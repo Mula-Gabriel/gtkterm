@@ -1,13 +1,21 @@
-# GTKTerm: A GTK+ Serial Port Terminal
 
-[![CircleCI Badge](https://circleci.com/gh/Jeija/gtkterm.svg?style=shield)](https://circleci.com/gh/Jeija/gtkterm)
+# GTKTerm Fork
+
+This fork add pannel to call macro using button :
+
+<p align="center">
+    <img src="Capture1.png" width="60%"/>
+</p>
+<p align="center">
+    <img src="Capture2.png" width="60%"/>
+</p>
+
+# GTKTerm: A GTK+ Serial Port Terminal
 <img src="data/gtkterm_256x256.png" align="right" width="20%"/>
+
 
 GTKTerm is a simple, graphical serial port terminal emulator for Linux and possibly other POSIX-compliant operating systems. It can be used to communicate with all kinds of devices with a serial interface, such as embedded computers, microcontrollers, modems, GPS receivers, CNC machines and more.
 
-<p align="center">
-    <img src="screenshot.png" width="60%"/>
-</p>
 
 ## Usage
 ### Keyboard Shortcuts 
