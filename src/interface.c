@@ -98,6 +98,9 @@ GtkUIManager *ui_manager;
 GtkAccelGroup *shortcuts;
 GtkActionGroup *action_group;
 GtkWidget *display = NULL;
+GtkWidget *macro_panel;
+GtkWidget *macro_scrolled;
+GtkWidget *macro_vbox;
 
 GtkWidget *Text;
 GtkTextBuffer *buffer;
@@ -143,6 +146,11 @@ void update_copy_sensivity(VteTerminal *terminal, gpointer data);
 void edit_paste_callback(GtkAction *action, gpointer data);
 void edit_find_callback(GtkAction *action);
 void edit_select_all_callback(GtkAction *action, gpointer data);
+
+void view_macro_panel_toggled_callback(GtkAction *action, gpointer data);
+static void on_macro_button_clicked(GtkWidget *widget, gpointer data);
+static void create_macro_panel(void);
+void rebuild_macro_buttons(void);
 
 void set_saved_data(GtkWidget *widget, gboolean direction);
 void update_hex_history(GtkWidget *widget);
@@ -211,7 +219,8 @@ const GtkToggleActionEntry menu_toggle_entries[] =
 
 	/* View Menu */
 	{"ViewIndex", NULL, N_("Show _index"), NULL, NULL, G_CALLBACK(view_index_toggled_callback), FALSE},
-	{"ViewSendHexData", NULL, N_("_Send hexadecimal data"), NULL, NULL, G_CALLBACK(view_send_hex_toggled_callback), FALSE}
+	{"ViewSendHexData", NULL, N_("_Send hexadecimal data"), NULL, NULL, G_CALLBACK(view_send_hex_toggled_callback), FALSE},
+        {"ViewMacroPanel", NULL, N_("_Macro panel"), NULL, NULL, G_CALLBACK(view_macro_panel_toggled_callback), TRUE}
 };
 
 const GtkRadioActionEntry menu_view_radio_entries[] =
@@ -288,6 +297,7 @@ static const char *ui_description =
     "      <menuitem action='ViewIndex'/>"
     "      <separator/>"
     "      <menuitem action='ViewSendHexData'/>"
+    "      <menuitem action='ViewMacroPanel'/>"
     "    </menu>"
     "    <menu action='Help'>"
     "      <menuitem action='HelpAbout'/>"
@@ -313,6 +323,16 @@ void view_send_hex_toggled_callback(GtkAction *action, gpointer data)
 		gtk_widget_show(GTK_WIDGET(Hex_Box));
 	else
 		gtk_widget_hide(GTK_WIDGET(Hex_Box));
+}
+
+void view_macro_panel_toggled_callback(GtkAction *action, gpointer data)
+{
+	gboolean visible = gtk_toggle_action_get_active(GTK_TOGGLE_ACTION(action));
+
+	if (macro_panel != NULL)
+	{
+		gtk_widget_set_visible(macro_panel, visible);
+	}
 }
 
 void view_index_toggled_callback(GtkAction *action, gpointer data)
@@ -514,6 +534,99 @@ void terminal_popup_menu_callback(GtkWidget *widget, gpointer data)
 	               0, gtk_get_current_event_time());
 }
 
+static void on_macro_button_clicked(GtkWidget *widget, gpointer data)
+{
+	gint macro_index = GPOINTER_TO_INT(data);
+	gint nb_macros = 0;
+	macro_t *macros = get_shortcuts(&nb_macros);
+
+	if (macros != NULL && macro_index < nb_macros && macros[macro_index].action != NULL)
+	{
+		/* Utilise la fonction callback existante */
+		shortcut_callback((gpointer)(long)macro_index);
+	}
+}
+void rebuild_macro_buttons(void)
+{
+	GList *children, *iter;
+	gint i = 0;
+	gint nb_macros = 0;   //++1 ? Label + Action
+	macro_t *macros = get_shortcuts(&nb_macros);
+
+	if (macro_vbox == NULL)
+		return;
+
+	/* Supprimer tous les boutons existants (sauf le titre et le séparateur) */
+	children = gtk_container_get_children(GTK_CONTAINER(macro_vbox));
+	for (iter = children; iter != NULL; iter = g_list_next(iter))
+	{
+	  GtkWidget *child = GTK_WIDGET(iter->data);
+
+	  if (GTK_IS_BUTTON(child) || (GTK_IS_LABEL(child) && gtk_widget_get_sensitive(child) == FALSE))
+	  {
+	    gtk_widget_destroy(child);
+	  }
+	}
+	g_list_free(children);
+
+  	gint button_count = 0;
+        //Create a button for each macro with not null 'label' and action
+	for (i = 0; i < nb_macros; i++)
+	{
+          /* Vérifier si la macro a un label défini et non vide */
+          if ((macros[i].label != NULL && strlen(macros[i].label) > 0) && (macros[i].action != NULL && strlen(macros[i].action) > 0))
+          {
+            GtkWidget *button;
+            gchar tooltip[256];
+
+            button = gtk_button_new_with_label(macros[i].label);
+            g_signal_connect(button, "clicked",G_CALLBACK(on_macro_button_clicked),GINT_TO_POINTER(i));
+            g_snprintf(tooltip, sizeof(tooltip),_("Shortcut: %s\nAction: %s"),macros[i].shortcut,macros[i].action);
+            gtk_widget_set_tooltip_text(button, tooltip);
+
+            /* Ajouter le bouton à la vbox */
+            gtk_box_pack_start(GTK_BOX(macro_vbox), button, FALSE, FALSE, 2);
+            gtk_widget_show(button);
+            button_count++;
+	  }
+	}
+
+	if (button_count == 0)
+	{
+	  GtkWidget *label = gtk_label_new(_("No macros defined\nwith labels"));
+	  gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+	  gtk_widget_set_sensitive(label, FALSE);
+	  gtk_box_pack_start(GTK_BOX(macro_vbox), label, FALSE, FALSE, 10);
+	  gtk_widget_show(label);
+	}
+}
+
+static void create_macro_panel(void)
+{
+	GtkWidget *label;
+	GtkWidget *separator;
+
+	macro_scrolled = gtk_scrolled_window_new(NULL, NULL);
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(macro_scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+	gtk_widget_set_size_request(macro_scrolled, 150, -1);
+
+	macro_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+	gtk_container_set_border_width(GTK_CONTAINER(macro_vbox), 5);
+
+	label = gtk_label_new(NULL);
+	gtk_label_set_markup(GTK_LABEL(label), "<b>Macros</b>");
+	gtk_box_pack_start(GTK_BOX(macro_vbox), label, FALSE, FALSE, 3);
+
+	separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+	gtk_box_pack_start(GTK_BOX(macro_vbox), separator, FALSE, FALSE, 3);
+
+	gtk_container_add(GTK_CONTAINER(macro_scrolled), macro_vbox);
+
+	macro_panel = macro_scrolled;
+
+	rebuild_macro_buttons();
+}
+
 void create_main_window(void)
 {
 	GtkWidget *menu, *main_vbox, *label;
@@ -588,7 +701,13 @@ void create_main_window(void)
 	searchBar = search_bar_new(GTK_WINDOW(Fenetre), VTE_TERMINAL(display));
 	gtk_box_pack_start(GTK_BOX(main_vbox), GTK_WIDGET(searchBar), FALSE, FALSE, 0);
 
-	/* make vte window scrollable - inspired by gnome-terminal package */
+        /* Créer le panneau de macros */
+	create_macro_panel();
+
+	/* Créer un paned horizontal pour le terminal et le panneau de macros */
+	GtkWidget *h_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+
+	/* make vte window scrollable */
 	scrolled_window = gtk_scrolled_window_new(NULL, gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (display)));
 
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window),
@@ -600,7 +719,12 @@ void create_main_window(void)
 
 	gtk_container_add(GTK_CONTAINER(scrolled_window), GTK_WIDGET(display));
 
-	gtk_box_pack_start(GTK_BOX(main_vbox), scrolled_window, TRUE, TRUE, 0);
+	/* Ajouter le terminal (gauche) et le panneau de macros (droite) au paned */
+	gtk_paned_pack1(GTK_PANED(h_paned), scrolled_window, TRUE, TRUE);
+	gtk_paned_pack2(GTK_PANED(h_paned), macro_panel, FALSE, FALSE);
+
+	/* Ajouter le paned au main_vbox au lieu du scrolled_window */
+	gtk_box_pack_start(GTK_BOX(main_vbox), h_paned, TRUE, TRUE, 0);
 
 	g_signal_connect(G_OBJECT(display), "button-press-event",
 	                 G_CALLBACK(terminal_button_press_callback), NULL);
@@ -623,7 +747,7 @@ void create_main_window(void)
 	label = gtk_label_new(_("Hexadecimal data to send (separator: ';' or space): "));
 	gtk_box_pack_start(GTK_BOX(Hex_Box), label, FALSE, FALSE, 5);
 	hex_send_entry = gtk_entry_new();
-    g_signal_connect(GTK_WIDGET(hex_send_entry), "key-press-event", G_CALLBACK(on_key_press), NULL);
+        g_signal_connect(GTK_WIDGET(hex_send_entry), "key-press-event", G_CALLBACK(on_key_press), NULL);
 	g_signal_connect(GTK_WIDGET(hex_send_entry), "activate", (GCallback)Send_Hexadecimal, NULL);
 	gtk_box_pack_start(GTK_BOX(Hex_Box), hex_send_entry, TRUE, TRUE, 5);
 	gtk_box_pack_start(GTK_BOX(main_vbox), Hex_Box, FALSE, TRUE, 2);
@@ -790,14 +914,14 @@ void help_about_callback(GtkAction *action, gpointer data)
 	g_sprintf(comments, "%s\n\n%s", RELEASE_DATE, comments_program);;
 
 	gtk_show_about_dialog(GTK_WINDOW(Fenetre),
-	                      "program-name", "GTKTerm",
+	                      "program-name", "GTKTerm fork MGU",
 	                      "logo", logo,
 	                      "version", VERSION,
 	                      "comments", comments,
 	                      "copyright", "Copyright © Julien Schimtt",
 	                      "authors", authors,
-	                      "website", "https://github.com/Jeija/gtkterm",
-	                      "website-label", "https://github.com/Jeija/gtkterm",
+	                      "website", "https://github.com/Mula-Gabriel/gtkterm",
+	                      "website-label", "https://github.com/Mula-Gabriel/gtkterm",
 	                      "license-type", GTK_LICENSE_LGPL_3_0,
 	                      NULL);
 }
@@ -1102,3 +1226,4 @@ void set_saved_data(GtkWidget *widget, gboolean direction) {
         }
     }
 }
+

@@ -1203,16 +1203,27 @@ gint Load_configuration_from_file(gchar *config_name)
 						perror("malloc");
 						return -1;
 					}
+
 					for(j = 0; j < size; j++)
 					{
-						for(k = 0; k < (strlen(t->str) - 1); k++)
+						// Parse format: label::shortcut::action
+
+						// Find "::" separator
+						gchar *sep1 = strstr(t->str, "::");
+                                                gchar *sep2 = strstr(sep1 + 2, "::");
+						if(sep1 == NULL || sep2 == NULL)
 						{
-							if((t->str[k] == ':') && (t->str[k + 1] == ':'))
-								break;
+						  // Invalid format, set default
+						  macros[j].label = g_strdup("");
+						  macros[j].shortcut = g_strdup("None");
+						  macros[j].action = g_strdup("");
+						  t = t->next;
+						  continue;
 						}
-						macros[j].shortcut = g_strndup(t->str, k);
-						str = &(t->str[k + 2]);
-						macros[j].action = g_strdup(str);
+
+						macros[j].label = g_strndup(t->str, sep1 - t->str);
+						macros[j].shortcut = g_strndup(sep1 + 2, sep2 - (sep1 + 2));
+						macros[j].action = g_strdup(sep2 + 2);
 
 						t = t->next;
 					}
@@ -1220,6 +1231,7 @@ gint Load_configuration_from_file(gchar *config_name)
 
 				remove_shortcuts();
 				create_shortcuts(macros, size);
+                                rebuild_macro_buttons();
 				g_free(macros);
 
 				if(block_cursor[i] != -1)
@@ -1242,7 +1254,7 @@ gint Load_configuration_from_file(gchar *config_name)
 					term_conf.visual_bell = FALSE;
 
 				term_conf.foreground_color.red = foreground_red[i];
-				term_conf.foreground_color.green = foreground_green[i];
+		  		term_conf.foreground_color.green = foreground_green[i];
 				term_conf.foreground_color.blue = foreground_blue[i];
 				term_conf.foreground_color.alpha = foreground_alpha[i];
 
@@ -1260,16 +1272,8 @@ gint Load_configuration_from_file(gchar *config_name)
 					term_conf.columns = 25;
 					term_conf.scrollback = DEFAULT_SCROLLBACK;
 					term_conf.visual_bell = FALSE;
-
-					term_conf.foreground_color.red = 0.66;
-					term_conf.foreground_color.green = 0.66;
-					term_conf.foreground_color.blue = 0.66;
-					term_conf.foreground_color.alpha = 1;
-
-					term_conf.background_color.red = 0;
-					term_conf.background_color.green = 0;
-					term_conf.background_color.blue = 0;
-					term_conf.background_color.alpha = 1;
+                                  	Selec_couleur(&term_conf.foreground_color, DEFAULT_FOREGROUNDCOLOR);
+	                                Selec_couleur(&term_conf.background_color, DEFAULT_BACKGROUDCOLOR);
 				}
 
 				i = max + 1;
@@ -1289,7 +1293,6 @@ gint Load_configuration_from_file(gchar *config_name)
 	vte_terminal_set_size (VTE_TERMINAL(display), term_conf.rows, term_conf.columns);
 	vte_terminal_set_scrollback_lines (VTE_TERMINAL(display), term_conf.scrollback);
 	vte_terminal_set_color_foreground (VTE_TERMINAL(display), &term_conf.foreground_color);
-	vte_terminal_set_color_background (VTE_TERMINAL(display), &term_conf.background_color);
 	vte_terminal_set_color_background (VTE_TERMINAL(display), &term_conf.background_color);
 	vte_terminal_set_cursor_shape(VTE_TERMINAL(display), term_conf.block_cursor ? VTE_CURSOR_SHAPE_BLOCK : VTE_CURSOR_SHAPE_IBEAM);
 	gtk_widget_queue_draw(display);
@@ -1386,7 +1389,7 @@ void Hard_default_configuration(void)
 	config.autoreconnect_enabled = FALSE;
 	config.esc_clear_screen = FALSE;
 	config.timestamp = FALSE;
-  config.disable_port_lock = FALSE;
+        config.disable_port_lock = FALSE;
 
 	term_conf.font = g_strdup_printf(DEFAULT_FONT);
 
@@ -1396,8 +1399,10 @@ void Hard_default_configuration(void)
 	term_conf.scrollback = DEFAULT_SCROLLBACK;
 	term_conf.visual_bell = TRUE;
 
-	Selec_couleur(&term_conf.foreground_color, 0.66, 0.66, 0.66, 1.0);
-	Selec_couleur(&term_conf.background_color, 0, 0, 0, 1.0);
+	Selec_couleur(&term_conf.foreground_color, DEFAULT_FOREGROUNDCOLOR);
+	Selec_couleur(&term_conf.background_color, DEFAULT_BACKGROUDCOLOR);
+  	vte_terminal_set_color_foreground (VTE_TERMINAL(display), &term_conf.foreground_color);
+	vte_terminal_set_color_background (VTE_TERMINAL(display), &term_conf.background_color);
 }
 
 void Copy_configuration(int pos)
@@ -1522,7 +1527,9 @@ void Copy_configuration(int pos)
 	macros = get_shortcuts(&size);
 	for(i = 0; i < size; i++)
 	{
-		string = g_strdup_printf("%s::%s", macros[i].shortcut, macros[i].action);
+		string = g_strdup_printf("%s::%s::%s", macros[i].label ? macros[i].label : "",
+                                                       macros[i].shortcut ? macros[i].shortcut : "",
+                                                       macros[i].action ? macros[i].action : "");
 		cfgStoreValue(cfg, "macros", string, CFG_INI, pos);
 		g_free(string);
 	}

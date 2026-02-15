@@ -41,7 +41,7 @@ void interface_open_port(void);
 
 void toggle_logging_pause_resume(gboolean currentlyLogging);
 void toggle_logging_sensitivity(gboolean currentlyLogging);
-
+void rebuild_macro_buttons(void);
 extern GtkWidget *Fenetre;
 extern GtkWidget *StatusBar;
 extern guint id;

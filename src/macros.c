@@ -31,6 +31,7 @@
 enum
 {
 	COLUMN_SHORTCUT,
+        COLUMN_LABEL,
 	COLUMN_ACTION,
 	NUM_COLUMNS
 };
@@ -44,7 +45,7 @@ macro_t *get_shortcuts(gint *size)
 
 	if(macros != NULL)
 	{
-		while(macros[i].shortcut != NULL)
+		while(macros[i].shortcut != NULL || macros[i].label != NULL )
 			i++;
 	}
 	*size = i;
@@ -52,7 +53,8 @@ macro_t *get_shortcuts(gint *size)
 }
 
 
-static void shortcut_callback(gpointer *number)
+
+void shortcut_callback(gpointer *number)
 {
 	gchar *string;
 	gchar *str;
@@ -141,7 +143,7 @@ static void shortcut_callback(gpointer *number)
 		}
 	}
 
-	str = g_strdup_printf(_("Macro \"%s\" sent!"), macros[(long)number].shortcut);
+	str = g_strdup_printf(_("Macro \"%s\" sent!"), strlen(macros[(long)number].label) > 0 ? macros[(long)number].label : macros[(long)number].shortcut);
 	Put_temp_message(str, 800);
 	g_free(str);
 }
@@ -152,7 +154,8 @@ void create_shortcuts(macro_t *macro, gint size)
 	if(macros != NULL)
 	{
 		memcpy(macros, macro, size * sizeof(macro_t));
-		macros[size].shortcut = NULL;
+	        macros[size].label = NULL;
+                macros[size].shortcut = NULL;
 		macros[size].action = NULL;
 	}
 	else
@@ -189,6 +192,7 @@ static void macros_destroy(void)
 	{
 		g_free(macros[i].shortcut);
 		g_free(macros[i].action);
+                g_free(macros[i].label);
 		/*
 		g_closure_unref(macros[i].closure);
 		*/
@@ -222,6 +226,7 @@ static GtkTreeModel *create_model(void)
 
 	/* create list store */
 	store = gtk_list_store_new (NUM_COLUMNS,
+                                    G_TYPE_STRING,
 	                            G_TYPE_STRING,
 	                            G_TYPE_STRING,
 	                            G_TYPE_BOOLEAN,
@@ -232,10 +237,12 @@ static GtkTreeModel *create_model(void)
 	{
 		while(1)
 		{
-			if(macros[i].shortcut == NULL)
+			if(macros[i].shortcut == NULL && macros[i].action == NULL && macros[i].label == NULL)
 				break;
+
 			gtk_list_store_append (store, &iter);
 			gtk_list_store_set (store, &iter,
+                                            COLUMN_LABEL, macros[i].label,
 			                    COLUMN_SHORTCUT, macros[i].shortcut,
 			                    COLUMN_ACTION, macros[i].action,
 			                    -1);
@@ -246,8 +253,7 @@ static GtkTreeModel *create_model(void)
 	return GTK_TREE_MODEL(store);
 }
 
-static gboolean
-shortcut_edited (GtkCellRendererText *cell,
+static gboolean action_edited (GtkCellRendererText *cell,
                  const gchar         *path_string,
                  const gchar         *new_text,
                  gpointer             data)
@@ -264,24 +270,43 @@ shortcut_edited (GtkCellRendererText *cell,
 	return TRUE;
 }
 
-static void
-add_columns (GtkTreeView *treeview)
+static gboolean label_edited (GtkCellRendererText *cell,
+                 const gchar         *path_string,
+                 const gchar         *new_text,
+                 gpointer             data)
+{
+	GtkTreeModel *model = (GtkTreeModel *)data;
+	GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
+	GtkTreeIter iter;
+
+	gtk_tree_model_get_iter(model, &iter, path);
+
+	gtk_list_store_set(GTK_LIST_STORE(model), &iter, COLUMN_LABEL, new_text, -1);
+	gtk_tree_path_free (path);
+
+	return TRUE;
+}
+
+static void add_columns (GtkTreeView *treeview)
 {
 	GtkCellRenderer *renderer;
 	GtkTreeViewColumn *column;
 	GtkTreeModel *model = gtk_tree_view_get_model (treeview);
 
 	renderer = gtk_cell_renderer_text_new ();
-	column = gtk_tree_view_column_new_with_attributes (_("Shortcut"),
-	         renderer,
-	         "text",
-	         COLUMN_SHORTCUT,
-	         NULL);
+        g_signal_connect (renderer, "edited", G_CALLBACK(label_edited), model);
+        g_object_set(G_OBJECT(renderer), "editable", TRUE, NULL);
+        column = gtk_tree_view_column_new_with_attributes ("Label",renderer,"text",COLUMN_LABEL,NULL);
+	gtk_tree_view_column_set_sort_column_id (column, COLUMN_LABEL);
+	gtk_tree_view_append_column (treeview, column);
+
+	renderer = gtk_cell_renderer_text_new ();
+	column = gtk_tree_view_column_new_with_attributes (_("Shortcut"),renderer,"text",COLUMN_SHORTCUT,NULL);
 	gtk_tree_view_column_set_sort_column_id (column, COLUMN_SHORTCUT);
 	gtk_tree_view_append_column (treeview, column);
 
 	renderer = gtk_cell_renderer_text_new ();
-	g_signal_connect (renderer, "edited", G_CALLBACK(shortcut_edited), model);
+	g_signal_connect (renderer, "edited", G_CALLBACK(action_edited), model);
 	column = gtk_tree_view_column_new_with_attributes ("Action", renderer, "text", COLUMN_ACTION, NULL);
 	g_object_set(G_OBJECT(renderer), "editable", TRUE, NULL);
 	gtk_tree_view_column_set_sort_column_id (column, COLUMN_ACTION);
@@ -301,7 +326,7 @@ static gint Add_shortcut(GtkWidget *button, gpointer pointer)
 	return FALSE;
 }
 
-static gboolean Delete_shortcut(GtkWidget *button, gpointer pointer)
+static gboolean Delete_macro(GtkWidget *button, gpointer pointer)
 {
 	GtkTreeIter iter;
 	GtkTreeView *treeview = (GtkTreeView *)pointer;
@@ -318,6 +343,23 @@ static gboolean Delete_shortcut(GtkWidget *button, gpointer pointer)
 		gtk_list_store_remove (GTK_LIST_STORE (model), &iter);
 
 		gtk_tree_path_free (path);
+	}
+
+	return FALSE;
+}
+
+static gboolean Delete_shortcut(GtkWidget *button, gpointer pointer)
+{
+	GtkTreeIter iter;
+	GtkTreeView *treeview = (GtkTreeView *)pointer;
+	GtkTreeModel *model = gtk_tree_view_get_model (treeview);
+	GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
+
+	if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+	{
+		GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
+		gint i = gtk_tree_path_get_indices(path)[0];
+          	gtk_list_store_set(GTK_LIST_STORE(model), &iter, COLUMN_SHORTCUT, "None", -1);
 	}
 
 	return FALSE;
@@ -348,20 +390,23 @@ static gboolean Save_shortcuts(GtkWidget *button, gpointer pointer)
 		{
 			do
 			{
-				gtk_tree_model_get(model, &iter, COLUMN_SHORTCUT, &(macros[i].shortcut), \
+				gtk_tree_model_get(model, &iter,
+                                                   COLUMN_LABEL, &(macros[i].label), \
+                                                   COLUMN_SHORTCUT, &(macros[i].shortcut), \
 				                   COLUMN_ACTION, &(macros[i].action), \
 				                   -1);
 				i++;
-			}
-			while(gtk_tree_model_iter_next(model, &iter));
+			}while(gtk_tree_model_iter_next(model, &iter));
 
+                        macros[i].label= NULL;
 			macros[i].shortcut = NULL;
 			macros[i].action = NULL;
+
 		}
 	}
 
 	add_shortcuts();
-
+        rebuild_macro_buttons ();
 	return FALSE;
 }
 
@@ -491,11 +536,15 @@ void Config_macros(GtkAction *action, gpointer data)
 	gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
 
 	button = gtk_button_new_with_mnemonic (_("_Delete"));
-	g_signal_connect(button, "clicked", G_CALLBACK(Delete_shortcut), (gpointer)treeview);
+	g_signal_connect(button, "clicked", G_CALLBACK(Delete_macro), (gpointer)treeview);
 	gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
 
 	button = gtk_button_new_with_mnemonic (_("_Capture Shortcut"));
 	g_signal_connect(button, "clicked", G_CALLBACK(Capture_shortcut), (gpointer)treeview);
+	gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
+
+  	button = gtk_button_new_with_mnemonic ("Delete Shortcut");
+	g_signal_connect(button, "clicked", G_CALLBACK(Delete_shortcut), (gpointer)treeview);
 	gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
 
 	separator = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);

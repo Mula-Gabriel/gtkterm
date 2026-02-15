@@ -79,5 +79,7 @@ typedef struct
 #define DEFAULT_CHAR -1
 #define DEFAULT_DELAY_RS485 30
 #define DEFAULT_ECHO FALSE
+#define DEFAULT_BACKGROUDCOLOR  1.0,1.0,1.0,1.0
+#define DEFAULT_FOREGROUNDCOLOR 0.0,0.0,0.0,0.0
 
 #endif
