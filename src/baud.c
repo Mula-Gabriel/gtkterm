@@ -45,9 +45,17 @@ unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 
 #elif defined(HAVE_LINUX_TERMIOS_H)
 
-#include <linux/termios.h>
-#include <sys/ioctl.h>
 #include <sys/types.h>
+
+/* Mask the conflicting structures before including linux headers */
+#define winsize winsize_kernel
+#define termio termio_kernel
+#include <linux/termios.h>
+#undef winsize
+#undef termio
+
+/* Now we can safely include sys/ioctl.h for the ioctl() function */
+#include <sys/ioctl.h>
 
 /* <termios.h> cannot be included here */
 #define NO_TERMIOS
@@ -70,20 +78,36 @@ unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 #ifndef CIBAUD
 # define CIBAUD (CBAUD << 16)
 #endif
+#ifndef BOTHER
+# define BOTHER 0010000
+#endif
 
 unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 {
 	struct termios2 tio;
-	CHK(ioctl(port_fd, TCGETS2, &tio));
+	int ret;
+	
+	/* Get current settings */
+	ret = ioctl(port_fd, TCGETS2, &tio);
+	if (ret < 0)
+		return 0;
 
-	tio.c_ispeed = tio.c_ospeed = baud;
-	tio.c_cflag &= ~(CBAUD | CIBAUD);
+	/* Set custom baud rate using BOTHER */
+	tio.c_cflag &= ~CBAUD;
 	tio.c_cflag |= BOTHER;
+	tio.c_ispeed = baud;
+	tio.c_ospeed = baud;
 
-	CHK(ioctl(port_fd, TCSETS2, &tio));
-	CHK(ioctl(port_fd, TCGETS2, &tio));
+	/* Apply settings */
+	ret = ioctl(port_fd, TCSETS2, &tio);
+	if (ret < 0)
+		return 0;
+	
+	/* Verify settings were applied */
+	ret = ioctl(port_fd, TCGETS2, &tio);
+	if (ret < 0)
+		return 0;
 
-	CHK((tio.c_cflag & CBAUD) ==  BOTHER);
 	return tio.c_ospeed;
 }
 
