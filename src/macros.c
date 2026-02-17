@@ -52,8 +52,97 @@ macro_t *get_shortcuts(gint *size)
 	return macros;
 }
 
+void shortcut_callback(gpointer *number)
+{
+    gchar *string;
+    gchar *str;
+    gint i, length;
+    guchar a;
+    guint val_read;
 
+    /* Buffer de sortie */
+    GByteArray *out = g_byte_array_new();
 
+    string = macros[(long)number].action;
+    length = strlen(string);
+
+    for(i = 0; i < length; i++)
+    {
+        if(string[i] == '\\')
+        {
+            if(g_unichar_isdigit((gunichar)string[i + 1]))
+            {
+                if((string[i + 1] == '0') && (string[i + 2] != 0))
+                {
+                    if(g_unichar_isxdigit((gunichar)string[i + 3]))
+                    {
+                        str = &string[i + 2];
+                        i += 3;
+                    }
+                    else
+                    {
+                        str = &string[i + 1];
+                        if(g_unichar_isxdigit((gunichar)string[i + 2]))
+                            i += 2;
+                        else
+                            i++;
+                    }
+                }
+                else
+                {
+                    str = &string[i + 1];
+                    if(g_unichar_isxdigit((gunichar)string[i + 2]))
+                        i += 2;
+                    else
+                        i++;
+                }
+                if(sscanf(str, "%02X", &val_read) == 1)
+                    a = (guchar)val_read;
+                else
+                    a = '\\';
+            }
+            else
+            {
+                switch(string[i + 1])
+                {
+                case 'a': a = '\a'; break;
+                case 'b': a = '\b'; break;
+                case 't': a = '\t'; break;
+                case 'n': a = '\n'; break;
+                case 'v': a = '\v'; break;
+                case 'f': a = '\f'; break;
+                case 'r': a = '\r'; break;
+                case '\\': a = '\\'; break;
+                default:
+                    a = '\\';
+                    i--;
+                    break;
+                }
+                i++;
+            }
+            /* Ajouter le caractère échappé au buffer */
+            g_byte_array_append(out, &a, 1);
+        }
+        else
+        {
+            /* Ajouter le caractère normal au buffer */
+            g_byte_array_append(out, (guchar*)&string[i], 1);
+        }
+    }
+
+    /* Envoyer tout en une seule fois */
+    if(out->len > 0)
+        send_serial((gchar*)out->data, out->len);
+
+    g_byte_array_free(out, TRUE);
+
+    str = g_strdup_printf(_("Macro \"%s\" sent!"),
+        strlen(macros[(long)number].label) > 0 ?
+        macros[(long)number].label : macros[(long)number].shortcut);
+    Put_temp_message(str, 800);
+    g_free(str);
+}
+/*
 void shortcut_callback(gpointer *number)
 {
 	gchar *string;
@@ -147,6 +236,7 @@ void shortcut_callback(gpointer *number)
 	Put_temp_message(str, 800);
 	g_free(str);
 }
+*/
 
 void create_shortcuts(macro_t *macro, gint size)
 {

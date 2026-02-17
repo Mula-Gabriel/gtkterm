@@ -546,6 +546,7 @@ static void on_macro_button_clicked(GtkWidget *widget, gpointer data)
 		shortcut_callback((gpointer)(long)macro_index);
 	}
 }
+
 void rebuild_macro_buttons(void)
 {
 	GList *children, *iter;
