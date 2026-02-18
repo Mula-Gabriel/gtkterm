@@ -27,7 +27,7 @@ void Config_macros (GtkAction *action, gpointer data);
 void remove_shortcuts (void);
 void add_shortcuts (void);
 void create_shortcuts (macro_t *, gint);
-void shortcut_callback(gpointer *number);
+void shortcut_callback(gpointer number);
 macro_t *get_shortcuts (gint *);
 
 #endif

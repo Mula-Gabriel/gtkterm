@@ -54,98 +54,117 @@ macro_t *get_shortcuts(gint *size)
 
 
 
-void shortcut_callback(gpointer *number)
+/* Parse une séquence hexadécimale après un backslash (\XX ou \0XX) */
+static guchar parse_hex_escape(const gchar *string, gint *index)
 {
-	gchar *string;
-	gchar *str;
-	gint i, length;
-	guchar a;
-	guint val_read;
+	gint i = *index;
+	gint hex_start=0;
+	gint isTwodigits = 0;
 
-	string = macros[(long)number].action;
-	length = strlen(string);
 
-	for(i = 0; i < length; i++)
+	/* Déterminer où commence la partie hexa et combien de digits on a */
+	if(string[i + 1] == '0' && g_unichar_isxdigit((gunichar)string[i + 2]))
 	{
-		if(string[i] == '\\')
-		{
-			if(g_unichar_isdigit((gunichar)string[i + 1]))
-			{
-				if((string[i + 1] == '0') && (string[i + 2] != 0))
-				{
-					if(g_unichar_isxdigit((gunichar)string[i + 3]))
-					{
-						str = &string[i + 2];
-						i += 3;
-					}
-					else
-					{
-						str = &string[i + 1];
-						if(g_unichar_isxdigit((gunichar)string[i + 2]))
-							i += 2;
-						else
-							i++;
-					}
-				}
-				else
-				{
-					str = &string[i + 1];
-					if(g_unichar_isxdigit((gunichar)string[i + 2]))
-						i += 2;
-					else
-						i++;
-				}
-				if(sscanf(str, "%02X", &val_read) == 1)
-					a = (guchar)val_read;
-				else
-					a = '\\';
-			}
-			else
-			{
-				switch(string[i + 1])
-				{
-				case 'a':
-					a = '\a';
-					break;
-				case 'b':
-					a = '\b';
-					break;
-				case 't':
-					a = '\t';
-					break;
-				case 'n':
-					a = '\n';
-					break;
-				case 'v':
-					a = '\v';
-					break;
-				case 'f':
-					a = '\f';
-					break;
-				case 'r':
-					a = '\r';
-					break;
-				case '\\':
-					a = '\\';
-					break;
-				default:
-					a = '\\';
-					i--;
-					break;
-				}
-				i++;
-			}
-			send_serial((gchar*)&a, 1);
-		}
-		else
-		{
-			send_serial(&string[i], 1);
-		}
+		// Format \0XX ou \0X
+		hex_start = i + 2;
+		isTwodigits = g_unichar_isxdigit((gunichar)string[i + 3]) ? 1 : 0;
+	}
+	else if(g_unichar_isxdigit((gunichar)string[i + 1]))
+	{
+		// Format \XX ou \X
+		hex_start = i + 1;
+		isTwodigits = g_unichar_isxdigit((gunichar)string[i + 2]) ? 1 : 0;
+	}
+	else
+	{       //finalement, mauvais format, on sort les caractaire ascii tel quel
+		return '\\';
 	}
 
-	str = g_strdup_printf(_("Macro \"%s\" sent!"), strlen(macros[(long)number].label) > 0 ? macros[(long)number].label : macros[(long)number].shortcut);
-	Put_temp_message(str, 800);
-	g_free(str);
+	/* Parser les digits hexa */
+  	guint val_read;
+	if(sscanf(&string[hex_start], "%02X", &val_read) == 1)
+	{
+                /* Mettre l'index sur le dernier caractère utiliser */
+		*index = hex_start + isTwodigits;
+		return (guchar)val_read;
+	}
+
+
+	return '\\';
+}
+/* Parse une séquence d'échappement C standard (\n, \t, etc.) */
+static guchar parse_standard_escape(gchar escape_char, gint *index)
+{
+	guchar result;
+
+	switch(escape_char)
+	{
+	    case 'a': result = '\a'; break;
+	    case 'b': result = '\b'; break;
+	    case 't': result = '\t'; break;
+	    case 'n': result = '\n'; break;
+	    case 'v': result = '\v'; break;
+	    case 'f': result = '\f'; break;
+	    case 'r': result = '\r'; break;
+	    case '\\':result = '\\'; break;
+	    default:  return '\\';	//séquence inconue, retourne \ et n'avance pas
+	}
+
+	(*index)++;
+	return result;
+}
+
+/* Parse une chaîne de macro et construit le buffer à envoyer */
+static GByteArray* parse_macro_string(const gchar *string)
+{
+	guchar byte;
+	GByteArray *buffer = g_byte_array_new();
+	gint length = strlen(string);
+
+	for(gint i = 0; i < length; i++)
+	{
+	    if(string[i] == '\\' && string[i + 1] != '\0')
+	    {
+	        if(g_unichar_isdigit((gunichar)string[i + 1]))
+	        {
+	          byte = parse_hex_escape(string, &i);
+	        }
+	        else
+	        {
+	          byte = parse_standard_escape(string[i + 1], &i);
+	        }
+	    }
+	    else
+	    {
+	        byte = (guchar)string[i];
+	    }
+
+	  g_byte_array_append(buffer, &byte, 1);
+	}
+
+	return buffer;
+}
+
+/* Fonction principale de callback pour l'exécution d'une macro */
+void shortcut_callback(gpointer number)
+{
+  gint macro_index = GPOINTER_TO_INT(number);
+  /* Récupérer la chaîne de la macro */
+  gchar *macro_string = macros[macro_index].action;
+
+  /* Parser et construire le buffer */
+  GByteArray *buffer = parse_macro_string(macro_string);
+
+  /* Envoyer tout le buffer d'un seul coup */
+  if(buffer->len > 0) send_serial((gchar*)buffer->data, buffer->len);
+
+  /* Libérer le buffer */
+  g_byte_array_free(buffer, TRUE);
+
+  /* Afficher le message de confirmation */
+  gchar *message = g_strdup_printf(_("Macro \"%s\" sent!"), strlen(macros[macro_index].label) > 0 ? macros[macro_index].label : macros[macro_index].shortcut);
+  Put_temp_message(message, 800);
+  g_free(message);
 }
 
 void create_shortcuts(macro_t *macro, gint size)
