@@ -898,7 +898,7 @@ void rebuild_macro_buttons(void)
 				macro_arg_info_t *arg_infos = macro_get_arg_infos(macros[i].action, NULL);
 
 				gboolean is_two_button_list = FALSE;
-				if (n_args == 1 && arg_infos[0].type == 'l' && arg_infos[0].list_name != NULL)
+				if (n_args == 1 && g_strcmp0 (arg_infos[0].type, "l") == 0 && arg_infos[0].list_name != NULL)
 				{
 					gint list_idx = macro_list_find(arg_infos[0].list_name);
 					if (list_idx >= 0 && macro_list_entry_count(list_idx) == 2)
@@ -963,7 +963,7 @@ void rebuild_macro_buttons(void)
 				{
 					GtkWidget *widget;
 
-					if (arg_infos[k].type == 'l' && arg_infos[k].list_name != NULL)
+					if (g_strcmp0 (arg_infos[k].type, "l") == 0 && arg_infos[k].list_name != NULL)
 					{
 						/* Argument de liste : GtkComboBox avec GtkListStore */
 						GtkListStore *store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_STRING);
@@ -1020,9 +1020,9 @@ void rebuild_macro_buttons(void)
 						/* Argument classique : GtkEntry */
 						widget = gtk_entry_new();
 
-						const gchar *placeholder =
-						    (arg_infos[k].type == 's')                         ? "text" :
-						    (strchr("feEgGaA", arg_infos[k].type) != NULL)     ? "0.0"  : "0";
+					const gchar *placeholder =
+					    (g_strcmp0 (arg_infos[k].type, "s") == 0)           ? "text" :
+					    (macro_type_is_float (arg_infos[k].type))            ? "0.0"  : "0";
 						gtk_entry_set_placeholder_text(GTK_ENTRY(widget), placeholder);
 						gtk_entry_set_width_chars(GTK_ENTRY(widget), 4);
 

@@ -17,7 +17,9 @@
   - %s – string
   - %d / %i – signed integer
   - %u / %o / %x – unsigned integer (decimal/octal/hex)
-  - %f – floating point
+  - %f – 32-bit float (~7 significant digits)
+  - %lf – 64-bit double (~15 significant digits)
+  - %Lf – 80/128-bit long double
   - %c – single character
 - Macros with arguments automatically generate buttons with input fields in the macro panel
 - Example action: "AT+SEND=%s\r\n" → user types the string, macro sends the full command

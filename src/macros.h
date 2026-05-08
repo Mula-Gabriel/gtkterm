@@ -57,13 +57,14 @@ const gchar *macro_list_name (gint list_idx);
 
 typedef struct
 {
-  gchar  type;           /* 'd','f','s'... ou 'l' pour liste */
+  gchar *type;           /* "d","ld","f","lf","s","l"... ou "l" pour liste */
   gchar *list_name;      /* nom de la liste si type=='l', sinon NULL */
   gchar *label;          /* texte du label (ex: "[addr]%s" → "addr"), sinon NULL */
 } macro_arg_info_t;
 
 macro_arg_info_t *macro_get_arg_infos (const gchar *action, gint *count_out);
 void              macro_arg_infos_free (macro_arg_info_t *infos, gint count);
+gboolean          macro_type_is_float  (const gchar *type);
 
 void Config_macros (GtkAction *action, gpointer data);
 void remove_shortcuts (void);
@@ -71,10 +72,10 @@ void add_shortcuts (void);
 void create_shortcuts (macro_t *, gint);
 void shortcut_callback(gpointer number);
 macro_t *get_shortcuts (gint *);
-gchar    macro_get_format_type  (const gchar *action);
+gchar   *macro_get_format_type  (const gchar *action);
 gboolean macro_has_format_arg   (const gchar *action);
 gint     macro_count_format_args(const gchar *action);
-gchar   *macro_get_format_types (const gchar *action, gint *count_out);
+gchar  **macro_get_format_types (const gchar *action, gint *count_out);
 void     send_macro_with_arg    (gint macro_index, const gchar *arg_str);
 void     send_macro_with_args   (gint macro_index, const gchar **args, gint n_args);
 void     macro_set_arg          (gint macro_index, gint arg_index, const gchar *value);

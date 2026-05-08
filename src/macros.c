@@ -319,7 +319,7 @@ parse_macro_string (const gchar *string)
 
 /* Parse le spécificateur de format à action[start] (où action[start]=='%' et action[start+1]!='%').
    Retourne le type char ('d','f','s'...) et écrit la position du type dans *end_out. */
-static gchar
+static gchar *
 parse_one_spec (const gchar *action, gint start, gint *end_out)
 {
   gint j = start + 1;
@@ -334,16 +334,43 @@ parse_one_spec (const gchar *action, gint start, gint *end_out)
       while (g_ascii_isdigit (action[j]))
         j++;
     }
-  while (action[j] == 'h' || action[j] == 'l' || action[j] == 'L' ||
-         action[j] == 'z' || action[j] == 'j' || action[j] == 't')
-    j++;
+  const gchar *modifier = "";
+  if (action[j] == 'h' && action[j + 1] == 'h')
+    {
+      modifier = "hh";
+      j += 2;
+    }
+  else if (action[j] == 'h')
+    {
+      modifier = "h";
+      j++;
+    }
+  else if (action[j] == 'l' && action[j + 1] == 'l')
+    {
+      modifier = "ll";
+      j += 2;
+    }
+  else if (action[j] == 'l')
+    {
+      modifier = "l";
+      j++;
+    }
+  else if (action[j] == 'L')
+    {
+      modifier = "L";
+      j++;
+    }
+  else if (action[j] == 'z' || action[j] == 'j' || action[j] == 't')
+    {
+      j++;
+    }
   if (action[j] != '\0' && strchr ("diouxXeEfFgGaAcs", action[j]))
     {
       if (end_out)
         *end_out = j;
-      return action[j];
+      return g_strdup_printf ("%s%c", modifier, action[j]);
     }
-  return '\0';
+  return NULL;
 }
 
 /* Tente de parser [label] juste avant action[start] (où action[start]=='%').
@@ -402,42 +429,79 @@ try_parse_list_spec (const gchar *action, gint start, gchar **name_out, gint *en
 
 /* Applique un spécificateur isolé sur une valeur string et retourne le résultat alloué. */
 static gchar *
-apply_spec (const gchar *spec, gchar fmt_type, const gchar *arg_str)
+apply_spec (const gchar *spec, const gchar *fmt_type, const gchar *arg_str)
 {
-  switch (fmt_type)
+  if (!fmt_type || !fmt_type[0] || !arg_str)
+    return g_strdup ("");
+
+  gchar conv = fmt_type[strlen (fmt_type) - 1];
+
+  if (conv == 'd' || conv == 'i')
     {
-    case 'd':
-    case 'i':
+      if (g_strcmp0 (fmt_type, "ld") == 0 || g_strcmp0 (fmt_type, "li") == 0)
+        return g_strdup_printf (spec, (long) strtol (arg_str, NULL, 10));
+      if (g_strcmp0 (fmt_type, "lld") == 0 || g_strcmp0 (fmt_type, "lli") == 0)
+        return g_strdup_printf (spec, (long long) strtoll (arg_str, NULL, 10));
+      if (g_strcmp0 (fmt_type, "hd") == 0 || g_strcmp0 (fmt_type, "hi") == 0)
+        return g_strdup_printf (spec, (short) strtol (arg_str, NULL, 10));
+      if (g_strcmp0 (fmt_type, "hhd") == 0 || g_strcmp0 (fmt_type, "hhi") == 0)
+        return g_strdup_printf (spec, (signed char) strtol (arg_str, NULL, 10));
       return g_strdup_printf (spec, (int) strtol (arg_str, NULL, 10));
-    case 'u':
-    case 'o':
-      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, 10));
-    case 'x':
-    case 'X':
-      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, 0));
-    case 'e':
-    case 'E':
-    case 'f':
-    case 'F':
-    case 'g':
-    case 'G':
-    case 'a':
-    case 'A':
-      return g_strdup_printf (spec, strtod (arg_str, NULL));
-    case 's':
-      return g_strdup_printf (spec, arg_str);
-    case 'c':
-      return g_strdup_printf (spec, (int) (arg_str[0] ? arg_str[0] : ' '));
-    default:
-      return g_strdup ("");
     }
+
+  if (conv == 'u' || conv == 'o')
+    {
+      if (g_strcmp0 (fmt_type, "lu") == 0 || g_strcmp0 (fmt_type, "lo") == 0)
+        return g_strdup_printf (spec, (unsigned long) strtoul (arg_str, NULL, 10));
+      if (g_strcmp0 (fmt_type, "llu") == 0 || g_strcmp0 (fmt_type, "llo") == 0)
+        return g_strdup_printf (spec, (unsigned long long) strtoull (arg_str, NULL, 10));
+      if (g_strcmp0 (fmt_type, "hu") == 0 || g_strcmp0 (fmt_type, "ho") == 0)
+        return g_strdup_printf (spec, (unsigned short) strtoul (arg_str, NULL, 10));
+      if (g_strcmp0 (fmt_type, "hhu") == 0 || g_strcmp0 (fmt_type, "hho") == 0)
+        return g_strdup_printf (spec, (unsigned char) strtoul (arg_str, NULL, 10));
+      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, 10));
+    }
+
+  if (conv == 'x' || conv == 'X')
+    {
+      if (g_strcmp0 (fmt_type, "lx") == 0 || g_strcmp0 (fmt_type, "lX") == 0)
+        return g_strdup_printf (spec, (unsigned long) strtoul (arg_str, NULL, 0));
+      if (g_strcmp0 (fmt_type, "llx") == 0 || g_strcmp0 (fmt_type, "llX") == 0)
+        return g_strdup_printf (spec, (unsigned long long) strtoull (arg_str, NULL, 0));
+      if (g_strcmp0 (fmt_type, "hx") == 0 || g_strcmp0 (fmt_type, "hX") == 0)
+        return g_strdup_printf (spec, (unsigned short) strtoul (arg_str, NULL, 0));
+      if (g_strcmp0 (fmt_type, "hhx") == 0 || g_strcmp0 (fmt_type, "hhX") == 0)
+        return g_strdup_printf (spec, (unsigned char) strtoul (arg_str, NULL, 0));
+      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, 0));
+    }
+
+  if (strchr ("fFeEgGaA", conv))
+    {
+      if (fmt_type[0] == 'L')
+        {
+          long double val = strtold (arg_str, NULL);
+          return g_strdup_printf ("%.19Lg", val);
+        }
+      double val = strtod (arg_str, NULL);
+      if (fmt_type[0] == 'l')
+        return g_strdup_printf ("%.16g", val);
+      return g_strdup_printf ("%.9g", val);
+    }
+
+  if (conv == 's')
+    return g_strdup_printf (spec, arg_str);
+
+  if (conv == 'c')
+    return g_strdup_printf (spec, (int) (arg_str[0] ? arg_str[0] : ' '));
+
+  return g_strdup ("");
 }
 
-gchar
+gchar *
 macro_get_format_type (const gchar *action)
 {
   if (action == NULL)
-    return '\0';
+    return NULL;
   for (gint i = 0; action[i] != '\0'; i++)
     {
       if (action[i] != '%')
@@ -447,17 +511,20 @@ macro_get_format_type (const gchar *action)
           i++;
           continue;
         }
-      gchar t = parse_one_spec (action, i, NULL);
-      if (t != '\0')
+      gchar *t = parse_one_spec (action, i, NULL);
+      if (t != NULL)
         return t;
     }
-  return '\0';
+  return NULL;
 }
 
 gboolean
 macro_has_format_arg (const gchar *action)
 {
-  return macro_get_format_type (action) != '\0';
+  gchar *t = macro_get_format_type (action);
+  gboolean has = (t != NULL);
+  g_free (t);
+  return has;
 }
 
 gint
@@ -487,17 +554,19 @@ macro_count_format_args (const gchar *action)
           }
       }
       gint end;
-      if (parse_one_spec (action, i, &end) != '\0')
+      gchar *t = parse_one_spec (action, i, &end);
+      if (t != NULL)
         {
           count++;
           i = end;
         }
+      g_free (t);
     }
   return count;
 }
 
-/* Retourne un tableau de types (ex: "dfs") à libérer avec g_free, ou NULL si aucun arg. */
-gchar *
+/* Retourne un tableau de types (ex: {"d","f","s",NULL}) à libérer avec g_strfreev, ou NULL si aucun arg. */
+gchar **
 macro_get_format_types (const gchar *action, gint *count_out)
 {
   gint n = macro_count_format_args (action);
@@ -505,7 +574,7 @@ macro_get_format_types (const gchar *action, gint *count_out)
     *count_out = n;
   if (n == 0)
     return NULL;
-  gchar *types = g_new (gchar, n + 1);
+  gchar **types = g_new0 (gchar *, n + 1);
   gint idx = 0;
   for (gint i = 0; action[i] != '\0' && idx < n; i++)
     {
@@ -521,21 +590,21 @@ macro_get_format_types (const gchar *action, gint *count_out)
         gint end;
         if (try_parse_list_spec (action, i, &list_name, &end))
           {
-            types[idx++] = 'l';
+            types[idx++] = g_strdup ("l");
             i = end;
             g_free (list_name);
             continue;
           }
       }
       gint end;
-      gchar t = parse_one_spec (action, i, &end);
-      if (t != '\0')
+      gchar *t = parse_one_spec (action, i, &end);
+      if (t != NULL)
         {
           types[idx++] = t;
           i = end;
         }
     }
-  types[n] = '\0';
+  types[n] = NULL;
   return types;
 }
 
@@ -571,7 +640,7 @@ macro_get_arg_infos (const gchar *action, gint *count_out)
         gint end;
         if (try_parse_list_spec (action, i, &list_name, &end))
           {
-            infos[idx].type = 'l';
+            infos[idx].type = g_strdup ("l");
             infos[idx].list_name = list_name;
             idx++;
             i = end;
@@ -580,8 +649,8 @@ macro_get_arg_infos (const gchar *action, gint *count_out)
       }
 
       gint end;
-      gchar t = parse_one_spec (action, i, &end);
-      if (t != '\0')
+      gchar *t = parse_one_spec (action, i, &end);
+      if (t != NULL)
         {
           infos[idx].type = t;
           infos[idx].list_name = NULL;
@@ -602,8 +671,18 @@ macro_arg_infos_free (macro_arg_info_t *infos, gint count)
     {
       g_free (infos[i].list_name);
       g_free (infos[i].label);
+      g_free (infos[i].type);
     }
   g_free (infos);
+}
+
+gboolean
+macro_type_is_float (const gchar *type)
+{
+  if (!type || !type[0])
+    return FALSE;
+  gchar last = type[strlen (type) - 1];
+  return strchr ("fFeEgGaA", last) != NULL;
 }
 
 /* Construit la chaîne d'action en substituant chaque spécificateur par l'argument correspondant. */
@@ -651,9 +730,9 @@ format_action_with_args (const gchar *action, const gchar **args, gint n_args)
       }
 
       gint spec_end;
-      gchar fmt_type = parse_one_spec (action, i, &spec_end);
+      gchar *fmt_type = parse_one_spec (action, i, &spec_end);
 
-      if (fmt_type == '\0')
+      if (fmt_type == NULL)
         {
           g_string_append_c (result, action[i]);
           continue;
@@ -672,6 +751,7 @@ format_action_with_args (const gchar *action, const gchar **args, gint n_args)
         {
           g_string_append_len (result, &action[i], spec_end - i + 1);
         }
+      g_free (fmt_type);
       i = spec_end;
     }
   return g_string_free (result, FALSE);
