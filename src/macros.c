@@ -945,12 +945,21 @@ add_columns (GtkTreeView *treeview)
 static gint
 Add_shortcut (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter;
-  GtkTreeModel *model = (GtkTreeModel *) pointer;
+  GtkTreeIter iter, new_iter;
+  GtkTreeView *treeview = (GtkTreeView *) pointer;
+  GtkTreeModel *model = gtk_tree_view_get_model (treeview);
+  GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  gtk_list_store_append (GTK_LIST_STORE (model), &iter);
+  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+    {
+      gtk_list_store_insert_after (GTK_LIST_STORE (model), &new_iter, &iter);
+    }
+  else
+    {
+      gtk_list_store_append (GTK_LIST_STORE (model), &new_iter);
+    }
 
-  gtk_list_store_set (GTK_LIST_STORE (model), &iter,
+  gtk_list_store_set (GTK_LIST_STORE (model), &new_iter,
                       COLUMN_SHORTCUT, "None",
                       COLUMN_TAB, _ ("General"),
                       -1);
@@ -1392,10 +1401,20 @@ add_list_columns (GtkTreeView *treeview)
 static gboolean
 Add_list_entry (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter;
+  GtkTreeIter iter, new_iter;
+  GtkTreeView *treeview = (GtkTreeView *) pointer;
+  GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  gtk_list_store_append (GTK_LIST_STORE (lists_model), &iter);
-  gtk_list_store_set (GTK_LIST_STORE (lists_model), &iter,
+  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+    {
+      gtk_list_store_insert_after (GTK_LIST_STORE (lists_model), &new_iter, &iter);
+    }
+  else
+    {
+      gtk_list_store_append (GTK_LIST_STORE (lists_model), &new_iter);
+    }
+
+  gtk_list_store_set (GTK_LIST_STORE (lists_model), &new_iter,
                       LIST_COLUMN_NAME, "NewList",
                       LIST_COLUMN_DISPLAY, "display",
                       LIST_COLUMN_VALUE, "value",
@@ -1468,7 +1487,7 @@ build_lists_page (void)
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
 
   GtkWidget *button = gtk_button_new_with_mnemonic (_ ("_Add Entry"));
-  g_signal_connect (button, "clicked", G_CALLBACK (Add_list_entry), NULL);
+  g_signal_connect (button, "clicked", G_CALLBACK (Add_list_entry), (gpointer) treeview);
   gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
 
   button = gtk_button_new_with_mnemonic (_ ("_Delete Entry"));
@@ -1536,7 +1555,7 @@ Config_macros (GtkAction *action, gpointer data)
   gtk_box_pack_start (GTK_BOX (macros_vbox), hbox, FALSE, FALSE, 0);
 
   button = gtk_button_new_with_mnemonic (_ ("_Add"));
-  g_signal_connect (button, "clicked", G_CALLBACK (Add_shortcut), (gpointer) model);
+  g_signal_connect (button, "clicked", G_CALLBACK (Add_shortcut), (gpointer) treeview);
   gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
 
   button = gtk_button_new_with_mnemonic (_ ("_Delete"));
