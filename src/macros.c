@@ -21,6 +21,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <limits.h>
 
 #include "interface.h"
 #include "macros.h"
@@ -685,6 +687,84 @@ macro_type_is_float (const gchar *type)
   return strchr ("fFeEgGaA", last) != NULL;
 }
 
+gboolean
+macro_type_value_valid (const gchar *type, const gchar *value)
+{
+  if (!type || !type[0] || !value || !value[0])
+    return TRUE;
+
+  gchar conv = type[strlen (type) - 1];
+
+  if (conv == 's' || conv == 'c' || g_strcmp0 (type, "l") == 0)
+    return TRUE;
+
+  if (strchr ("fFeEgGaA", conv))
+    {
+      gchar *end = NULL;
+      errno = 0;
+      strtod (value, &end);
+      if (errno == ERANGE || end == value || *end != '\0')
+        return FALSE;
+
+      gint limit;
+      if (type[0] == 'L')
+        limit = 19;
+      else if (type[0] == 'l')
+        limit = 16;
+      else
+        limit = 9;
+      gint digits = 0;
+      for (const gchar *p = value; *p != '\0' && *p != 'e' && *p != 'E'; p++)
+        if (g_ascii_isdigit (*p))
+          digits++;
+      return digits <= limit;
+    }
+
+  {
+    gchar *end = NULL;
+    errno = 0;
+
+    if (conv == 'd' || conv == 'i')
+      {
+        gint64 v = g_ascii_strtoll (value, &end, 10);
+        if (errno == ERANGE || end == value || *end != '\0')
+          return FALSE;
+        if (g_strcmp0 (type, "hd") == 0 || g_strcmp0 (type, "hi") == 0)
+          return v >= SHRT_MIN && v <= SHRT_MAX;
+        if (g_strcmp0 (type, "hhd") == 0 || g_strcmp0 (type, "hhi") == 0)
+          return v >= SCHAR_MIN && v <= SCHAR_MAX;
+        if (g_strcmp0 (type, "ld") == 0 || g_strcmp0 (type, "li") == 0)
+          return v >= LONG_MIN && v <= LONG_MAX;
+        if (g_strcmp0 (type, "lld") == 0 || g_strcmp0 (type, "lli") == 0)
+          return TRUE;
+        return v >= INT_MIN && v <= INT_MAX;
+      }
+
+    if (conv == 'u' || conv == 'o' || conv == 'x' || conv == 'X')
+      {
+        gint base = (conv == 'x' || conv == 'X') ? 0 : 10;
+        guint64 v = g_ascii_strtoull (value, &end, base);
+        if (errno == ERANGE || end == value || *end != '\0')
+          return FALSE;
+        if (g_strcmp0 (type, "hu") == 0 || g_strcmp0 (type, "ho") == 0 ||
+            g_strcmp0 (type, "hx") == 0 || g_strcmp0 (type, "hX") == 0)
+          return v <= USHRT_MAX;
+        if (g_strcmp0 (type, "hhu") == 0 || g_strcmp0 (type, "hho") == 0 ||
+            g_strcmp0 (type, "hhx") == 0 || g_strcmp0 (type, "hhX") == 0)
+          return v <= UCHAR_MAX;
+        if (g_strcmp0 (type, "lu") == 0 || g_strcmp0 (type, "lo") == 0 ||
+            g_strcmp0 (type, "lx") == 0 || g_strcmp0 (type, "lX") == 0)
+          return v <= ULONG_MAX;
+        if (g_strcmp0 (type, "llu") == 0 || g_strcmp0 (type, "llo") == 0 ||
+            g_strcmp0 (type, "llx") == 0 || g_strcmp0 (type, "llX") == 0)
+          return TRUE;
+        return v <= UINT_MAX;
+      }
+  }
+
+  return TRUE;
+}
+
 /* Construit la chaîne d'action en substituant chaque spécificateur par l'argument correspondant. */
 static gchar *
 format_action_with_args (const gchar *action, const gchar **args, gint n_args)
@@ -1025,14 +1105,30 @@ add_columns (GtkTreeView *treeview)
 static gint
 Add_shortcut (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter, new_iter;
+  GtkTreeIter new_iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
   GtkTreeModel *model = gtk_tree_view_get_model (treeview);
   GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+  GList *list = gtk_tree_selection_get_selected_rows (selection, &model);
+  gint max_idx = -1;
+  for (GList *l = list; l; l = l->next)
     {
+      GtkTreePath *path = (GtkTreePath *) l->data;
+      gint row = gtk_tree_path_get_indices (path)[0];
+      if (row > max_idx)
+        max_idx = row;
+      gtk_tree_path_free (path);
+    }
+  g_list_free (list);
+
+  if (max_idx >= 0)
+    {
+      GtkTreePath *path = gtk_tree_path_new_from_indices (max_idx, -1);
+      GtkTreeIter iter;
+      gtk_tree_model_get_iter (model, &iter, path);
       gtk_list_store_insert_after (GTK_LIST_STORE (model), &new_iter, &iter);
+      gtk_tree_path_free (path);
     }
   else
     {
@@ -1047,21 +1143,49 @@ Add_shortcut (GtkWidget *button, gpointer pointer)
   return FALSE;
 }
 
+static void
+sort_indices_asc (gint *indices, gint count)
+{
+  for (gint i = 0; i < count - 1; i++)
+    for (gint j = i + 1; j < count; j++)
+      if (indices[i] > indices[j])
+        { gint tmp = indices[i]; indices[i] = indices[j]; indices[j] = tmp; }
+}
+
 static gboolean
 Delete_macro (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
   GtkTreeModel *model = gtk_tree_view_get_model (treeview);
   GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+  GList *list = gtk_tree_selection_get_selected_rows (selection, &model);
+  if (list == NULL)
+    return FALSE;
+
+  gint n = g_list_length (list);
+  gint *indices = g_new (gint, n);
+  gint idx_count = 0;
+  for (GList *l = list; l; l = l->next)
     {
-      GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
-      gtk_list_store_remove (GTK_LIST_STORE (model), &iter);
+      GtkTreePath *path = (GtkTreePath *) l->data;
+      indices[idx_count++] = gtk_tree_path_get_indices (path)[0];
+      gtk_tree_path_free (path);
+    }
+  g_list_free (list);
+
+  sort_indices_asc (indices, idx_count);
+
+  for (gint k = idx_count - 1; k >= 0; k--)
+    {
+      GtkTreePath *path = gtk_tree_path_new_from_indices (indices[k], -1);
+      GtkTreeIter iter;
+      if (gtk_tree_model_get_iter (model, &iter, path))
+        gtk_list_store_remove (GTK_LIST_STORE (model), &iter);
       gtk_tree_path_free (path);
     }
 
+  g_free (indices);
   return FALSE;
 }
 
@@ -1084,63 +1208,118 @@ Delete_shortcut (GtkWidget *button, gpointer pointer)
 static gboolean
 Move_up (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
   GtkTreeModel *model = gtk_tree_view_get_model (treeview);
   GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  if (!gtk_tree_selection_get_selected (selection, NULL, &iter))
+  GList *list = gtk_tree_selection_get_selected_rows (selection, &model);
+  if (list == NULL)
     return FALSE;
 
-  GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
-  gint row = gtk_tree_path_get_indices (path)[0];
-  gtk_tree_path_free (path);
-
-  if (row > 0)
+  gint n = g_list_length (list);
+  gint *indices = g_new (gint, n);
+  gint idx_count = 0;
+  for (GList *l = list; l; l = l->next)
     {
-      GtkTreePath *target = gtk_tree_path_new_from_indices (row - 1, -1);
-      GtkTreeIter target_iter;
-      gtk_tree_model_get_iter (model, &target_iter, target);
-      gtk_list_store_move_before (GTK_LIST_STORE (model), &iter, &target_iter);
-      gtk_tree_path_free (target);
-      target = gtk_tree_path_new_from_indices (row - 1, -1);
-      gtk_tree_model_get_iter (model, &iter, target);
-      gtk_tree_selection_select_iter (selection, &iter);
-      gtk_tree_path_free (target);
+      GtkTreePath *path = (GtkTreePath *) l->data;
+      indices[idx_count++] = gtk_tree_path_get_indices (path)[0];
+      gtk_tree_path_free (path);
+    }
+  g_list_free (list);
+
+  sort_indices_asc (indices, idx_count);
+
+  if (indices[0] <= 0)
+    { g_free (indices); return FALSE; }
+
+  gtk_tree_selection_unselect_all (selection);
+
+  gint offset = 0;
+  for (gint k = 0; k < idx_count; k++)
+    {
+      gint cur = indices[k] - offset;
+      GtkTreePath *src_path = gtk_tree_path_new_from_indices (cur, -1);
+      GtkTreeIter src_iter;
+      gtk_tree_model_get_iter (model, &src_iter, src_path);
+      gtk_tree_path_free (src_path);
+
+      GtkTreePath *tgt_path = gtk_tree_path_new_from_indices (cur - 1, -1);
+      GtkTreeIter tgt_iter;
+      gtk_tree_model_get_iter (model, &tgt_iter, tgt_path);
+      gtk_tree_path_free (tgt_path);
+
+      gtk_list_store_move_before (GTK_LIST_STORE (model), &src_iter, &tgt_iter);
+      offset++;
     }
 
+  for (gint k = 0; k < idx_count; k++)
+    {
+      GtkTreePath *sel_path = gtk_tree_path_new_from_indices (indices[k] - 1, -1);
+      GtkTreeIter sel_iter;
+      gtk_tree_model_get_iter (model, &sel_iter, sel_path);
+      gtk_tree_selection_select_iter (selection, &sel_iter);
+      gtk_tree_path_free (sel_path);
+    }
+
+  g_free (indices);
   return FALSE;
 }
 
 static gboolean
 Move_down (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
   GtkTreeModel *model = gtk_tree_view_get_model (treeview);
   GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  if (!gtk_tree_selection_get_selected (selection, NULL, &iter))
+  GList *list = gtk_tree_selection_get_selected_rows (selection, &model);
+  if (list == NULL)
     return FALSE;
 
-  GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
-  gint row = gtk_tree_path_get_indices (path)[0];
-  gtk_tree_path_free (path);
+  gint n = g_list_length (list);
+  gint *indices = g_new (gint, n);
+  gint idx_count = 0;
+  for (GList *l = list; l; l = l->next)
+    {
+      GtkTreePath *path = (GtkTreePath *) l->data;
+      indices[idx_count++] = gtk_tree_path_get_indices (path)[0];
+      gtk_tree_path_free (path);
+    }
+  g_list_free (list);
+
+  sort_indices_asc (indices, idx_count);
 
   gint n_rows = gtk_tree_model_iter_n_children (model, NULL);
-  if (row < n_rows - 1)
+  if (indices[idx_count - 1] >= n_rows - 1)
+    { g_free (indices); return FALSE; }
+
+  gtk_tree_selection_unselect_all (selection);
+
+  for (gint k = idx_count - 1; k >= 0; k--)
     {
-      GtkTreePath *target = gtk_tree_path_new_from_indices (row + 1, -1);
-      GtkTreeIter target_iter;
-      gtk_tree_model_get_iter (model, &target_iter, target);
-      gtk_list_store_move_after (GTK_LIST_STORE (model), &iter, &target_iter);
-      gtk_tree_path_free (target);
-      target = gtk_tree_path_new_from_indices (row + 1, -1);
-      gtk_tree_model_get_iter (model, &iter, target);
-      gtk_tree_selection_select_iter (selection, &iter);
-      gtk_tree_path_free (target);
+      GtkTreePath *src_path = gtk_tree_path_new_from_indices (indices[k], -1);
+      GtkTreeIter src_iter;
+      gtk_tree_model_get_iter (model, &src_iter, src_path);
+      gtk_tree_path_free (src_path);
+
+      GtkTreePath *tgt_path = gtk_tree_path_new_from_indices (indices[k] + 1, -1);
+      GtkTreeIter tgt_iter;
+      gtk_tree_model_get_iter (model, &tgt_iter, tgt_path);
+      gtk_tree_path_free (tgt_path);
+
+      gtk_list_store_move_after (GTK_LIST_STORE (model), &src_iter, &tgt_iter);
     }
 
+  for (gint k = 0; k < idx_count; k++)
+    {
+      GtkTreePath *sel_path = gtk_tree_path_new_from_indices (indices[k] + 1, -1);
+      GtkTreeIter sel_iter;
+      gtk_tree_model_get_iter (model, &sel_iter, sel_path);
+      gtk_tree_selection_select_iter (selection, &sel_iter);
+      gtk_tree_path_free (sel_path);
+    }
+
+  g_free (indices);
   return FALSE;
 }
 
@@ -1481,13 +1660,30 @@ add_list_columns (GtkTreeView *treeview)
 static gboolean
 Add_list_entry (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter, new_iter;
+  GtkTreeIter new_iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
   GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
+  GtkTreeModel *model = GTK_TREE_MODEL (lists_model);
 
-  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+  GList *list = gtk_tree_selection_get_selected_rows (selection, &model);
+  gint max_idx = -1;
+  for (GList *l = list; l; l = l->next)
     {
+      GtkTreePath *path = (GtkTreePath *) l->data;
+      gint row = gtk_tree_path_get_indices (path)[0];
+      if (row > max_idx)
+        max_idx = row;
+      gtk_tree_path_free (path);
+    }
+  g_list_free (list);
+
+  if (max_idx >= 0)
+    {
+      GtkTreePath *path = gtk_tree_path_new_from_indices (max_idx, -1);
+      GtkTreeIter iter;
+      gtk_tree_model_get_iter (model, &iter, path);
       gtk_list_store_insert_after (GTK_LIST_STORE (lists_model), &new_iter, &iter);
+      gtk_tree_path_free (path);
     }
   else
     {
@@ -1506,15 +1702,37 @@ Add_list_entry (GtkWidget *button, gpointer pointer)
 static gboolean
 Delete_list_entry (GtkWidget *button, gpointer pointer)
 {
-  GtkTreeIter iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
+  GtkTreeModel *model = gtk_tree_view_get_model (treeview);
   GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+  GList *list = gtk_tree_selection_get_selected_rows (selection, &model);
+  if (list == NULL)
+    return FALSE;
+
+  gint n = g_list_length (list);
+  gint *indices = g_new (gint, n);
+  gint idx_count = 0;
+  for (GList *l = list; l; l = l->next)
     {
-      gtk_list_store_remove (GTK_LIST_STORE (gtk_tree_view_get_model (treeview)), &iter);
+      GtkTreePath *path = (GtkTreePath *) l->data;
+      indices[idx_count++] = gtk_tree_path_get_indices (path)[0];
+      gtk_tree_path_free (path);
+    }
+  g_list_free (list);
+
+  sort_indices_asc (indices, idx_count);
+
+  for (gint k = idx_count - 1; k >= 0; k--)
+    {
+      GtkTreePath *path = gtk_tree_path_new_from_indices (indices[k], -1);
+      GtkTreeIter iter;
+      if (gtk_tree_model_get_iter (model, &iter, path))
+        gtk_list_store_remove (GTK_LIST_STORE (model), &iter);
+      gtk_tree_path_free (path);
     }
 
+  g_free (indices);
   return FALSE;
 }
 
@@ -1558,6 +1776,7 @@ build_lists_page (void)
 
   lists_model = create_lists_model ();
   GtkWidget *treeview = gtk_tree_view_new_with_model (lists_model);
+  gtk_tree_selection_set_mode (gtk_tree_view_get_selection (GTK_TREE_VIEW (treeview)), GTK_SELECTION_MULTIPLE);
 
   add_list_columns (GTK_TREE_VIEW (treeview));
   gtk_container_add (GTK_CONTAINER (sw), treeview);
@@ -1620,6 +1839,7 @@ Config_macros (GtkAction *action, gpointer data)
 
   model = create_model ();
   treeview = gtk_tree_view_new_with_model (model);
+  gtk_tree_selection_set_mode (gtk_tree_view_get_selection (GTK_TREE_VIEW (treeview)), GTK_SELECTION_MULTIPLE);
   gtk_tree_view_set_search_column (GTK_TREE_VIEW (treeview), COLUMN_SHORTCUT);
   g_object_unref (model);
 

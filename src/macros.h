@@ -65,6 +65,7 @@ typedef struct
 macro_arg_info_t *macro_get_arg_infos (const gchar *action, gint *count_out);
 void              macro_arg_infos_free (macro_arg_info_t *infos, gint count);
 gboolean          macro_type_is_float  (const gchar *type);
+gboolean          macro_type_value_valid (const gchar *type, const gchar *value);
 
 void Config_macros (GtkAction *action, gpointer data);
 void remove_shortcuts (void);

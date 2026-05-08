@@ -13,14 +13,16 @@
 - Example: A list called "Commands" with entries like "Reset" → "AT+RESET", "Ping" → "AT+PING"
                                                                                                               
 3. Macros with Format Arguments
-- Macro actions support printf-style format specifiers:
+- Macro actions support full printf-style format specifiers with length modifiers:
   - %s – string
-  - %d / %i – signed integer
-  - %u / %o / %x – unsigned integer (decimal/octal/hex)
-  - %f – 32-bit float (~7 significant digits)
-  - %lf – 64-bit double (~15 significant digits)
-  - %Lf – 80/128-bit long double
   - %c – single character
+  - %d / %i – signed int; %hd/%hi (short), %hhd/%hhi (signed char), %ld/%li (long), %lld/%lli (long long)
+  - %u / %o – unsigned int (decimal/octal); %hu/%ho (unsigned short), %hhu/%hho (unsigned char), %lu/%lo (unsigned long), %llu/%llo (unsigned long long)
+  - %x / %X – unsigned hex; %hx/%hX, %hhx/%hhX, %lx/%lX, %llx/%llX
+  - %f / %e / %g / %a (and F/E/G/A variants) – float (~9 significant digits)
+  - %lf / %le / %lg / %la – double (~16 significant digits)
+  - %Lf / %Le / %Lg / %La – long double (~19 significant digits)
+- Values are automatically truncated to the type's precision on send; no trailing zeros or out-of-range digits reach the port
 - Macros with arguments automatically generate buttons with input fields in the macro panel
 - Example action: "AT+SEND=%s\r\n" → user types the string, macro sends the full command
 - A `[name]` tag placed immediately before a format specifier adds a label above its input field
@@ -47,6 +49,7 @@
 7. Smart Add (Insert After Selection)
 - In the Macros tab, clicking "Add" inserts a new macro right after the currently selected row
 - In the Lists tab, clicking "Add Entry" inserts a new entry right after the currently selected row
+- With multiple rows selected, the new item is inserted after the last selected row
 - If no row is selected, the new item is appended at the end of the list as before
 
 8. Macro Tab Groups
@@ -67,6 +70,18 @@
 - While actively polling, the button blinks to provide a visual indicator
 - For macros with format arguments, the argument values entered at start time are captured and reused for every subsequent send
 - The polling configuration (enabled state and period) is saved automatically to the macros file and restored at startup
+
+10. Multi-Selection in Macro/List Editors
+- Both the Macros and Lists tabs support multi-row selection (Ctrl+Click, Shift+Click)
+- Move Up / Move Down and Delete buttons operate on the entire selected group
+- Selected rows keep their relative order after moving; the group moves as a block
+- Delete removes all selected rows in one operation (processed bottom-to-top to preserve indices)
+
+11. Input Validation with Visual Feedback
+- Numeric macro arguments (integer and float types) are validated on focus-out or Enter
+- If the value exceeds the type's range or contains invalid characters, the entry field turns red, bold, with a red border
+- Saved argument values are validated at startup and when loading a macros file
+- Empty fields and string/list fields are always considered valid
 
 
 <p align="center">

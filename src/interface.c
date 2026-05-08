@@ -778,7 +778,35 @@ static void on_macro_button_clicked_with_polling(GtkWidget *widget, gpointer dat
 
 static void save_entry_arg(GtkWidget *entry)
 {
+	const gchar *type = (const gchar *)g_object_get_data(G_OBJECT(entry), "arg-type");
+	const gchar *text = gtk_entry_get_text(GTK_ENTRY(entry));
+	GtkStyleContext *ctx = gtk_widget_get_style_context(entry);
+
+	if (!macro_type_value_valid(type, text))
+		gtk_style_context_add_class(ctx, "error");
+	else
+		gtk_style_context_remove_class(ctx, "error");
+
 	save_arg_from_widget(entry);
+}
+
+static void apply_entry_validation(GtkWidget *entry)
+{
+	const gchar *type = (const gchar *)g_object_get_data(G_OBJECT(entry), "arg-type");
+	const gchar *text = gtk_entry_get_text(GTK_ENTRY(entry));
+	GtkStyleContext *ctx = gtk_widget_get_style_context(entry);
+
+	if (!macro_type_value_valid(type, text))
+		gtk_style_context_add_class(ctx, "error");
+	else
+		gtk_style_context_remove_class(ctx, "error");
+}
+
+static void update_entry_width(GtkEntry *entry)
+{
+	const gchar *text = gtk_entry_get_text(entry);
+	gint len = (gint) g_utf8_strlen(text, -1);
+	gtk_entry_set_width_chars(entry, MAX(4, len));
 }
 
 static gboolean on_macro_arg_entry_focus_out(GtkWidget *entry, GdkEvent *event, gpointer data)
@@ -1027,13 +1055,20 @@ void rebuild_macro_buttons(void)
 						gtk_entry_set_width_chars(GTK_ENTRY(widget), 4);
 
 						if (macros[i].args != NULL && k < (gint)g_strv_length(macros[i].args))
+						{
 							gtk_entry_set_text(GTK_ENTRY(widget), macros[i].args[k]);
+							update_entry_width(GTK_ENTRY(widget));
+						}
 					}
 
 					d->entries[k] = widget;
 
-					g_object_set_data(G_OBJECT(widget), "macro-index", GINT_TO_POINTER(i));
-					g_object_set_data(G_OBJECT(widget), "arg-index",   GINT_TO_POINTER(k));
+			g_object_set_data(G_OBJECT(widget), "macro-index", GINT_TO_POINTER(i));
+			g_object_set_data(G_OBJECT(widget), "arg-index",   GINT_TO_POINTER(k));
+			g_object_set_data_full(G_OBJECT(widget), "arg-type", g_strdup(arg_infos[k].type), g_free);
+
+			if (GTK_IS_ENTRY(widget))
+				apply_entry_validation(widget);
 
 					if (GTK_IS_COMBO_BOX(widget))
 						g_signal_connect(widget, "changed",
@@ -1042,8 +1077,12 @@ void rebuild_macro_buttons(void)
 						g_signal_connect(widget, "focus-out-event",
 						                 G_CALLBACK(on_macro_arg_entry_focus_out), NULL);
 					if (GTK_IS_ENTRY(widget))
+					{
+						g_signal_connect(widget, "changed",
+						                 G_CALLBACK(update_entry_width), NULL);
 						g_signal_connect(widget, "activate",
 						                 G_CALLBACK(on_macro_arg_entry_activate), button);
+					}
 
 					GtkWidget *arg_cell = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
 					if (arg_infos[k].label != NULL)
@@ -1282,7 +1321,9 @@ static void create_macro_panel(void)
 	    "  margin-top: -1px; padding-top: 4px; }\n"
 	    "button.macro-tab:hover:not(:checked) { background-color: #cccccc;"
 	    "  color: #000000; }\n"
-	    "button.macro-button { min-width: 0; }\n",
+	    "button.macro-button { min-width: 0; }\n"
+	    "entry.error { color: #cc0000; font-weight: bold; caret-color: #cc0000;"
+	    "  border-color: #cc0000; border-width: 2px; }\n",
 	    -1, NULL);
 	gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
 	                                          GTK_STYLE_PROVIDER(polling_css_provider),
