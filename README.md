@@ -21,6 +21,9 @@
   - %c – single character
 - Macros with arguments automatically generate buttons with input fields in the macro panel
 - Example action: "AT+SEND=%s\r\n" → user types the string, macro sends the full command
+- A `[name]` tag placed immediately before a format specifier adds a label above its input field
+- Example: "AT+SPEED=[Speed]%d\r\n" → the integer field is labeled "Speed" in the UI
+- Works with list arguments too: "[Command]%#Commands" → the dropdown is labeled "Command"
                                                                                                               
 4. List Arguments in Macros
 - Using %#ListName in a macro action creates a combo box dropdown in the button UI
@@ -31,6 +34,38 @@
 - Both the Macros tab and Lists tab have "Move Up" / "Move Down" buttons
 - Lets you reorder macros and list entries to match your preferred workflow
 
+6. TCP Client / Server Transport
+- Supports three transport modes: Serial port, TCP Client, and TCP Server
+- TCP Client connects to a remote host:port with optional auto-reconnect (2-second interval)
+- TCP Server listens on a port and accepts a single client connection (new client replaces old)
+- Privileged ports (<1024) are supported via Linux CAP_NET_BIND_SERVICE capability
+- Switch transport type in Config > Port dialog via a combo box; GUI adapts to show relevant settings
+- Command-line options: --transport (serial|tcp-client|tcp-server), --host, --tcp-port
+
+7. Smart Add (Insert After Selection)
+- In the Macros tab, clicking "Add" inserts a new macro right after the currently selected row
+- In the Lists tab, clicking "Add Entry" inserts a new entry right after the currently selected row
+- If no row is selected, the new item is appended at the end of the list as before
+
+8. Macro Tab Groups
+- Each macro has an optional **Tab** field in the configuration window
+- Macros sharing the same tab name are grouped under a common tab in the macro panel
+- Macros with no tab name are placed in the **General** tab automatically
+- The tab bar wraps across multiple rows if there are many groups
+- Right-clicking anywhere on the tab bar shows a checklist of all tabs, allowing you to show or hide each group independently
+
+9. Macro Polling (Right-click on a macro button)
+- Right-clicking any macro button opens a context menu with two options:
+  - **Polling Mode** checkbox: enables or disables periodic auto-send for that macro
+  - **Period (ms)** field: sets the repeat interval in milliseconds (default: 1000 ms)
+- When polling is enabled, the button label gains a ⏱ prefix to indicate the mode
+- **Left-clicking** the button then acts as a start/stop toggle:
+  - First click: sends the macro immediately and starts repeating it at the configured interval
+  - Second click: stops the periodic sending
+- While actively polling, the button blinks to provide a visual indicator
+- For macros with format arguments, the argument values entered at start time are captured and reused for every subsequent send
+- The polling configuration (enabled state and period) is saved automatically to the macros file and restored at startup
+
 
 <p align="center">
     <img src="Capture1.png" width="60%"/>
@@ -40,6 +75,15 @@
 </p>
 <p align="center">
     <img src="Capture3.png" width="60%"/>
+</p>
+<p align="center">
+    <img src="Capture4.png" width="60%"/>
+    </p>
+<p align="center">
+    <img src="Capture5.png" width="60%"/>
+    </p>
+<p align="center">
+    <img src="Capture6.png" width="60%"/>
 </p>
 # GTKTerm: A GTK+ Serial Port Terminal
 <img src="data/gtkterm_256x256.png" align="right" width="20%"/>
