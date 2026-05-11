@@ -93,7 +93,7 @@ static gboolean transport_read_cb(GIOChannel *src, GIOCondition cond, gpointer d
 		bytes_read = read(fd, c, BUFFER_RECEPTION);
 		if(bytes_read > 0)
 		{
-			put_chars(c, bytes_read, config.crlfauto, config.esc_clear_screen);
+			put_chars(c, bytes_read, config.crlfauto);
 
 			if(config.car != -1 && waiting_for_char == TRUE)
 			{

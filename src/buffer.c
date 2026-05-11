@@ -89,7 +89,7 @@ unsigned int insert_timestamp(char *buffer)
   return size;
 }
 
-void put_chars(const char *chars, unsigned int size, gboolean crlf_auto, gboolean esc_clear_screen)
+void put_chars(const char *chars, unsigned int size, gboolean crlf_auto)
 {
 	// Each input byte can expand to at most: 1 (CR insert) + TIMESTAMP_SIZE + 1 (char itself).
 	// Allocate on the heap to avoid stack overflow with large inputs containing many newlines.
@@ -97,18 +97,13 @@ void put_chars(const char *chars, unsigned int size, gboolean crlf_auto, gboolea
 	const char *characters;
 
 	/* If the auto CR LF mode on, read the buffer to add \r before \n */
-	if(crlf_auto || timestamp_on || esc_clear_screen)
+	if(crlf_auto || timestamp_on)
 	{
 		out_buffer = g_malloc(size * (TIMESTAMP_SIZE + 3) + 1);
 		int i, out_size = 0;
 
 		for (i=0; i<size; i++)
 		{
-			if(esc_clear_screen && chars[i] == '\x1b')
-			{
-				clear_buffer();
-				continue;
-			}
 			if(crlf_auto)
 			{
 				if (chars[i] == '\r')
@@ -167,7 +162,7 @@ void put_chars(const char *chars, unsigned int size, gboolean crlf_auto, gboolea
 		// converted newline characters
 		chars = out_buffer;
 		size = out_size;
-	} // if(crlf_auto || timestamp_on || esc_clear_screen)
+	} // if(crlf_auto || timestamp_on)
 
 	if(buffer == NULL)
 	{

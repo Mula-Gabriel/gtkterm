@@ -115,11 +115,17 @@ send_serial (gchar *string, gint len)
 {
   gint bytes_written;
 
+  if (esc_clear_screen_on && len == 1 && (guchar)string[0] == '\x1b')
+    {
+      clear_buffer ();
+      return 1;
+    }
+
   bytes_written = Send_chars (string, len);
   if (bytes_written > 0)
     {
       if (echo_on)
-        put_chars (string, bytes_written, crlfauto_on, esc_clear_screen_on);
+        put_chars (string, bytes_written, crlfauto_on);
     }
 
   return bytes_written;
