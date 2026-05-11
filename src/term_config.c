@@ -1217,7 +1217,6 @@ void Save_config_file(void)
 void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 {
 	int max, cfg_num, i;
-	gchar *string = NULL;
 
 	cfg_num = -1;
 
@@ -1261,10 +1260,6 @@ void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 
 		Copy_configuration(cfg_num);
 		cfgDump(g_file_get_path(config_file), cfg, CFG_INI, max);
-
-		string = g_strdup_printf(_("Configuration [%s] saved\n"), (char *)data);
-		show_message(string, MSG_WRN);
-		g_free(string);
 	}
 	else
 		Save_config_file();
