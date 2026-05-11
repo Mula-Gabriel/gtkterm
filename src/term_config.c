@@ -137,7 +137,6 @@ cfgStruct cfg[] =
 };
 
 GFile *config_file;
-static GFile *state_file;
 static gchar *active_config_name = NULL;
 
 struct configuration_port config;
@@ -157,7 +156,7 @@ static void load_config(GtkDialog *, gint, GtkTreeSelection *);
 static void delete_config(GtkDialog *, gint, GtkTreeSelection *);
 static void save_config(GtkDialog *, gint, GtkWidget *);
 static void really_save_config(GtkDialog *, gint, gpointer);
-static gint remove_section(gchar *, gchar *);
+static gint remove_section(const gchar *, gchar *);
 static gboolean cursor_block(GtkSwitch *, gboolean, gpointer);
 static void Selec_couleur(GdkRGBA *, gfloat, gfloat, gfloat, gfloat);
 void config_fg_color(GtkWidget *button, gpointer data);
@@ -182,15 +181,90 @@ void config_file_init(void)
 		g_file_move(config_file_old, config_file, G_FILE_COPY_NONE, NULL, NULL, NULL, NULL);
 
 	g_object_unref(config_file_old);
-
-	state_file = g_file_new_build_filename(g_get_user_config_dir(), "gtkterm_state.ini", NULL);
 }
 
-void save_window_state(GtkWidget *window, GtkWidget *paned)
+const gchar *get_config_file_path(void)
 {
-	GKeyFile *kf = g_key_file_new();
-	gint x, y, w, h;
+	return g_file_get_path(config_file);
+}
 
+/* Section names written by GKeyFile (must be invisible to parsecfg). */
+static const gchar * const kf_groups[] = {
+	"window", "colors", "layout", "session", NULL
+};
+
+/* Remove kf_groups from .gtktermrc so parsecfg doesn't see them.
+   Returns the stripped content as an allocated string; caller must g_free. */
+static gchar *cfg_strip_kf_sections(void)
+{
+	const gchar *path = get_config_file_path();
+	gchar *contents = NULL;
+	gsize  len;
+
+	if (!g_file_get_contents(path, &contents, &len, NULL))
+		return g_strdup("");
+
+	GString *kept   = g_string_new(NULL);
+	GString *extras = g_string_new(NULL);
+	gchar  **lines  = g_strsplit(contents, "\n", -1);
+	g_free(contents);
+
+	gboolean in_protected = FALSE;
+	for (int i = 0; lines[i] != NULL; i++) {
+		const gchar *line = lines[i];
+		if (line[0] == '[') {
+			in_protected = FALSE;
+			for (int j = 0; kf_groups[j]; j++) {
+				gchar *tag = g_strdup_printf("[%s]", kf_groups[j]);
+				if (g_str_has_prefix(line, tag))
+					in_protected = TRUE;
+				g_free(tag);
+				if (in_protected) break;
+			}
+		}
+		GString *dest = in_protected ? extras : kept;
+		g_string_append(dest, line);
+		if (lines[i + 1] != NULL)
+			g_string_append_c(dest, '\n');
+	}
+	g_strfreev(lines);
+
+	g_file_set_contents(path, kept->str, kept->len, NULL);
+	g_string_free(kept, TRUE);
+	return g_string_free(extras, FALSE);
+}
+
+/* Append previously extracted kf_section content back to .gtktermrc. */
+static void cfg_restore_kf_sections(gchar *extras)
+{
+	if (!extras || !extras[0]) return;
+
+	const gchar *path = get_config_file_path();
+	gchar *existing = NULL;
+	gsize  elen;
+
+	if (!g_file_get_contents(path, &existing, &elen, NULL)) {
+		existing = g_strdup("");
+		elen = 0;
+	}
+	GString *out = g_string_new_len(existing, elen);
+	g_free(existing);
+
+	if (out->len && out->str[out->len - 1] != '\n')
+		g_string_append_c(out, '\n');
+	g_string_append(out, extras);
+
+	g_file_set_contents(path, out->str, out->len, NULL);
+	g_string_free(out, TRUE);
+}
+
+void save_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_paned, gboolean script_visible)
+{
+	const gchar *path = get_config_file_path();
+	GKeyFile *kf = g_key_file_new();
+	g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL); /* load existing, preserve other sections */
+
+	gint x, y, w, h;
 	gtk_window_get_position(GTK_WINDOW(window), &x, &y);
 	gtk_window_get_size(GTK_WINDOW(window), &w, &h);
 
@@ -199,26 +273,41 @@ void save_window_state(GtkWidget *window, GtkWidget *paned)
 	g_key_file_set_integer(kf, "window", "width", w);
 	g_key_file_set_integer(kf, "window", "height", h);
 	g_key_file_set_integer(kf, "window", "paned_position", gtk_paned_get_position(GTK_PANED(paned)));
+	g_key_file_set_boolean(kf, "window", "script_panel_visible", script_visible);
+	if (script_paned)
+		g_key_file_set_integer(kf, "window", "v_paned_position", gtk_paned_get_position(GTK_PANED(script_paned)));
 
-	g_key_file_save_to_file(kf, g_file_get_path(state_file), NULL);
+	gsize  length;
+	gchar *data = g_key_file_to_data(kf, &length, NULL);
+	GError *werr = NULL;
+	if (!g_file_set_contents(path, data, (gssize)length, &werr)) {
+		g_printerr("Cannot save window state: %s\n", werr ? werr->message : "?");
+		g_clear_error(&werr);
+	}
+	g_free(data);
 	g_key_file_free(kf);
 }
 
-void load_window_state(GtkWidget *window, GtkWidget *paned)
+void load_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_paned, gboolean *script_visible_out)
 {
 	GKeyFile *kf = g_key_file_new();
 
-	if (!g_key_file_load_from_file(kf, g_file_get_path(state_file), G_KEY_FILE_NONE, NULL))
+	if (!g_key_file_load_from_file(kf, get_config_file_path(), G_KEY_FILE_NONE, NULL))
 	{
 		g_key_file_free(kf);
 		return;
 	}
 
-	gint x   = g_key_file_get_integer(kf, "window", "x",              NULL);
-	gint y   = g_key_file_get_integer(kf, "window", "y",              NULL);
-	gint w   = g_key_file_get_integer(kf, "window", "width",          NULL);
-	gint h   = g_key_file_get_integer(kf, "window", "height",         NULL);
-	gint pos = g_key_file_get_integer(kf, "window", "paned_position", NULL);
+	gint x    = g_key_file_get_integer(kf, "window", "x",              NULL);
+	gint y    = g_key_file_get_integer(kf, "window", "y",              NULL);
+	gint w    = g_key_file_get_integer(kf, "window", "width",          NULL);
+	gint h    = g_key_file_get_integer(kf, "window", "height",         NULL);
+	gint pos  = g_key_file_get_integer(kf, "window", "paned_position", NULL);
+	gint spos = g_key_file_get_integer(kf, "window", "v_paned_position", NULL);
+
+	if (script_visible_out)
+		*script_visible_out = g_key_file_get_boolean(kf, "window", "script_panel_visible", NULL);
+
 	g_key_file_free(kf);
 
 	if (w > 0 && h > 0)
@@ -228,6 +317,8 @@ void load_window_state(GtkWidget *window, GtkWidget *paned)
 	}
 	if (pos > 0)
 		gtk_paned_set_position(GTK_PANED(paned), pos);
+	if (script_paned && spos > 0)
+		gtk_paned_set_position(GTK_PANED(script_paned), spos);
 }
 
 void ConfigFlags(void)
@@ -972,10 +1063,15 @@ void save_config_silent(void)
 {
 	int max, cfg_num, i;
 	const gchar *name = active_config_name ? active_config_name : "default";
+	const gchar *path = get_config_file_path();
 
-	max = cfgParse(g_file_get_path(config_file), cfg, CFG_INI);
+	gchar *kf_backup = cfg_strip_kf_sections();
+
+	max = cfgParse(path, cfg, CFG_INI);
 	if(max == -1)
 	{
+		cfg_restore_kf_sections(kf_backup);
+		g_free(kf_backup);
 		show_message(_("Cannot save configuration file!\nConfig file may contain invalid parameter.\n"), MSG_ERR);
 		return;
 	}
@@ -994,13 +1090,17 @@ void save_config_silent(void)
 	}
 	else
 	{
-		if(remove_section(g_file_get_path(config_file), (char *)name) == -1)
+		if(remove_section(path, (char *)name) == -1)
 		{
+			cfg_restore_kf_sections(kf_backup);
+			g_free(kf_backup);
 			show_message(_("Cannot overwrite section!"), MSG_ERR);
 			return;
 		}
-		if(max == cfgParse(g_file_get_path(config_file), cfg, CFG_INI))
+		if(max == cfgParse(path, cfg, CFG_INI))
 		{
+			cfg_restore_kf_sections(kf_backup);
+			g_free(kf_backup);
 			show_message(_("Cannot read configuration file!"), MSG_ERR);
 			return;
 		}
@@ -1009,7 +1109,9 @@ void save_config_silent(void)
 	}
 
 	Copy_configuration(cfg_num);
-	cfgDump(g_file_get_path(config_file), cfg, CFG_INI, max);
+	cfgDump(path, cfg, CFG_INI, max);
+	cfg_restore_kf_sections(kf_backup);
+	g_free(kf_backup);
 }
 
 void save_config_callback(GtkAction *action, gpointer data)
@@ -1222,10 +1324,15 @@ void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 
 	if(id == GTK_RESPONSE_ACCEPT)
 	{
-		max = cfgParse(g_file_get_path(config_file), cfg, CFG_INI);
+		const gchar *path = get_config_file_path();
+		gchar *kf_backup = cfg_strip_kf_sections();
+
+		max = cfgParse(path, cfg, CFG_INI);
 
 		if(max == -1)
 		{
+			cfg_restore_kf_sections(kf_backup);
+			g_free(kf_backup);
 			show_message(_("Cannot save configuration file!\nConfig file may contain invalid parameter.\n"), MSG_ERR);
 			return;
 		}
@@ -1244,13 +1351,17 @@ void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 		}
 		else
 		{
-			if(remove_section(g_file_get_path(config_file), (char *)data) == -1)
+			if(remove_section(path, (char *)data) == -1)
 			{
+				cfg_restore_kf_sections(kf_backup);
+				g_free(kf_backup);
 				show_message(_("Cannot overwrite section!"), MSG_ERR);
 				return;
 			}
-			if(max == cfgParse(g_file_get_path(config_file), cfg, CFG_INI))
+			if(max == cfgParse(path, cfg, CFG_INI))
 			{
+				cfg_restore_kf_sections(kf_backup);
+				g_free(kf_backup);
 				show_message(_("Cannot read configuration file!"), MSG_ERR);
 				return;
 			}
@@ -1259,7 +1370,9 @@ void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 		}
 
 		Copy_configuration(cfg_num);
-		cfgDump(g_file_get_path(config_file), cfg, CFG_INI, max);
+		cfgDump(path, cfg, CFG_INI, max);
+		cfg_restore_kf_sections(kf_backup);
+		g_free(kf_backup);
 	}
 	else
 		Save_config_file();
@@ -1834,7 +1947,7 @@ void Copy_configuration(int pos)
 }
 
 
-gint remove_section(gchar *cfg_file, gchar *section)
+gint remove_section(const gchar *cfg_file, gchar *section)
 {
 	FILE *f = NULL;
 	char *buffer = NULL;

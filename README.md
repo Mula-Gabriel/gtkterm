@@ -83,6 +83,46 @@
 - Saved argument values are validated at startup and when loading a macros file
 - Empty fields and string/list fields are always considered valid
 
+12. Lua Script Panel
+- A built-in Lua 5.4 script editor and output console, shown/hidden via the View menu
+- Syntax highlighting powered by GtkSourceView 4 (Lua keywords, strings, numbers, comments, functions)
+- Toolbar buttons: **Open**, **Save**, **Run**, **Stop**, **Couleurs…**
+- **Run** executes the script in a background thread; **Stop** interrupts it at the next `gtkterm.sleep()` or `gtkterm.wait_for()` call
+- The last opened script file is saved and reloaded automatically at startup
+- **Layout** — right-click anywhere on the divider or toolbar to toggle between:
+  - *Horizontal* — editor on top, console on bottom
+  - *Vertical* — editor on the left, console on the right
+- The chosen layout and both divider positions are persisted independently across sessions
+- **Colors** — the "Couleurs…" button opens a dialog to customise:
+  - Editor background and default text color
+  - Syntax colors: comments, keywords, strings, numbers, functions
+  - Line-number bar foreground and background
+  - Colors default to a dark or light palette derived from the terminal's configured background; changes are saved to `~/.config/gtkterm_script_colors.ini`
+
+### Lua Scripting API
+
+Function | Description
+---:|---
+`gtkterm.send(handle, data)` | Send raw bytes to a port (`handle 0` = main serial port)
+`gtkterm.wait_for(handle, pattern, timeout_ms)` | Block until `pattern` (Lua regex) appears in received data, or timeout; returns `true/false, matched_string`
+`gtkterm.sleep(ms)` | Pause execution for `ms` milliseconds (interruptible by Stop)
+`gtkterm.log(text)` | Print a line to the script console
+`gtkterm.get_macros()` | Return a list of `{index, label, n_args, args=[{type,label,list}]}` tables
+`gtkterm.send_macro(index_or_label, …)` | Send a macro by its index or label, with optional format arguments
+`gtkterm.get_lists()` | Return a list of `{name, entries=[{display,value}]}` tables for all defined value lists
+`gtkterm.time()` | Return wall-clock time in seconds (float) — use instead of `os.clock()` for elapsed-time measurement
+
+**Example script** (`scripts/05_macros_demo.lua`):
+```lua
+local macros = gtkterm.get_macros()
+for _, m in ipairs(macros) do
+    gtkterm.log(string.format("[%d] %s", m.index, m.label))
+end
+gtkterm.send_macro(1)          -- send macro #1
+gtkterm.sleep(500)
+gtkterm.send_macro("Reset")    -- send macro by label
+```
+
 
 <p align="center">
     <img src="Capture1.png" width="60%"/>
@@ -154,6 +194,8 @@ GTKTerm has a few dependencies-
 * vte (version 0.40 or higher)
 * intltool (version 0.40.0 or higher)
 * libgudev (version 229 or higher)
+* Lua 5.4 (`lua5.4`) — scripting engine
+* GtkSourceView 4 (`gtksourceview-4`) — script editor syntax highlighting
 
 Once these dependencies are installed, most people should simply run:
 

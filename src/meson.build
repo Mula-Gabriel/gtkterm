@@ -46,6 +46,10 @@ sources = [
 	'transport.h',
 	'user_signals.c',
 	'user_signals.h',
+	'script_engine.c',
+	'script_engine.h',
+	'script_panel.c',
+	'script_panel.h',
 	gresources
 ]
 
@@ -56,7 +60,9 @@ executable(
 		gtk_deps,
 		vte_deps,
 		config,
-		gudev_deps
+		gudev_deps,
+		lua_dep,
+		gsv_dep
 	],
 	install : true
 )

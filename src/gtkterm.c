@@ -30,6 +30,7 @@
 #include "auto_config.h"
 #include "device_monitor.h"
 #include "user_signals.h"
+#include "script_panel.h"
 
 #include <config.h>
 #include <glib/gi18n.h>
@@ -57,6 +58,7 @@ int main(int argc, char *argv[])
 
 	Config_port();
 	ConfigFlags();
+	script_panel_refresh_colors();
 
 	message = get_port_string();
 	Set_window_title(message);

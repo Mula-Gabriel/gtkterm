@@ -43,6 +43,7 @@ extern guint virt_col_pos;
 
 void (*write_func)(const char *, unsigned int) = NULL;
 void (*clear_func)(void) = NULL;
+static void (*tap_func)(const char *, unsigned int) = NULL;
 
 void create_buffer(void)
 {
@@ -199,6 +200,9 @@ void put_chars(const char *chars, unsigned int size, gboolean crlf_auto)
 	if(write_func != NULL)
 		write_func(characters, size);
 
+	if(tap_func != NULL)
+		tap_func(characters, size);
+
 	g_free(out_buffer);
 }
 
@@ -261,4 +265,14 @@ void set_display_func(void (*func)(const char *, unsigned int))
 void unset_display_func(void (*func)(const char *, unsigned int))
 {
 	write_func = NULL;
+}
+
+void set_tap_func(void (*func)(const char *, unsigned int))
+{
+	tap_func = func;
+}
+
+void unset_tap_func(void)
+{
+	tap_func = NULL;
 }

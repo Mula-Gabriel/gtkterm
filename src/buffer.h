@@ -31,5 +31,7 @@ void unset_display_func(void (*func)(const char *, unsigned int));
 void set_clear_func(void (*func)(void));
 void unset_clear_func(void (*func)(void));
 void write_buffer_with_func(void (*func)(const char *, unsigned int));
+void set_tap_func(void (*func)(const char *, unsigned int));
+void unset_tap_func(void);
 
 #endif

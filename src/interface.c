@@ -73,6 +73,7 @@
 #include "serial.h"
 #include "interface.h"
 #include "macro_panel.h"
+#include "script_panel.h"
 #include "buffer.h"
 #include "macros.h"
 #include "terminal_display.h"
@@ -99,6 +100,7 @@ GtkWidget *popup_menu;
 GtkAccelGroup *shortcuts;
 GtkWidget *display = NULL;
 static GtkWidget *h_paned = NULL;
+static GtkWidget *v_paned = NULL;
 
 /* GAction infrastructure (for state management: enable/disable, toggle, radio) */
 static GSimpleAction *action_local_echo;
@@ -109,6 +111,7 @@ static GSimpleAction *action_timestamp;
 static GSimpleAction *action_view_index;
 static GSimpleAction *action_view_send_hex;
 static GSimpleAction *action_view_macro_panel;
+static GSimpleAction *action_view_script_panel;
 
 /* Radio actions */
 static GSimpleAction *action_view_ascii;
@@ -152,6 +155,7 @@ void view_radio_callback(GtkWidget *widget, gpointer data);
 void view_hex_chars_radio_callback(GtkWidget *widget, gpointer data);
 void view_index_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
 void view_send_hex_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
+void view_script_panel_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
 gboolean Send_Hexadecimal(GtkWidget *, GdkEventKey *, gpointer);
 gboolean pop_message(void);
 void edit_copy_callback(GtkWidget *widget, gpointer data);
@@ -166,7 +170,8 @@ gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 
 static gboolean on_window_delete_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
-	save_window_state(widget, h_paned);
+	script_panel_save_state();
+	save_window_state(widget, h_paned, v_paned, gtk_widget_get_visible(script_panel));
 	return FALSE;
 }
 
@@ -189,6 +194,16 @@ void view_macro_panel_toggled_callback(GSimpleAction *action, GVariant *paramete
 	{
 		gtk_widget_set_visible(macro_panel, visible);
 	}
+}
+
+void view_script_panel_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data)
+{
+	gboolean visible = g_variant_get_boolean(parameter);
+
+	g_simple_action_set_state(action, parameter);
+
+	if (script_panel != NULL)
+		gtk_widget_set_visible(script_panel, visible);
 }
 
 void view_index_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data)
@@ -611,6 +626,11 @@ static void populate_view_menu(GtkWidget *menu)
 	connect_check_to_toggle_action(GTK_CHECK_MENU_ITEM(item), action_view_macro_panel);
 	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), TRUE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+	item = gtk_check_menu_item_new_with_mnemonic(_("Script panel"));
+	connect_check_to_toggle_action(GTK_CHECK_MENU_ITEM(item), action_view_script_panel);
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), FALSE);
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 }
 
 static void populate_help_menu(GtkWidget *menu)
@@ -678,6 +698,10 @@ static void create_actions_and_menu(void)
 	action_view_macro_panel = g_simple_action_new_stateful("view-macro-panel", G_VARIANT_TYPE_BOOLEAN, g_variant_new_boolean(TRUE));
 	g_object_ref_sink(G_OBJECT(action_view_macro_panel));
 	g_signal_connect(action_view_macro_panel, "change-state", G_CALLBACK(view_macro_panel_toggled_callback), NULL);
+
+	action_view_script_panel = g_simple_action_new_stateful("view-script-panel", G_VARIANT_TYPE_BOOLEAN, g_variant_new_boolean(FALSE));
+	g_object_ref_sink(G_OBJECT(action_view_script_panel));
+	g_signal_connect(action_view_script_panel, "change-state", G_CALLBACK(view_script_panel_toggled_callback), NULL);
 
 	/* Radio actions */
 	action_view_ascii = g_simple_action_new_stateful("view-ascii", G_VARIANT_TYPE_BOOLEAN, g_variant_new_boolean(TRUE));
@@ -769,8 +793,17 @@ void create_main_window(void)
 	gtk_paned_pack1(GTK_PANED(h_paned), scrolled_window, TRUE, TRUE);
 	gtk_paned_pack2(GTK_PANED(h_paned), macro_panel, FALSE, FALSE);
 
-	/* Ajouter le paned au main_vbox au lieu du scrolled_window */
-	gtk_box_pack_start(GTK_BOX(main_vbox), h_paned, TRUE, TRUE, 0);
+	/* Créer le panneau de scripts */
+	create_script_panel();
+
+	/* Empiler terminal+macros (h_paned) et panneau de scripts dans un paned vertical */
+	v_paned = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
+	gtk_paned_pack1(GTK_PANED(v_paned), h_paned, TRUE, TRUE);
+	gtk_paned_pack2(GTK_PANED(v_paned), script_panel, FALSE, TRUE);
+	gtk_widget_set_no_show_all(script_panel, TRUE);
+	gtk_widget_set_visible(script_panel, FALSE);
+
+	gtk_box_pack_start(GTK_BOX(main_vbox), v_paned, TRUE, TRUE, 0);
 
 	g_signal_connect(G_OBJECT(display), "button-press-event",
 	                 G_CALLBACK(terminal_button_press_callback), NULL);
@@ -831,10 +864,14 @@ void create_main_window(void)
 	g_timeout_add(POLL_DELAY, (GSourceFunc)control_signals_read, NULL);
 
 	gtk_window_set_default_size(GTK_WINDOW(Fenetre), 750, 550);
-	load_window_state(Fenetre, h_paned);
+	gboolean script_was_visible = FALSE;
+	load_window_state(Fenetre, h_paned, v_paned, &script_was_visible);
 	gtk_widget_show_all(Fenetre);
 	search_bar_hide(searchBar);
 	gtk_widget_hide(GTK_WIDGET(Hex_Box));
+	/* Restore script panel visibility after show_all */
+	g_action_change_state(G_ACTION(action_view_script_panel),
+	                      g_variant_new_boolean(script_was_visible));
 }
 
 void help_about_callback(GtkAction *action, gpointer data)

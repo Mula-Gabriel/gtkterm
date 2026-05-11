@@ -955,7 +955,9 @@ static int parse_ini(const char *file, FILE *fp, char *ptr, cfgStruct cfg[], int
 		}
 		if ((error_code = store_value(cfg, parameter, value, CFG_INI, *section)) != CFG_NO_ERROR)
 		{
-			return (error_code);
+			if (error_code != CFG_WRONG_PARAMETER)
+				return (error_code);
+			/* silently skip keys that belong to non-parsecfg sections */
 		}
 		free(parameter);
 		free(value);

@@ -18,8 +18,9 @@
 #include "transport.h"
 
 void config_file_init(void);
-void save_window_state(GtkWidget *window, GtkWidget *paned);
-void load_window_state(GtkWidget *window, GtkWidget *paned);
+const gchar *get_config_file_path(void);
+void save_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_paned, gboolean script_visible);
+void load_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_paned, gboolean *script_visible_out);
 void ConfigFlags(void);
 void Config_Port_Fenetre(GtkAction *action, gpointer data);
 gint Lis_Config(GtkWidget *bouton, GtkWidget **Combos);
@@ -75,6 +76,7 @@ typedef struct
 	gchar *font;
 } display_config_t;
 
+extern display_config_t term_conf;
 
 #define DEFAULT_FONT "Monospace 12"
 #define DEFAULT_SCROLLBACK 10000

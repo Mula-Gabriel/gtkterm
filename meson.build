@@ -9,6 +9,8 @@ project(
 gtk_deps = dependency('gtk+-3.0', version : '>= 3.0.0')
 vte_deps = dependency('vte-2.91', version : '>= 0.28.0')
 gudev_deps = dependency('gudev-1.0', version: '>= 230')
+lua_dep = dependency('lua5.4', required: true)
+gsv_dep = dependency('gtksourceview-4', required: true)
 
 # Find install paths
 prefix = get_option('prefix')
