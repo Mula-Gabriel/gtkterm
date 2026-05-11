@@ -463,10 +463,9 @@ Move_up (GtkWidget *button, gpointer pointer)
 
   gtk_tree_selection_unselect_all (selection);
 
-  gint offset = 0;
   for (gint k = 0; k < idx_count; k++)
     {
-      gint cur = indices[k] - offset;
+      gint cur = indices[k];
       GtkTreePath *src_path = gtk_tree_path_new_from_indices (cur, -1);
       GtkTreeIter src_iter;
       gtk_tree_model_get_iter (model, &src_iter, src_path);
@@ -478,7 +477,6 @@ Move_up (GtkWidget *button, gpointer pointer)
       gtk_tree_path_free (tgt_path);
 
       gtk_list_store_move_before (GTK_LIST_STORE (model), &src_iter, &tgt_iter);
-      offset++;
     }
 
   for (gint k = 0; k < idx_count; k++)
