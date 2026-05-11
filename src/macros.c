@@ -289,6 +289,22 @@ tab_edited (GtkCellRendererText *cell,
   return TRUE;
 }
 
+static gboolean
+cell_focus_out (GtkWidget *entry, GdkEventFocus *event, gpointer data)
+{
+  gtk_widget_activate (entry);
+  return FALSE;
+}
+
+static void
+cell_editing_started (GtkCellRenderer *renderer, GtkCellEditable *editable,
+                      const gchar *path, gpointer data)
+{
+  if (GTK_IS_ENTRY (editable))
+    g_signal_connect (editable, "focus-out-event",
+                      G_CALLBACK (cell_focus_out), NULL);
+}
+
 static void
 add_columns (GtkTreeView *treeview)
 {
@@ -298,6 +314,7 @@ add_columns (GtkTreeView *treeview)
 
   renderer = gtk_cell_renderer_text_new ();
   g_signal_connect (renderer, "edited", G_CALLBACK (label_edited), model);
+  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
   g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
   column = gtk_tree_view_column_new_with_attributes (_ ("Label"), renderer, "text", COLUMN_LABEL, NULL);
   gtk_tree_view_column_set_sort_column_id (column, COLUMN_LABEL);
@@ -314,6 +331,7 @@ add_columns (GtkTreeView *treeview)
 
   renderer = gtk_cell_renderer_text_new ();
   g_signal_connect (renderer, "edited", G_CALLBACK (action_edited), model);
+  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
   column = gtk_tree_view_column_new_with_attributes (_ ("Action"), renderer, "text", COLUMN_ACTION, NULL);
   g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
   gtk_tree_view_column_set_sort_column_id (column, COLUMN_ACTION);
@@ -323,6 +341,7 @@ add_columns (GtkTreeView *treeview)
 
   renderer = gtk_cell_renderer_text_new ();
   g_signal_connect (renderer, "edited", G_CALLBACK (tab_edited), model);
+  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
   g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
   column = gtk_tree_view_column_new_with_attributes (_ ("Tab"), renderer, "text", COLUMN_TAB, NULL);
   gtk_tree_view_column_set_sort_column_id (column, COLUMN_TAB);
@@ -861,6 +880,7 @@ add_list_columns (GtkTreeView *treeview)
 
   renderer = gtk_cell_renderer_text_new ();
   g_signal_connect (renderer, "edited", G_CALLBACK (list_name_edited), model);
+  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
   g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
   column = gtk_tree_view_column_new_with_attributes (_ ("List"), renderer, "text", LIST_COLUMN_NAME, NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
@@ -869,6 +889,7 @@ add_list_columns (GtkTreeView *treeview)
 
   renderer = gtk_cell_renderer_text_new ();
   g_signal_connect (renderer, "edited", G_CALLBACK (list_display_edited), model);
+  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
   g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
   column = gtk_tree_view_column_new_with_attributes (_ ("Display"), renderer, "text", LIST_COLUMN_DISPLAY, NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
@@ -877,6 +898,7 @@ add_list_columns (GtkTreeView *treeview)
 
   renderer = gtk_cell_renderer_text_new ();
   g_signal_connect (renderer, "edited", G_CALLBACK (list_value_edited), model);
+  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
   g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
   column = gtk_tree_view_column_new_with_attributes (_ ("Value"), renderer, "text", LIST_COLUMN_VALUE, NULL);
   gtk_tree_view_column_set_resizable (column, TRUE);
