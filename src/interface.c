@@ -367,14 +367,17 @@ static void populate_file_menu(GtkWidget *menu)
 	GtkWidget *item;
 	item = gtk_menu_item_new_with_mnemonic(_("Clear screen"));
 	connect_menu_item_callback(item, G_CALLBACK(clear_buffer));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_l, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Clear scrollback"));
 	connect_menu_item_callback(item, G_CALLBACK(clear_scrollback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_k, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Send RAW file"));
 	connect_menu_item_callback(item, G_CALLBACK(send_raw_file));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_r, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Save RAW file"));
@@ -389,6 +392,7 @@ static void populate_file_menu(GtkWidget *menu)
 
 	item = gtk_menu_item_new_with_mnemonic(_("Quit"));
 	connect_menu_item_callback(item, G_CALLBACK(gtk_main_quit));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_q, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 }
 
@@ -398,20 +402,24 @@ static void populate_edit_menu(GtkWidget *menu)
 	item = gtk_menu_item_new_with_mnemonic(_("Copy"));
 	menu_item_edit_copy = item;
 	connect_menu_item_callback(item, G_CALLBACK(edit_copy_callback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_c, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Paste"));
 	connect_menu_item_callback(item, G_CALLBACK(edit_paste_callback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_v, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Find"));
 	connect_menu_item_callback(item, G_CALLBACK(edit_find_callback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_f, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
 	item = gtk_menu_item_new_with_mnemonic(_("Select All"));
 	connect_menu_item_callback(item, G_CALLBACK(edit_select_all_callback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_a, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 }
 
@@ -444,6 +452,7 @@ static void populate_config_menu(GtkWidget *menu)
 	GtkWidget *item;
 	item = gtk_menu_item_new_with_mnemonic(_("Port"));
 	connect_menu_item_callback(item, G_CALLBACK(Config_Port_Fenetre));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_s, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Main window"));
@@ -503,24 +512,30 @@ static void populate_signals_menu(GtkWidget *menu)
 	item = gtk_menu_item_new_with_mnemonic(_("Send break"));
 	menu_item_send_break = item;
 	connect_menu_item_callback(item, G_CALLBACK(signals_send_break_callback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_b, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_b, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Open Port"));
 	connect_menu_item_callback(item, G_CALLBACK(signals_open_port));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_F5, 0, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Close Port"));
 	connect_menu_item_callback(item, G_CALLBACK(signals_close_port));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_F6, 0, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Toggle DTR"));
 	menu_item_toggle_dtr = item;
 	connect_menu_item_callback(item, G_CALLBACK(signals_toggle_DTR_callback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_F7, 0, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
 	item = gtk_menu_item_new_with_mnemonic(_("Toggle RTS"));
 	menu_item_toggle_rts = item;
 	connect_menu_item_callback(item, G_CALLBACK(signals_toggle_RTS_callback));
+	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_F8, 0, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 }
 
