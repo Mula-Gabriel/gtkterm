@@ -556,6 +556,8 @@ void rebuild_macro_buttons(void)
 
 	if (tab_names == NULL)
 	{
+		gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(macro_tab_flowbox), 1);
+
 		GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
 		gtk_container_set_border_width(GTK_CONTAINER(vbox), 5);
 		GtkWidget *lbl = gtk_label_new(_("No macros defined\nwith labels"));
@@ -574,6 +576,10 @@ void rebuild_macro_buttons(void)
 		gtk_widget_show_all(macro_tab_flowbox);
 		return;
 	}
+
+	gint n_tabs = g_list_length(tab_names);
+	gint min_per_line = (n_tabs >= 3) ? 3 : n_tabs;
+	gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(macro_tab_flowbox), min_per_line);
 
 	/* Créer un onglet par nom unique */
 	for (GList *l = tab_names; l != NULL; l = l->next)
@@ -956,11 +962,10 @@ void create_macro_panel(void)
 
 	/* Conteneur principal du panneau latéral */
 	GtkWidget *panel_vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_set_size_request(panel_vbox, 170, -1);
 
 	/* Barre d'onglets wrappable */
 	macro_tab_flowbox = gtk_flow_box_new();
-	gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(macro_tab_flowbox), 4);
+	gtk_flow_box_set_min_children_per_line(GTK_FLOW_BOX(macro_tab_flowbox), 1);
 	gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(macro_tab_flowbox), 100);
 	gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(macro_tab_flowbox), GTK_SELECTION_NONE);
 	gtk_flow_box_set_homogeneous(GTK_FLOW_BOX(macro_tab_flowbox), TRUE);
