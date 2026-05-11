@@ -18,6 +18,8 @@
 #include "transport.h"
 
 void config_file_init(void);
+void save_window_state(GtkWidget *window, GtkWidget *paned);
+void load_window_state(GtkWidget *window, GtkWidget *paned);
 void ConfigFlags(void);
 void Config_Port_Fenetre(GtkAction *action, gpointer data);
 gint Lis_Config(GtkWidget *bouton, GtkWidget **Combos);

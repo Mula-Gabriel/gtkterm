@@ -137,6 +137,7 @@ cfgStruct cfg[] =
 };
 
 GFile *config_file;
+static GFile *state_file;
 static gchar *active_config_name = NULL;
 
 struct configuration_port config;
@@ -181,6 +182,52 @@ void config_file_init(void)
 		g_file_move(config_file_old, config_file, G_FILE_COPY_NONE, NULL, NULL, NULL, NULL);
 
 	g_object_unref(config_file_old);
+
+	state_file = g_file_new_build_filename(g_get_user_config_dir(), "gtkterm_state.ini", NULL);
+}
+
+void save_window_state(GtkWidget *window, GtkWidget *paned)
+{
+	GKeyFile *kf = g_key_file_new();
+	gint x, y, w, h;
+
+	gtk_window_get_position(GTK_WINDOW(window), &x, &y);
+	gtk_window_get_size(GTK_WINDOW(window), &w, &h);
+
+	g_key_file_set_integer(kf, "window", "x", x);
+	g_key_file_set_integer(kf, "window", "y", y);
+	g_key_file_set_integer(kf, "window", "width", w);
+	g_key_file_set_integer(kf, "window", "height", h);
+	g_key_file_set_integer(kf, "window", "paned_position", gtk_paned_get_position(GTK_PANED(paned)));
+
+	g_key_file_save_to_file(kf, g_file_get_path(state_file), NULL);
+	g_key_file_free(kf);
+}
+
+void load_window_state(GtkWidget *window, GtkWidget *paned)
+{
+	GKeyFile *kf = g_key_file_new();
+
+	if (!g_key_file_load_from_file(kf, g_file_get_path(state_file), G_KEY_FILE_NONE, NULL))
+	{
+		g_key_file_free(kf);
+		return;
+	}
+
+	gint x   = g_key_file_get_integer(kf, "window", "x",              NULL);
+	gint y   = g_key_file_get_integer(kf, "window", "y",              NULL);
+	gint w   = g_key_file_get_integer(kf, "window", "width",          NULL);
+	gint h   = g_key_file_get_integer(kf, "window", "height",         NULL);
+	gint pos = g_key_file_get_integer(kf, "window", "paned_position", NULL);
+	g_key_file_free(kf);
+
+	if (w > 0 && h > 0)
+	{
+		gtk_window_move(GTK_WINDOW(window), x, y);
+		gtk_window_resize(GTK_WINDOW(window), w, h);
+	}
+	if (pos > 0)
+		gtk_paned_set_position(GTK_PANED(paned), pos);
 }
 
 void ConfigFlags(void)

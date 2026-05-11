@@ -98,6 +98,7 @@ GtkWidget *Fenetre;
 GtkWidget *popup_menu;
 GtkAccelGroup *shortcuts;
 GtkWidget *display = NULL;
+static GtkWidget *h_paned = NULL;
 
 /* GAction infrastructure (for state management: enable/disable, toggle, radio) */
 static GSimpleAction *action_local_echo;
@@ -162,6 +163,12 @@ void edit_select_all_callback(GtkWidget *widget, gpointer data);
 void set_saved_data(GtkWidget *widget, gboolean direction);
 void update_hex_history(GtkWidget *widget);
 gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data);
+
+static gboolean on_window_delete_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+	save_window_state(widget, h_paned);
+	return FALSE;
+}
 
 /* Menu */
 static void create_actions_and_menu(void);
@@ -712,6 +719,7 @@ void create_main_window(void)
 	gtk_window_add_accel_group(GTK_WINDOW(Fenetre), GTK_ACCEL_GROUP(shortcuts));
 
 	g_signal_connect(GTK_WIDGET(Fenetre), "destroy", (GCallback)gtk_main_quit, NULL);
+	g_signal_connect(GTK_WIDGET(Fenetre), "delete-event", G_CALLBACK(on_window_delete_event), NULL);
 
 	Set_window_title("GTKTerm");
 
@@ -743,7 +751,7 @@ void create_main_window(void)
 	create_macro_panel();
 
 	/* Créer un paned horizontal pour le terminal et le panneau de macros */
-	GtkWidget *h_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+	h_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
 
 	/* make vte window scrollable */
 	scrolled_window = gtk_scrolled_window_new(NULL, gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (display)));
@@ -823,6 +831,7 @@ void create_main_window(void)
 	g_timeout_add(POLL_DELAY, (GSourceFunc)control_signals_read, NULL);
 
 	gtk_window_set_default_size(GTK_WINDOW(Fenetre), 750, 550);
+	load_window_state(Fenetre, h_paned);
 	gtk_widget_show_all(Fenetre);
 	search_bar_hide(searchBar);
 	gtk_widget_hide(GTK_WIDGET(Hex_Box));
