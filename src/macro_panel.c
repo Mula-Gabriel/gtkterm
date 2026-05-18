@@ -509,6 +509,59 @@ static void on_combo_arg_changed(GtkComboBox *combo, gpointer data)
 {
 	save_arg_from_widget(GTK_WIDGET(combo));
 }
+
+/* Détecte si l'action est un séparateur visuel de la forme [Label]%& ou %&.
+   Si oui, *label_out reçoit le label alloué (à libérer) ou NULL. */
+static gboolean macro_is_separator(const gchar *action, gchar **label_out)
+{
+	if (label_out) *label_out = NULL;
+	if (!action) return FALSE;
+
+	const gchar *p = action;
+	if (*p == '[')
+	{
+		const gchar *end = strchr(p + 1, ']');
+		if (!end) return FALSE;
+		gchar *lbl = g_strndup(p + 1, end - p - 1);
+		p = end + 1;
+		while (*p == ' ') p++;
+		if (strcmp(p, "%&") == 0)
+		{
+			if (label_out) *label_out = lbl;
+			else g_free(lbl);
+			return TRUE;
+		}
+		g_free(lbl);
+		return FALSE;
+	}
+	return strcmp(p, "%&") == 0;
+}
+
+/* Crée un widget séparateur horizontal avec label centré, non-interactif. */
+static GtkWidget *make_separator_widget(const gchar *label)
+{
+	GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+
+	GtkWidget *sep_left = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+	gtk_widget_set_valign(sep_left, GTK_ALIGN_CENTER);
+	gtk_box_pack_start(GTK_BOX(hbox), sep_left, TRUE, TRUE, 0);
+
+	if (label && *label)
+	{
+		GtkWidget *lbl = gtk_label_new(label);
+		gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "dim-label");
+		gtk_box_pack_start(GTK_BOX(hbox), lbl, FALSE, FALSE, 2);
+
+		GtkWidget *sep_right = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+		gtk_widget_set_valign(sep_right, GTK_ALIGN_CENTER);
+		gtk_box_pack_start(GTK_BOX(hbox), sep_right, TRUE, TRUE, 0);
+	}
+
+	gtk_widget_set_sensitive(hbox, FALSE);
+	gtk_widget_show_all(hbox);
+	return hbox;
+}
+
 void rebuild_macro_buttons(void)
 {
 	gint nb_macros = 0;
@@ -605,6 +658,17 @@ void rebuild_macro_buttons(void)
 
 			if (g_strcmp0(macro_tab, tab_name) != 0)
 				continue;
+
+			{
+				gchar *sep_label = NULL;
+				if (macro_is_separator(macros[i].action, &sep_label))
+				{
+					GtkWidget *sep = make_separator_widget(sep_label);
+					g_free(sep_label);
+					gtk_box_pack_start(GTK_BOX(vbox), sep, FALSE, FALSE, 4);
+					continue;
+				}
+			}
 
 			gchar tooltip[256];
 			g_snprintf(tooltip, sizeof(tooltip), _("Shortcut: %s\nAction: %s"),

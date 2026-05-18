@@ -71,7 +71,14 @@
 - For macros with format arguments, the argument values entered at start time are captured and reused for every subsequent send
 - The polling configuration (enabled state and period) is saved automatically to the macros file and restored at startup
 
-10. Multi-Selection in Macro/List Editors
+10. Visual Separators in the Macro Panel
+- In the **action** field of a macro, use `[Label]%&` to insert a decorative separator in the panel instead of a button
+- The separator renders as a horizontal line with the label centered on it — non-clickable and greyed out
+- Use `%&` alone (no label) for an unlabeled horizontal line
+- The macro **label** field still needs to be filled in (for the config editor), but it is not shown in the panel
+- Example: action `[AT Commands]%&` → a `──── AT Commands ────` divider between button groups
+
+11. Multi-Selection in Macro/List Editors
 - Both the Macros and Lists tabs support multi-row selection (Ctrl+Click, Shift+Click)
 - Move Up / Move Down and Delete buttons operate on the entire selected group
 - Selected rows keep their relative order after moving; the group moves as a block
