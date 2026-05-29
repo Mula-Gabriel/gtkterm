@@ -38,6 +38,7 @@ void
 initialize_hexadecimal_display (void)
 {
   total_bytes = 0;
+  virt_col_pos = 0;
   memset (blank_data, ' ', 128);
   blank_data[bytes_per_line * 3 + 5] = 0;
 }
@@ -54,9 +55,6 @@ put_hexadecimal (const gchar *string, guint size)
 
   while (i < size)
     {
-      while (gtk_events_pending ())
-        gtk_main_iteration ();
-
       data[0] = 0;
 
       while (virt_col_pos < bytes_per_line && i < size)
@@ -125,7 +123,31 @@ send_serial (gchar *string, gint len)
   if (bytes_written > 0)
     {
       if (echo_on)
-        put_chars (string, bytes_written, crlfauto_on);
+        {
+          if (get_display_func () == put_hexadecimal)
+            {
+              vte_terminal_feed (VTE_TERMINAL (display), "\033[0;34m", 7);
+              put_hexadecimal (string, bytes_written);
+              if (virt_col_pos != 0)
+                {
+                  vte_terminal_feed (VTE_TERMINAL (display), "\r\n", 2);
+                  virt_col_pos = 0;
+                }
+              vte_terminal_feed (VTE_TERMINAL (display), "\033[0m", 4);
+            }
+          else
+            {
+              gint display_len = bytes_written;
+              while (display_len > 0 &&
+                     (string[display_len - 1] == '\r' || string[display_len - 1] == '\n'))
+                display_len--;
+
+              vte_terminal_feed (VTE_TERMINAL (display), "\033[0;34m> ", 9);
+              if (display_len > 0)
+                vte_terminal_feed (VTE_TERMINAL (display), string, display_len);
+              vte_terminal_feed (VTE_TERMINAL (display), "\033[0m\r\n", 6);
+            }
+        }
     }
 
   return bytes_written;
@@ -151,7 +173,17 @@ clear_display (void)
 {
   initialize_hexadecimal_display ();
   if (display)
-    vte_terminal_reset (VTE_TERMINAL (display), TRUE, TRUE);
+    {
+      /* Feed clear sequences into the same VTE data stream so the erase
+         is guaranteed to execute before any subsequent vte_terminal_feed
+         calls (e.g. write_buffer replay). vte_terminal_reset() is a direct
+         API call whose ordering relative to queued feed data is not
+         guaranteed, which leaves stale hex content visible. */
+      vte_terminal_feed (VTE_TERMINAL (display),
+                         "\033c"    /* RIS – full terminal reset + clear screen */
+                         "\033[3J", /* erase scrollback (VTE extension) */
+                         7);
+    }
 }
 
 /* ─── Display state setters ────────────────────────────────────────── */

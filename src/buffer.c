@@ -257,14 +257,19 @@ void unset_clear_func(void (*func)(void))
 	clear_func = NULL;
 }
 
-void set_display_func(void (*func)(const char *, unsigned int))
+void set_display_func(display_func_t func)
 {
 	write_func = func;
 }
 
-void unset_display_func(void (*func)(const char *, unsigned int))
+void unset_display_func(display_func_t func)
 {
 	write_func = NULL;
+}
+
+display_func_t get_display_func(void)
+{
+	return write_func;
 }
 
 void set_tap_func(void (*func)(const char *, unsigned int))
