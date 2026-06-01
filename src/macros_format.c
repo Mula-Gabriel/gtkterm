@@ -510,6 +510,26 @@ macro_type_value_valid (const gchar *type, const gchar *value)
 
 /* ─── Format action with arguments ─────────────────────────────────── */
 
+/* Doubles every backslash in an arg value so that parse_macro_string,
+   applied later to the full string, treats them as literal backslashes
+   rather than escape-sequence prefixes. */
+static gchar *
+escape_arg_backslashes (const gchar *s)
+{
+  if (!s)
+    return g_strdup ("");
+  if (!strchr (s, '\\'))
+    return g_strdup (s);
+  GString *out = g_string_sized_new (strlen (s) + 8);
+  for (; *s; s++)
+    {
+      if (*s == '\\')
+        g_string_append_c (out, '\\');
+      g_string_append_c (out, *s);
+    }
+  return g_string_free (out, FALSE);
+}
+
 gchar *
 format_action_with_args (const gchar *action, const gchar **args,
                          gint n_args)
@@ -536,7 +556,11 @@ format_action_with_args (const gchar *action, const gchar **args,
         if (try_parse_list_spec (action, i, &list_name, &list_end))
           {
             if (arg_idx < n_args)
-              g_string_append (result, args[arg_idx] ? args[arg_idx] : "");
+              {
+                gchar *escaped = escape_arg_backslashes (args[arg_idx]);
+                g_string_append (result, escaped);
+                g_free (escaped);
+              }
             else
               g_string_append_len (result, &action[i], list_end - i + 1);
             arg_idx++;
@@ -555,10 +579,11 @@ format_action_with_args (const gchar *action, const gchar **args,
       if (arg_idx < n_args)
         {
           gchar *spec = g_strndup (&action[i], spec_end - i + 1);
-          gchar *formatted = apply_spec (spec, fmt_type,
-                                         args[arg_idx] ? args[arg_idx] : "");
+          gchar *escaped_arg = escape_arg_backslashes (args[arg_idx]);
+          gchar *formatted = apply_spec (spec, fmt_type, escaped_arg);
           g_string_append (result, formatted);
           g_free (formatted);
+          g_free (escaped_arg);
           g_free (spec);
           arg_idx++;
         }
