@@ -20,30 +20,23 @@
 
 /* ─── Escape sequence parsing ─────────────────────────────────────── */
 
+/* Parses \xNN hex escape (standard C form). \i points to the backslash.
+   Requires explicit 'x'/'X' prefix so that bare backslashes in paths like
+   \30 or \306 are not silently eaten as byte values. */
 static guchar
 parse_hex_escape (const gchar *string, gint *index)
 {
   gint i = *index;
-  gint hex_start = 0;
-  gint isTwodigits = 0;
 
-  if (string[i + 1] == '0' && string[i + 2] != '\0'
-      && g_unichar_isxdigit ((gunichar) string[i + 2]))
-    {
-      hex_start = i + 2;
-      isTwodigits = (string[i + 3] != '\0'
-                     && g_unichar_isxdigit ((gunichar) string[i + 3])) ? 1 : 0;
-    }
-  else if (g_unichar_isxdigit ((gunichar) string[i + 1]))
-    {
-      hex_start = i + 1;
-      isTwodigits = (string[i + 2] != '\0'
-                     && g_unichar_isxdigit ((gunichar) string[i + 2])) ? 1 : 0;
-    }
-  else
-    {
-      return '\\';
-    }
+  if (string[i + 1] != 'x' && string[i + 1] != 'X')
+    return '\\';
+
+  gint hex_start = i + 2;
+  if (string[hex_start] == '\0' || !g_unichar_isxdigit ((gunichar) string[hex_start]))
+    return '\\';
+
+  gint isTwodigits = (string[hex_start + 1] != '\0'
+                      && g_unichar_isxdigit ((gunichar) string[hex_start + 1])) ? 1 : 0;
 
   guint val_read;
   if (sscanf (&string[hex_start], "%02X", &val_read) == 1)
@@ -88,7 +81,7 @@ parse_macro_string (const gchar *string)
     {
       if (string[i] == '\\' && string[i + 1] != '\0')
         {
-          if (g_unichar_isdigit ((gunichar) string[i + 1]))
+          if (string[i + 1] == 'x' || string[i + 1] == 'X')
             byte = parse_hex_escape (string, &i);
           else
             byte = parse_standard_escape (string[i + 1], &i);
