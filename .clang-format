@@ -1,0 +1,17 @@
+# Style GTKTerm : tabulations, accolades Allman, if( sans espace.
+# ColumnLimit=0 pour ne pas reformater les lignes existantes (diffs minimaux).
+BasedOnStyle: GNU
+Language: Cpp
+UseTab: Always
+TabWidth: 8
+IndentWidth: 8
+ContinuationIndentWidth: 8
+BreakBeforeBraces: Allman
+AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterDefinitionReturnType: None
+SpaceBeforeParens: Never
+ColumnLimit: 0
+AlignTrailingComments: true
+PointerAlignment: Right
+KeepEmptyLinesAtTheStartOfBlocks: false
+SortIncludes: false

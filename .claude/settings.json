@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(python3 -c 'import sys,json; print(json.load(sys.stdin).get(\"tool_input\",{}).get(\"file_path\",\"\"))' 2>/dev/null); case \"$f\" in */src/*.c|*/src/*.h) ninja -C /home/gaby/git/gtkterm/build 2>&1 | tail -20;; esac",
+            "statusMessage": "ninja -C build"
+          }
+        ]
+      }
+    ]
+  }
+}
