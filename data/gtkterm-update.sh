@@ -82,6 +82,6 @@ ninja -C build
 
 # --- 5. install (root) -------------------------------------------------
 echo ">>> Installing (will prompt for authorization)..."
-pkexec ninja -C build install
+pkexec ninja -C "$WORKDIR/build" install
 
 echo ">>> Update complete."
