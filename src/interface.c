@@ -901,6 +901,20 @@ void help_about_callback(GtkAction *action, gpointer data)
 	gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "https://github.com/Mula-Gabriel/gtkterm");
 	gtk_about_dialog_set_license_type(GTK_ABOUT_DIALOG(dialog), GTK_LICENSE_LGPL_3_0);
 
+	/* Add update source URL entry to the content area. */
+	GtkWidget *url_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	gtk_widget_set_margin_start(url_box, 12);
+	gtk_widget_set_margin_end(url_box, 12);
+	gtk_widget_set_margin_bottom(url_box, 6);
+	GtkWidget *url_label = gtk_label_new(_("Update source:"));
+	GtkWidget *url_entry = gtk_entry_new();
+	gtk_entry_set_text(GTK_ENTRY(url_entry), config.update_url);
+	gtk_entry_set_width_chars(GTK_ENTRY(url_entry), 50);
+	gtk_box_pack_start(GTK_BOX(url_box), url_label, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(url_box), url_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), url_box, FALSE, FALSE, 0);
+	gtk_widget_show_all(url_box);
+
 	/* Add the "Check for updates now" button to the dialog action area. */
 	gtk_dialog_add_button(GTK_DIALOG(dialog), _("Check for updates now"), 1);
 
@@ -912,6 +926,10 @@ void help_about_callback(GtkAction *action, gpointer data)
 			update_check(GTK_WINDOW(dialog), TRUE);
 	}
 	while(resp == 1);
+
+	/* Save the URL back to config even if dialog was just closed. */
+	g_strlcpy(config.update_url, gtk_entry_get_text(GTK_ENTRY(url_entry)), sizeof(config.update_url));
+	save_config_silent();
 
 	gtk_widget_destroy(dialog);
 	if(logo != NULL)
