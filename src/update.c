@@ -13,122 +13,109 @@ extern struct configuration_port config;
 /* Remembered "skip this version" sha for the current session. */
 static gchar skipped_revision[64] = "";
 
-/* ---- progress dialog: streams the update script's output ------------- */
+/* ---- lancer le script dans un terminal visible -------------------- */
 
 typedef struct
 {
-	GtkWidget *dialog;
-	GtkTextBuffer *buffer;
-	GtkWidget *close_button;
-} ProgressUI;
+	const gchar *name;
+	const gchar *flag;    /* "-e", "--", or NULL for kitty-style */
+	gboolean single_arg;  /* TRUE if -e takes a single quoted string */
+} TerminalDef;
 
-static void append_output(ProgressUI *ui, const gchar *text)
+static const TerminalDef terminals[] =
 {
-	GtkTextIter end;
-	gtk_text_buffer_get_end_iter(ui->buffer, &end);
-	gtk_text_buffer_insert(ui->buffer, &end, text, -1);
-}
+	{"x-terminal-emulator", "-e", FALSE},
+	{"gnome-terminal", "--", FALSE},
+	{"xfce4-terminal", "-e", FALSE},
+	{"konsole", "-e", FALSE},
+	{"lxterminal", "-e", FALSE},
+	{"qterminal", "-e", FALSE},
+	{"xterm", "-e", FALSE},
+	{"urxvt", "-e", FALSE},
+	{"alacritty", "-e", TRUE},
+	{"kitty", NULL, FALSE},
+	{NULL, NULL, FALSE}
+};
 
-static gboolean on_script_output(GIOChannel *source, GIOCondition condition, gpointer data)
+static gchar *find_terminal(void)
 {
-	ProgressUI *ui = (ProgressUI *)data;
-	gchar *line = NULL;
-	gsize len = 0;
-	GIOStatus status;
-
-	if(condition & (G_IO_IN | G_IO_PRI))
+	for(gint i = 0; terminals[i].name != NULL; i++)
 	{
-		while((status = g_io_channel_read_line(source, &line, &len, NULL, NULL)) == G_IO_STATUS_NORMAL)
+		gchar *path = g_find_program_in_path(terminals[i].name);
+		if(path != NULL)
 		{
-			append_output(ui, line);
-			g_free(line);
-			line = NULL;
+			g_free(path);
+			return g_strdup(terminals[i].name);
 		}
 	}
-
-	if(condition & (G_IO_HUP | G_IO_ERR))
-		return FALSE;
-
-	return TRUE;
+	return NULL;
 }
 
-static void on_child_exit(GPid pid, gint status, gpointer data)
+static const TerminalDef *get_terminal_def(const gchar *name)
 {
-	ProgressUI *ui = (ProgressUI *)data;
-	gboolean ok = g_spawn_check_wait_status(status, NULL);
-
-	if(ok)
+	for(gint i = 0; terminals[i].name != NULL; i++)
 	{
-		append_output(ui, _("\n>>> Update finished successfully.\n"));
-		GtkWidget *q = gtk_message_dialog_new(GTK_WINDOW(ui->dialog),
-				GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-				_("Update complete. Restart GTKTerm now?"));
-		if(gtk_dialog_run(GTK_DIALOG(q)) == GTK_RESPONSE_YES)
-		{
-			gchar *argv[] = { (gchar *)"gtkterm", NULL };
-			g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, NULL);
-			gtk_main_quit();
-		}
-		gtk_widget_destroy(q);
+		if(g_strcmp0(terminals[i].name, name) == 0)
+			return &terminals[i];
 	}
-	else
-	{
-		append_output(ui, _("\n!!! Update failed. See the log above.\n"));
-	}
-
-	gtk_widget_set_sensitive(ui->close_button, TRUE);
-	g_spawn_close_pid(pid);
+	return NULL;
 }
 
 static void run_update_script(GtkWindow *parent)
 {
 	const gchar *script = PACKAGE_DATA_DIR "/gtkterm-update.sh";
-	gchar *argv[] = {
-		(gchar *)"sh", (gchar *)script,
-		config.update_url, config.update_prefix, NULL
-	};
-	GError *error = NULL;
-	GPid pid;
-	gint out_fd = -1, err_fd = -1;
 
-	ProgressUI *ui = g_new0(ProgressUI, 1);
-	ui->dialog = gtk_dialog_new_with_buttons(_("Updating GTKTerm"),
-			parent, GTK_DIALOG_DESTROY_WITH_PARENT,
-			_("_Close"), GTK_RESPONSE_CLOSE, NULL);
-	gtk_window_set_default_size(GTK_WINDOW(ui->dialog), 640, 400);
-	ui->close_button = gtk_dialog_get_widget_for_response(GTK_DIALOG(ui->dialog), GTK_RESPONSE_CLOSE);
-	gtk_widget_set_sensitive(ui->close_button, FALSE);
-
-	GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-	GtkWidget *view = gtk_text_view_new();
-	gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
-	ui->buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
-	gtk_container_add(GTK_CONTAINER(scroll), view);
-	gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(ui->dialog))), scroll, TRUE, TRUE, 0);
-	gtk_widget_show_all(ui->dialog);
-
-	if(!g_spawn_async_with_pipes(NULL, argv, NULL,
-			G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH,
-			NULL, NULL, &pid, NULL, &out_fd, &err_fd, &error))
+	gchar *term_name = find_terminal();
+	if(term_name == NULL)
 	{
-		append_output(ui, error ? error->message : _("Failed to start update script."));
-		gtk_widget_set_sensitive(ui->close_button, TRUE);
-		g_clear_error(&error);
-		g_signal_connect_swapped(ui->dialog, "response", G_CALLBACK(gtk_widget_destroy), ui->dialog);
+		GtkWidget *m = gtk_message_dialog_new(parent,
+				GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+				_("No terminal emulator found. Please install xterm or similar."));
+		gtk_dialog_run(GTK_DIALOG(m));
+		gtk_widget_destroy(m);
 		return;
 	}
 
-	GIOChannel *out_ch = g_io_channel_unix_new(out_fd);
-	GIOChannel *err_ch = g_io_channel_unix_new(err_fd);
-	g_io_channel_set_flags(out_ch, G_IO_FLAG_NONBLOCK, NULL);
-	g_io_channel_set_flags(err_ch, G_IO_FLAG_NONBLOCK, NULL);
-	g_io_add_watch(out_ch, G_IO_IN | G_IO_HUP | G_IO_ERR, on_script_output, ui);
-	g_io_add_watch(err_ch, G_IO_IN | G_IO_HUP | G_IO_ERR, on_script_output, ui);
-	g_io_channel_unref(out_ch);
-	g_io_channel_unref(err_ch);
-	g_child_watch_add(pid, on_child_exit, ui);
+	/*
+	 * Build a single command string that launches the script in the
+	 * terminal.  The inner sh -c wrapper ensures the terminal stays open
+	 * after the script finishes so the user can read the output.
+	 */
+	const TerminalDef *def = get_terminal_def(term_name);
+	gchar *inner_cmd = g_strdup_printf("sh '%s' '%s' '%s'; echo; echo '>>> Appuyez sur Entrée pour fermer...'; read",
+			script, config.update_url, config.update_prefix);
+	gchar *inner = g_shell_quote(inner_cmd);
+	g_free(inner_cmd);
+	gchar *cmd;
 
-	g_signal_connect_swapped(ui->dialog, "response", G_CALLBACK(gtk_widget_destroy), ui->dialog);
+	if(def->flag == NULL)
+		cmd = g_strdup_printf("%s sh -c %s", term_name, inner);
+	else
+		cmd = g_strdup_printf("%s %s sh -c %s", term_name, def->flag, inner);
+
+	g_free(inner);
+	g_free(term_name);
+
+	GError *error = NULL;
+	if(!g_spawn_command_line_async(cmd, &error))
+	{
+		GtkWidget *m = gtk_message_dialog_new(parent,
+				GTK_DIALOG_MODAL, GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+				_("Failed to launch update terminal:\n%s"), error->message);
+		gtk_dialog_run(GTK_DIALOG(m));
+		gtk_widget_destroy(m);
+		g_clear_error(&error);
+	}
+	else
+	{
+		GtkWidget *m = gtk_message_dialog_new(parent,
+				GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+				_("The update is running in a terminal window.\nFollow the instructions there and restart GTKTerm when done."));
+		gtk_dialog_run(GTK_DIALOG(m));
+		gtk_widget_destroy(m);
+	}
+
+	g_free(cmd);
 }
 
 /* ---- the remote version check --------------------------------------- */
