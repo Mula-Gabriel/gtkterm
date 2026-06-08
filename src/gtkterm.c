@@ -21,6 +21,7 @@
 #include <stdlib.h>
 
 #include "interface.h"
+#include "update.h"
 #include "serial.h"
 #include "term_config.h"
 #include "cmdline.h"
@@ -34,6 +35,15 @@
 
 #include <config.h>
 #include <glib/gi18n.h>
+
+extern GtkWidget *Fenetre;
+
+static gboolean startup_update_check(gpointer data)
+{
+	(void)data;
+	update_check(GTK_WINDOW(Fenetre), FALSE);
+	return G_SOURCE_REMOVE;
+}
 
 int main(int argc, char *argv[])
 {
@@ -72,6 +82,8 @@ int main(int argc, char *argv[])
 	device_monitor_start();
 
 	user_signals_catch();
+
+	g_idle_add(startup_update_check, NULL);
 
 	gtk_main();
 
