@@ -57,3 +57,9 @@ install_data('gtkterm_48x48.png',
 
 # Manpage
 install_man('gtkterm.1')
+
+# Self-update script, used by the in-app updater.
+install_data('gtkterm-update.sh',
+	install_dir: join_paths(datadir, 'gtkterm'),
+	install_mode: 'rwxr-xr-x'
+)
