@@ -27,6 +27,21 @@ conf = configuration_data()
 conf.set_quoted('VERSION', meson.project_version())
 conf.set_quoted('PACKAGE', meson.project_name())
 conf.set_quoted('RELEASE_DATE', 'May 2024')
+
+# Bake the current git commit so the app can compare against the remote HEAD.
+git_prog = find_program('git', required : false)
+git_revision = 'unknown'
+if git_prog.found()
+	git_rev_result = run_command(git_prog, 'rev-parse', 'HEAD', check : false)
+	if git_rev_result.returncode() == 0
+		git_revision = git_rev_result.stdout().strip()
+	endif
+endif
+conf.set_quoted('GIT_REVISION', git_revision)
+
+# Path where the update script is installed (used by src/update.c).
+conf.set_quoted('PACKAGE_DATA_DIR', join_paths(datadir, 'gtkterm'))
+
 conf.set_quoted('LOCALEDIR', localedir)
 
 cc = meson.get_compiler('c')
