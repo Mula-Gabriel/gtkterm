@@ -19,22 +19,21 @@ typedef struct
 {
 	const gchar *name;
 	const gchar *flag;    /* "-e", "--", or NULL for kitty-style */
-	gboolean single_arg;  /* TRUE if -e takes a single quoted string */
+	const gchar *extra;   /* additional flags (font/zoom) applied before -e/-- */
 } TerminalDef;
 
 static const TerminalDef terminals[] =
 {
-	{"x-terminal-emulator", "-e", FALSE},
-	{"gnome-terminal", "--", FALSE},
-	{"xfce4-terminal", "-e", FALSE},
-	{"konsole", "-e", FALSE},
-	{"lxterminal", "-e", FALSE},
-	{"qterminal", "-e", FALSE},
-	{"xterm", "-e", FALSE},
-	{"urxvt", "-e", FALSE},
-	{"alacritty", "-e", TRUE},
-	{"kitty", NULL, FALSE},
-	{NULL, NULL, FALSE}
+	{"xterm",             "-e", "-fa Monospace -fs 12"},
+	{"x-terminal-emulator", "-e", NULL},
+	{"gnome-terminal",    "--", "--zoom=1.5"},
+	{"xfce4-terminal",    "-e", "--font 'Monospace 12'"},
+	{"konsole",           "-e", NULL},
+	{"lxterminal",        "-e", NULL},
+	{"qterminal",         "-e", NULL},
+	{"urxvt",             "-e", "-fn 'xft:Monospace:size=12'"},
+	{"kitty",             NULL, "-o font_size=14"},
+	{NULL, NULL, NULL}
 };
 
 static gchar *find_terminal(void)
@@ -89,9 +88,16 @@ static void run_update_script(GtkWindow *parent)
 	gchar *cmd;
 
 	if(def->flag == NULL)
-		cmd = g_strdup_printf("%s sh -c %s", term_name, inner);
+		cmd = g_strdup_printf("%s %s sh -c %s",
+			term_name,
+			def->extra ? def->extra : "",
+			inner);
 	else
-		cmd = g_strdup_printf("%s %s sh -c %s", term_name, def->flag, inner);
+		cmd = g_strdup_printf("%s %s %s sh -c %s",
+			term_name,
+			def->extra ? def->extra : "",
+			def->flag,
+			inner);
 
 	g_free(inner);
 	g_free(term_name);
