@@ -62,6 +62,9 @@ struct configuration_port
 	gboolean esc_clear_screen;   // clear screen when receive ESC char ('\x1b' - 27)
 	gboolean timestamp;
 	gboolean disable_port_lock;
+	gchar update_url[1024];
+	gboolean update_check_startup;
+	gchar update_prefix[256];
 };
 
 typedef struct

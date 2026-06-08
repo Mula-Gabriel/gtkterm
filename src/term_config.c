@@ -95,6 +95,9 @@ gchar **macros_file;
 gint *transport_type_cfg;
 gchar **socket_host;
 gchar **socket_port;
+gchar **update_url_cfg;
+gint *update_check_startup_cfg;
+gchar **update_prefix_cfg;
 
 
 cfgStruct cfg[] =
@@ -133,6 +136,9 @@ cfgStruct cfg[] =
 	{"transport_type", CFG_INT, &transport_type_cfg},
 	{"socket_host", CFG_STRING, &socket_host},
 	{"socket_port", CFG_STRING, &socket_port},
+	{"update_url", CFG_STRING, &update_url_cfg},
+	{"update_check_startup", CFG_BOOL, &update_check_startup_cfg},
+	{"update_prefix", CFG_STRING, &update_prefix_cfg},
 	{NULL, CFG_END, NULL}
 };
 
@@ -1571,6 +1577,21 @@ gint Load_configuration_from_file(gchar *config_name)
 			else
 				config.socket_port[0] = '\0';
 
+			if(update_url_cfg != NULL && update_url_cfg[i] != NULL)
+				g_strlcpy(config.update_url, update_url_cfg[i], sizeof(config.update_url));
+			else
+				g_strlcpy(config.update_url, "https://github.com/Mula-Gabriel/gtkterm.git", sizeof(config.update_url));
+
+			if(update_check_startup_cfg != NULL && update_check_startup_cfg[i] != -1)
+				config.update_check_startup = (gboolean)update_check_startup_cfg[i];
+			else
+				config.update_check_startup = TRUE;
+
+			if(update_prefix_cfg != NULL && update_prefix_cfg[i] != NULL)
+				g_strlcpy(config.update_prefix, update_prefix_cfg[i], sizeof(config.update_prefix));
+			else
+				g_strlcpy(config.update_prefix, "/usr/local", sizeof(config.update_prefix));
+
 		g_free(term_conf.font);
 			term_conf.font = (font[i] != NULL) ? g_strdup(font[i]) : g_strdup(DEFAULT_FONT);
 
@@ -1746,6 +1767,9 @@ void Hard_default_configuration(void)
 	config.transport_type = TRANSPORT_SERIAL;
 	config.socket_host[0] = '\0';
 	config.socket_port[0] = '\0';
+	g_strlcpy(config.update_url, "https://github.com/Mula-Gabriel/gtkterm.git", sizeof(config.update_url));
+	config.update_check_startup = TRUE;
+	g_strlcpy(config.update_prefix, "/usr/local", sizeof(config.update_prefix));
 
 	term_conf.font = g_strdup_printf(DEFAULT_FONT);
 
@@ -1936,6 +1960,17 @@ void Copy_configuration(int pos)
 
 	cfgStoreValue(cfg, "socket_host", config.socket_host, CFG_INI, pos);
 	cfgStoreValue(cfg, "socket_port", config.socket_port, CFG_INI, pos);
+
+	cfgStoreValue(cfg, "update_url", config.update_url, CFG_INI, pos);
+
+	if(config.update_check_startup == FALSE)
+		string = g_strdup_printf("False");
+	else
+		string = g_strdup_printf("True");
+	cfgStoreValue(cfg, "update_check_startup", string, CFG_INI, pos);
+	g_free(string);
+
+	cfgStoreValue(cfg, "update_prefix", config.update_prefix, CFG_INI, pos);
 
 	const gchar *mfp = macros_file_get_path();
 	if (mfp)
