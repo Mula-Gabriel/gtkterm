@@ -4,6 +4,7 @@
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "update.h"
 #include "term_config.h"
@@ -81,8 +82,8 @@ static void run_update_script(GtkWindow *parent)
 	 * after the script finishes so the user can read the output.
 	 */
 	const TerminalDef *def = get_terminal_def(term_name);
-	gchar *inner_cmd = g_strdup_printf("sh '%s' '%s' '%s'; echo; echo '>>> Appuyez sur Entrée pour fermer...'; read",
-			script, config.update_url, config.update_prefix);
+	gchar *inner_cmd = g_strdup_printf("sh '%s' '%s' '%s' '%d'; echo; echo '>>> Appuyez sur Entrée pour fermer...'; read",
+			script, config.update_url, config.update_prefix, getpid());
 	gchar *inner = g_shell_quote(inner_cmd);
 	g_free(inner_cmd);
 	gchar *cmd;

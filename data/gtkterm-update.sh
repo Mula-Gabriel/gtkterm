@@ -4,13 +4,14 @@
 # builds, and installs. The resulting system install does not depend on
 # any original checkout, so the source folder can be deleted afterwards.
 #
-# Usage: gtkterm-update.sh <repo-url> <install-prefix>
+# Usage: gtkterm-update.sh <repo-url> <install-prefix> [pid-to-restart]
 # Privileged steps (dependency install, ninja install) use pkexec.
 
 set -eu
 
 REPO_URL="${1:-https://github.com/Mula-Gabriel/gtkterm.git}"
 PREFIX="${2:-/usr/local}"
+OLD_PID="${3:-}"
 BRANCH="master"
 WORKDIR="${XDG_CACHE_HOME:-$HOME/.cache}/gtkterm/src"
 
@@ -85,3 +86,12 @@ echo ">>> Installing (will prompt for authorization)..."
 pkexec ninja -C "$WORKDIR/build" install
 
 echo ">>> Update complete."
+
+# --- 6. restart --------------------------------------------------------
+if [ -n "$OLD_PID" ]; then
+	echo ">>> Redémarrage de GTKTerm..."
+	kill "$OLD_PID" 2>/dev/null || true
+	sleep 1
+fi
+gtkterm &
+disown
