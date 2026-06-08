@@ -44,6 +44,8 @@ sources = [
 	'term_config.h',
 	'transport.c',
 	'transport.h',
+	'update.c',
+	'update.h',
 	'user_signals.c',
 	'user_signals.h',
 	'script_engine.c',
