@@ -80,6 +80,7 @@
 #include "auto_config.h"
 #include "logging.h"
 #include "device_monitor.h"
+#include "update.h"
 
 #include <glib/gprintf.h>
 #include <glib/gi18n.h>
@@ -886,17 +887,35 @@ void help_about_callback(GtkAction *action, gpointer data)
 	logo = gdk_pixbuf_new_from_resource ("/org/gtk/gtkterm/gtkterm_64x64.png", &error);
 	g_snprintf(comments, sizeof(comments), "%s\n\n%s", RELEASE_DATE, comments_program);
 
-	gtk_show_about_dialog(GTK_WINDOW(Fenetre),
-	                      "program-name", "GTKTerm fork MGU",
-	                      "logo", logo,
-	                      "version", VERSION,
-	                      "comments", comments,
-	                      "copyright", "Copyright © Julien Schimtt",
-	                      "authors", authors,
-	                      "website", "https://github.com/Mula-Gabriel/gtkterm",
-	                      "website-label", "https://github.com/Mula-Gabriel/gtkterm",
-	                      "license-type", GTK_LICENSE_LGPL_3_0,
-	                      NULL);
+	GtkWidget *dialog = gtk_about_dialog_new();
+	gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(Fenetre));
+	gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+	gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), "GTKTerm fork MGU");
+	if(logo != NULL)
+		gtk_about_dialog_set_logo(GTK_ABOUT_DIALOG(dialog), logo);
+	gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), VERSION);
+	gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog), comments);
+	gtk_about_dialog_set_copyright(GTK_ABOUT_DIALOG(dialog), "Copyright © Julien Schimtt");
+	gtk_about_dialog_set_authors(GTK_ABOUT_DIALOG(dialog), (const gchar **)authors);
+	gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://github.com/Mula-Gabriel/gtkterm");
+	gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "https://github.com/Mula-Gabriel/gtkterm");
+	gtk_about_dialog_set_license_type(GTK_ABOUT_DIALOG(dialog), GTK_LICENSE_LGPL_3_0);
+
+	/* Add the "Check for updates now" button to the dialog action area. */
+	gtk_dialog_add_button(GTK_DIALOG(dialog), _("Check for updates now"), 1);
+
+	gint resp;
+	do
+	{
+		resp = gtk_dialog_run(GTK_DIALOG(dialog));
+		if(resp == 1)
+			update_check(GTK_WINDOW(dialog), TRUE);
+	}
+	while(resp == 1);
+
+	gtk_widget_destroy(dialog);
+	if(logo != NULL)
+		g_object_unref(logo);
 }
 
 void show_control_signals(int stat)
