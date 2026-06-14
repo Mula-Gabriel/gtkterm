@@ -782,7 +782,12 @@ int transport_get_signals(void)
 	{
 		if(ioctl(transport_fd, TIOCMGET, &stat_read) == -1)
 		{
-			if(errno != EINVAL)
+			/* Les pseudo-terminaux (/dev/pts/N, ex: simulateur W32) et certains
+			   peripheriques n'ont pas de lignes modem : TIOCMGET echoue avec
+			   ENOTTY/EINVAL. Ce n'est pas une erreur de liaison, on ne ferme
+			   surtout pas le port (sinon le timer de lecture des signaux le
+			   refermait aussitot apres l'ouverture -> ni envoi ni echo). */
+			if(errno != EINVAL && errno != ENOTTY)
 			{
 				i18n_perror(_("Control signals read lis_sig"));
 				transport_close();
