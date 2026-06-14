@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <locale.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <gtk/gtk.h>
 #include <glib.h>
 #include <interface.h>
@@ -76,10 +77,20 @@ extern void device_monitor_start(void)
 		g_object_unref(udev_client);
 	udev_client = g_udev_client_new(subsystems);
 
-	if (g_udev_client_query_by_device_file(udev_client, config.port) == NULL) {
-		device_monitor_status(false);
-	} else {
+	GUdevDevice *dev = g_udev_client_query_by_device_file(udev_client, config.port);
+	if (dev != NULL) {
+		g_object_unref(dev);
 		device_monitor_status(true);
+	} else {
+		/* udev ne connait pas les pseudo-terminaux /dev/pts/N ni les liens
+		   hors /dev (ex: /tmp/metro/<port> du simulateur W32 : symlink ->
+		   /dev/pts/N) : on considere le port present s'il existe et est un
+		   device caractere, sinon le moniteur fermerait aussitot le port. */
+		struct stat st;
+		if (stat(config.port, &st) == 0 && S_ISCHR(st.st_mode))
+			device_monitor_status(true);
+		else
+			device_monitor_status(false);
 	}
 
 	/* Monitor device */
