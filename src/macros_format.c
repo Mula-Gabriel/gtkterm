@@ -186,6 +186,38 @@ try_parse_list_spec (const gchar *action, gint start,
   return TRUE;
 }
 
+/* TRUE si le spécificateur ne porte ni drapeau, ni largeur, ni précision :
+   "%f", "%lf", "%Lf". Seul le modificateur de longueur est toléré. */
+static gboolean
+spec_is_bare (const gchar *spec)
+{
+  const gchar *p = spec + 1;                    /* saute le '%' */
+  while (*p == 'h' || *p == 'l' || *p == 'L')
+    p++;
+  return p[0] != '\0' && p[1] == '\0';          /* il ne reste que la conversion */
+}
+
+/* Recopie le spécificateur sans son modificateur de longueur : printf attend un
+   double pour %f/%e/%g quoi qu'ait écrit l'utilisateur (%hf, %llf sont invalides
+   et provoqueraient un comportement indéfini). Si length_mod est non nul, il est
+   réinséré juste avant la conversion. */
+static gchar *
+spec_rebuild (const gchar *spec, gchar length_mod)
+{
+  GString *out = g_string_new ("%");
+  gsize len = strlen (spec);
+
+  for (gsize i = 1; i + 1 < len; i++)
+    if (spec[i] != 'h' && spec[i] != 'l' && spec[i] != 'L')
+      g_string_append_c (out, spec[i]);
+
+  if (length_mod != '\0')
+    g_string_append_c (out, length_mod);
+  g_string_append_c (out, spec[len - 1]);
+
+  return g_string_free (out, FALSE);
+}
+
 static gchar *
 apply_spec (const gchar *spec, const gchar *fmt_type, const gchar *arg_str)
 {
@@ -235,15 +267,25 @@ apply_spec (const gchar *spec, const gchar *fmt_type, const gchar *arg_str)
 
   if (strchr ("fFeEgGaA", conv))
     {
+      /* Spécificateur nu (%f, %lf, %Lf) : la valeur est transmise exactement
+         telle qu'elle a été saisie. La reformater ferait perdre les zéros de
+         fin, qui portent la résolution voulue — "2.00000" n'est pas "2", et
+         "%f" imposerait de son côté six décimales. */
+      if ((conv == 'f' || conv == 'F') && arg_str[0] != '\0' && spec_is_bare (spec))
+        return g_strdup (arg_str);
+
       if (fmt_type[0] == 'L')
         {
-          long double val = strtold (arg_str, NULL);
-          return g_strdup_printf ("%.19Lg", val);
+          gchar *lspec = spec_rebuild (spec, 'L');
+          gchar *out = g_strdup_printf (lspec, strtold (arg_str, NULL));
+          g_free (lspec);
+          return out;
         }
-      double val = strtod (arg_str, NULL);
-      if (fmt_type[0] == 'l')
-        return g_strdup_printf ("%.16g", val);
-      return g_strdup_printf ("%.9g", val);
+
+      gchar *dspec = spec_rebuild (spec, '\0');
+      gchar *out = g_strdup_printf (dspec, strtod (arg_str, NULL));
+      g_free (dspec);
+      return out;
     }
 
   if (conv == 's')
