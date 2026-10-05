@@ -63,3 +63,6 @@ install_data('gtkterm-update.sh',
 	install_dir: join_paths(datadir, 'gtkterm'),
 	install_mode: 'rwxr-xr-x'
 )
+
+# Ports CDC Metro (règle udev et script de rang)
+subdir('udev')
