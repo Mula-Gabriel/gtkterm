@@ -1,0 +1,26 @@
+#!/bin/sh
+# Rang d'un port CDC Metro parmi ceux du même produit, pour la règle 99-metro-cdc.rules : /dev/ttyM5_1, _2, _3...
+# Le port garde son rang tant qu'il vit (événements change) ; un nouveau prend le premier rang libre.
+# Usage : metro-tty-index <Produit> <devnode>, écrit le rang sur stdout.
+Produit=$1
+Noeud=$2
+[ -n "$Produit" ] && [ -n "$Noeud" ] || exit 1
+
+# Deux appareils branchés ensemble passent en parallèle : le verrou et le lien posé ici réservent le rang avant que udev pose le sien.
+exec 9>/run/udev/metro-tty-index.lock
+flock 9
+
+for N in $(seq 1 32); do
+	Lien=/dev/tty${Produit}_$N
+	if [ "$(readlink -f "$Lien")" = "$Noeud" ]; then echo "$N"; exit 0; fi
+done
+
+for N in $(seq 1 32); do
+	Lien=/dev/tty${Produit}_$N
+	if [ ! -e "$Lien" ]; then
+		ln -sfn "${Noeud#/dev/}" "$Lien"
+		echo "$N"
+		exit 0
+	fi
+done
+exit 1

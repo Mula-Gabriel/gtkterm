@@ -601,6 +601,27 @@ static GPtrArray *find_serial_ports(const struct device_path *devp)
 	return ports;
 }
 
+/* Les liens udev (/dev/ttyM5_1...) nomment l'appareil : en gras dans la liste, pour les distinguer des ttyACMx. */
+#define PORT_ID_LINK	"lien"
+
+static void port_cell_weight(GtkCellLayout *layout, GtkCellRenderer *cell, GtkTreeModel *model, GtkTreeIter *iter, gpointer data)
+{
+	gchar *id = NULL;
+
+	gtk_tree_model_get(model, iter, gtk_combo_box_get_id_column(GTK_COMBO_BOX(layout)), &id, -1);
+	g_object_set(cell, "weight", (g_strcmp0(id, PORT_ID_LINK) == 0) ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL, NULL);
+	g_free(id);
+}
+
+static void port_combo_bold_links(GtkWidget *combo)
+{
+	GList *cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(combo));
+
+	for (GList *c = cells; c != NULL; c = c->next)
+		gtk_cell_layout_set_cell_data_func(GTK_CELL_LAYOUT(combo), c->data, port_cell_weight, NULL, NULL);
+	g_list_free(cells);
+}
+
 static gchar *dlist_to_string(const struct device_path *dlist)
 {
 	const struct device_path *dp;
@@ -739,13 +760,15 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 	gtk_grid_attach(GTK_GRID(Table), Label, 2, 0, 1, 1);
 
 	Combo = gtk_combo_box_text_new_with_entry();
+	port_combo_bold_links(Combo);
 
 	prev = "";
 	for (i = 0; i < ports->len; i++)
 	{
 		char *curr = ports->pdata[i];
+		struct stat st;
 		if (strcmp(prev, curr))
-			gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(Combo), curr);
+			gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(Combo), (lstat(curr, &st) == 0 && S_ISLNK(st.st_mode)) ? PORT_ID_LINK : NULL, curr);
 		prev = curr;
 	}
 	for (i = 0; i < ports->len; i++)
