@@ -536,6 +536,44 @@ static int is_serial_port(const char *path, const struct device_path *dp)
 	return TRUE;
 }
 
+/*
+ * Liens de /dev vers un port deja trouve (ex. /dev/ttyM5 -> ttyACM0, pose par une
+ * regle udev) : aucun motif de /proc/tty/drivers ne les voit. Seuls les alias de
+ * ports reels sont gardes, ce qui ecarte /dev/stdin, /dev/fd et consorts.
+ */
+static void find_serial_port_links(GPtrArray *ports)
+{
+	DIR *dir = opendir("/dev");
+	struct dirent *entry;
+	guint nb_ports = ports->len;
+
+	if (dir == NULL)
+		return;
+
+	while ((entry = readdir(dir)) != NULL)
+	{
+		gchar *link;
+		char *target;
+		gboolean found = FALSE;
+		guint i;
+
+		if (entry->d_type != DT_LNK)
+			continue;
+
+		link = g_build_filename("/dev", entry->d_name, NULL);
+		target = realpath(link, NULL);
+		for (i = 0; target != NULL && i < nb_ports && !found; i++)
+			found = (strcmp(target, g_ptr_array_index(ports, i)) == 0);
+
+		if (found)
+			g_ptr_array_add(ports, link);
+		else
+			g_free(link);
+		free(target);
+	}
+	closedir(dir);
+}
+
 static GPtrArray *find_serial_ports(const struct device_path *devp)
 {
 	GPtrArray *ports = g_ptr_array_new();
@@ -555,8 +593,10 @@ static GPtrArray *find_serial_ports(const struct device_path *devp)
 			if (is_serial_port(*filep, devp))
 				g_ptr_array_add(ports, g_strdup(*filep));
 		}
+		globfree(&gl);
 	}
 
+	find_serial_port_links(ports);
 	g_ptr_array_sort_values(ports, compare_seminum);
 	return ports;
 }

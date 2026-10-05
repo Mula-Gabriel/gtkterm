@@ -49,6 +49,25 @@ static inline void device_monitor_handle(const char *action)
 		device_monitor_status(true);
 }
 
+/*
+ * Le port peut etre ouvert par un lien (ex. /dev/ttyM5) : udev rapporte le noeud
+ * (/dev/ttyACM0) et ses liens (DEVLINKS, presents aussi dans l'evenement remove).
+ */
+static gboolean device_monitor_is_port(GUdevDevice *device, const gchar *name)
+{
+	const gchar *const *links;
+
+	if (strcmp(g_udev_device_get_device_file(device), name) == 0)
+		return TRUE;
+
+	for (links = g_udev_device_get_device_file_symlinks(device); links != NULL && *links != NULL; links++)
+	{
+		if (strcmp(*links, name) == 0)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 void event_udev(GUdevClient *client, const gchar *action, GUdevDevice *device)
 {
 
@@ -60,7 +79,7 @@ void event_udev(GUdevClient *client, const gchar *action, GUdevDevice *device)
 
 	const gchar *name = config.port;
 
-	if (strcmp(g_udev_device_get_device_file(device), name) == 0)
+	if (device_monitor_is_port(device, name))
 		device_monitor_handle(action);
 }
 
