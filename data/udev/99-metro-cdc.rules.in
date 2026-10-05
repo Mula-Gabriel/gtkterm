@@ -1,0 +1,4 @@
+# Ports CDC des afficheurs Metro : un nom par appareil, numéroté par produit (/dev/ttyM5_1, /dev/ttyM5_2...), et ModemManager tenu à l'écart (plus de « AT » envoyés aux consoles).
+# Installée par ninja install (donc par la mise à jour de gtkterm) dans /etc/udev/rules.d, où elle remplace la version posée à la main.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1fc9", ATTRS{idProduct}=="00b5", ENV{ID_MM_DEVICE_IGNORE}="1"
+SUBSYSTEM=="tty", ACTION!="remove", ATTRS{product}=="F1|F2|F3|M5|GD200|D65S|D75|IKM5|SUN_M5", PROGRAM="@BINDIR@/metro-tty-index $attr{product} $devnode", SYMLINK+="tty$attr{product}_%c"
