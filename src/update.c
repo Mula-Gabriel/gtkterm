@@ -8,6 +8,7 @@
 
 #include "update.h"
 #include "term_config.h"
+#include "git_revision.h"
 
 extern struct configuration_port config;
 

@@ -28,7 +28,6 @@
 #include "parsecfg.h"
 #include "buffer.h"
 #include "macros.h"
-#include "auto_config.h"
 #include "device_monitor.h"
 #include "user_signals.h"
 #include "script_panel.h"

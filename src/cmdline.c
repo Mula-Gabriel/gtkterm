@@ -24,7 +24,6 @@
 
 #include "term_config.h"
 #include "files.h"
-#include "auto_config.h"
 #include "i18n.h"
 
 #include <config.h>

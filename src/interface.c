@@ -77,10 +77,10 @@
 #include "buffer.h"
 #include "macros.h"
 #include "terminal_display.h"
-#include "auto_config.h"
 #include "logging.h"
 #include "device_monitor.h"
 #include "update.h"
+#include "git_revision.h"
 
 #include <glib/gprintf.h>
 #include <glib/gi18n.h>
@@ -885,7 +885,7 @@ void help_about_callback(GtkAction *action, gpointer data)
 	GdkPixbuf *logo = NULL;
 
 	logo = gdk_pixbuf_new_from_resource ("/org/gtk/gtkterm/gtkterm_64x64.png", &error);
-	g_snprintf(comments, sizeof(comments), "%s\nGit: %s\n\n%s", RELEASE_DATE, GIT_REVISION, comments_program);
+	g_snprintf(comments, sizeof(comments), "Git: %s\n\n%s", GIT_REVISION, comments_program);
 
 	GtkWidget *dialog = gtk_about_dialog_new();
 	gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(Fenetre));

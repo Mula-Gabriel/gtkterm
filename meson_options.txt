@@ -1,0 +1,3 @@
+# meson construit toujours les prérequis des tests avec « ninja » : désactiver la suite pour une
+# construction destinée seulement à l'installation (c'est ce que fait data/gtkterm-update.sh).
+option('tests', type : 'boolean', value : true, description : 'Construire et déclarer la suite de tests (meson test)')

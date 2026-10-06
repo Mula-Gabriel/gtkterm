@@ -156,9 +156,8 @@ try_parse_label (const gchar *action, gint start, gchar **label_out)
   if (j < 0)
     return -1;
 
-  gchar *label = g_strndup (&action[j + 1], bracket_end - j - 1);
   if (label_out)
-    *label_out = label;
+    *label_out = g_strndup (&action[j + 1], bracket_end - j - 1);
   return j;
 }
 

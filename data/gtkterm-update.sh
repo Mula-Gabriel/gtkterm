@@ -5,7 +5,7 @@
 # any original checkout, so the source folder can be deleted afterwards.
 #
 # Usage: gtkterm-update.sh <repo-url> <install-prefix> [pid-to-restart]
-# Privileged steps (dependency install, ninja install) use pkexec.
+# Privileged steps (dependency install, meson install) use pkexec.
 
 set -eu
 
@@ -75,15 +75,16 @@ pkexec sh -c "$INSTALL"
 echo ">>> Configuring & building..."
 cd "$WORKDIR"
 if [ -d build ]; then
-	meson setup --reconfigure --prefix="$PREFIX" build
+	meson setup --reconfigure --prefix="$PREFIX" -Dtests=false build
 else
-	meson setup --prefix="$PREFIX" build
+	meson setup --prefix="$PREFIX" -Dtests=false build
 fi
 ninja -C build
 
 # --- 5. install (root) -------------------------------------------------
 echo ">>> Installing (will prompt for authorization)..."
-pkexec ninja -C "$WORKDIR/build" install
+# --no-rebuild : root ne relance ni ninja ni git (sinon des fichiers de build/, dont src/git_revision.h, passeraient à root).
+pkexec "$(command -v meson)" install -C "$WORKDIR/build" --no-rebuild
 
 echo ">>> Update complete."
 

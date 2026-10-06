@@ -5,10 +5,45 @@ baudrates_h = custom_target(
 	    input : 'baudrates.sh',
 	    command : [prog_sh, '@INPUT@', '@OUTPUT@'])
 
-sources = [
+# Cœur sans GTK : compilé une fois, lié par l'exécutable et par les tests (tests/).
+core_sources = [
 	'baud.c',
 	'baudrates.c',
 	baudrates_h,
+	'i18n.c',
+	'i18n.h',
+	'macros_format.c',
+	'macros_format.h',
+	'macros_list.c',
+	'macros_list.h',
+	'parsecfg.c',
+	'parsecfg.h',
+	'serial.h',
+]
+
+gtkterm_core = static_library(
+	'gtkterm_core', core_sources,
+	dependencies : [glib_dep, config]
+)
+
+gtkterm_core_dep = declare_dependency(
+	link_with : gtkterm_core,
+	include_directories : include_directories('.'),
+	dependencies : [glib_dep, config]
+)
+
+# Révision git recalculée à chaque construction (le fichier n'est réécrit que si elle change).
+# safe.directory=* : l'installation (pkexec/sudo ninja install) relance ceci en root dans un dépôt
+# appartenant à l'utilisateur ; sans cette option, git refuse et la révision deviendrait « unknown ».
+git_revision_h = vcs_tag(
+	command : ['git', '-c', 'safe.directory=*', 'rev-parse', 'HEAD'],
+	fallback : 'unknown',
+	input : 'git_revision.h.in',
+	output : 'git_revision.h',
+	replace_string : '@GIT_REVISION@'
+)
+
+sources = [
 	'buffer.c',
 	'buffer.h',
 	'cmdline.c',
@@ -18,28 +53,19 @@ sources = [
 	'files.c',
 	'files.h',
 	'gtkterm.c',
-	'i18n.c',
-	'i18n.h',
 	'interface.c',
 	'interface.h',
 	'logging.c',
 	'logging.h',
 	'macros.c',
 	'macros.h',
-	'macros_list.c',
-	'macros_list.h',
-	'macros_format.c',
-	'macros_format.h',
 	'terminal_display.c',
 	'terminal_display.h',
 	'macro_panel.c',
 	'macro_panel.h',
-	'parsecfg.c',
-	'parsecfg.h',
 	'search.c',
 	'search.h',
 	'serial.c',
-	'serial.h',
 	'term_config.c',
 	'term_config.h',
 	'transport.c',
@@ -52,6 +78,7 @@ sources = [
 	'script_engine.h',
 	'script_panel.c',
 	'script_panel.h',
+	git_revision_h,
 	gresources
 ]
 
@@ -64,7 +91,8 @@ executable(
 		config,
 		gudev_deps,
 		lua_dep,
-		gsv_dep
+		gsv_dep,
+		gtkterm_core_dep
 	],
 	install : true
 )
