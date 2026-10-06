@@ -52,6 +52,7 @@ static char *parse_word(char *ptr, char **word, cfgKeywordValue word_type);
 static int store_value(cfgStruct cfg[], const char *parameter, const char *value, cfgFileType type, int section);
 static int parse_ini(const char *file, FILE *fp, char *ptr, cfgStruct cfg[], int *line, int *section);
 static int alloc_for_new_section(cfgStruct cfg[], int *section);
+static int store_value_in_c_locale(cfgStruct cfg[], const char *parameter, const char *value, cfgFileType type, int section);
 
 static char *get_single_line_without_first_spaces(FILE *fp, char **gotstr, int *line);
 static char *rm_first_spaces(char *ptr);
@@ -178,7 +179,15 @@ int cfgDump(const char *file, cfgStruct cfg[], cfgFileType type, int max_section
 		retcode = dump_simple(fp, cfg, type);
 		break;
 	case CFG_INI:
-		retcode = dump_ini(fp, cfg, type, max_section);
+		{
+			/* Flottants écrits avec un point quelle que soit la langue, sans changer la locale du processus (M9). */
+			locale_t c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+			locale_t previous = uselocale(c_locale);
+
+			retcode = dump_ini(fp, cfg, type, max_section);
+			uselocale(previous);
+			freelocale(c_locale);
+		}
 		break;
 	default:
 		fclose(fp);
@@ -329,6 +338,13 @@ int cfgAllocForNewSection(cfgStruct cfg[], const char *name)
 int cfgStoreValue(cfgStruct cfg[], const char *parameter, const char *value, cfgFileType type, int section)
 {
 	int result;
+
+	/* Une section qui n'existe pas (fichier vide, indice périmé) : erreur au lieu d'écrire dans un tableau absent (C7). */
+	if (type == CFG_INI && (section < 0 || section >= parsecfg_maximum_section))
+	{
+		cfgFatalFunc(CFG_INTERNAL_ERROR, "unknown", 0, "");
+		return (-1);
+	}
 
 	result = store_value(cfg, parameter, value, type, section);
 	if (result != CFG_NO_ERROR)
@@ -561,8 +577,22 @@ static char *parse_word(char *ptr, char **word, cfgKeywordValue word_type)
 }
 
 
+/* Les nombres du fichier s'écrivent toujours avec un point : lecture sous une locale « C » propre au thread,
+   sans toucher à la locale du processus (M9 : setlocale(LC_ALL,"C") cassait les traductions et toute l'interface). */
+static int store_value(cfgStruct cfg[], const char *parameter, const char *value, cfgFileType type, int section)
+{
+	locale_t c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+	locale_t previous = uselocale(c_locale);
+	int result = store_value_in_c_locale(cfg, parameter, value, type, section);
+
+	uselocale(previous);
+	freelocale(c_locale);
+	return result;
+}
+
+
 /* --------------------------------------------------
-   NAME       store_value
+   NAME       store_value_in_c_locale
    FUNCTION   store the value according to cfg
    INPUT      cfg ......... array of possible variables
               parameter ... parameter
@@ -571,7 +601,7 @@ static char *parse_word(char *ptr, char **word, cfgKeywordValue word_type)
 	      section ..... section number
    OUTPUT     error code
    -------------------------------------------------- */
-static int store_value(cfgStruct cfg[], const char *parameter, const char *value, cfgFileType type, int section)
+static int store_value_in_c_locale(cfgStruct cfg[], const char *parameter, const char *value, cfgFileType type, int section)
 {
 	int num;
 	long tmp;
@@ -581,18 +611,6 @@ static int store_value(cfgStruct cfg[], const char *parameter, const char *value
 	char *endptr;
 	char *strptr;
 	cfgList *listptr;
-
-	//first step is to set locale to "C" and ignoring any environment
-	//defined locale.
-	//this is important because when saving float numbers in config file
-	//those are saved either as "1.0" or "1,0". When then starting
-	//gtkterm from console or via window manager menu, different locale
-	//could prevent processing config values correctly.
-	//In such a case configuration not loaded at all.
-	//
-	//Note: locale must be set at different locations to read and write
-	//      correct values.
-	setlocale(LC_ALL,"C");
 
 	for (num = 0; cfg[num].type != CFG_END; num++)
 	{
@@ -1244,18 +1262,6 @@ static int dump_ini(FILE *fp, cfgStruct cfg[], cfgFileType type, int max)
 	int i, j;
 	char c[2];
 	cfgList *l;
-
-	//first step is to set locale to "C" and ignoring any environment
-	//defined locale.
-	//this is important because when saving float numbers in config file
-	//those are saved either as "1.0" or "1,0". When then starting
-	//gtkterm from console or via window manager menu, different locale
-	//could prevent processing config values correctly.
-	//In such a case configuration not loaded at all.
-	//
-	//Note: locale must be set at different locations to read and write
-	//      correct values.
-	setlocale(LC_ALL,"C");
 
 	for (j = 0; j < max; j++)
 	{

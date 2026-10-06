@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <locale.h>
 #include <termios.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -97,7 +98,78 @@ static void engine_log(const char *fmt, ...)
 
     LogIdleData *d = g_new(LogIdleData, 1);
     d->text = text;
-    g_idle_add(log_idle_cb, d);
+    g_idle_add_full(G_PRIORITY_DEFAULT, log_idle_cb, d, NULL);
+}
+
+/* ------------------------------------------------------------------ */
+/* Exécution synchrone sur le thread principal                         */
+/* ------------------------------------------------------------------ */
+
+/* Le thread Lua ne touche jamais GTK ni l'état du thread principal (macros, listes, port principal) : il y fait exécuter
+ * func et attend sa fin (C10, C11). La source est ajoutée au contexte par défaut, que seul le thread principal fait tourner. */
+typedef struct {
+    GSourceFunc func;
+    gpointer    data;
+    gboolean    done;
+    GMutex      mutex;
+    GCond       cond;
+} MainCall;
+
+static gboolean main_call_trampoline(gpointer user_data)
+{
+    MainCall *mc = user_data;
+    mc->func(mc->data);
+    g_mutex_lock(&mc->mutex);
+    mc->done = TRUE;
+    g_cond_signal(&mc->cond);
+    g_mutex_unlock(&mc->mutex);
+    return G_SOURCE_REMOVE;
+}
+
+static void run_on_main_sync(GSourceFunc func, gpointer data)
+{
+    MainCall mc;
+    mc.func = func;
+    mc.data = data;
+    mc.done = FALSE;
+    g_mutex_init(&mc.mutex);
+    g_cond_init(&mc.cond);
+    g_idle_add_full(G_PRIORITY_DEFAULT, main_call_trampoline, &mc, NULL);
+    g_mutex_lock(&mc.mutex);
+    while (!mc.done)
+        g_cond_wait(&mc.cond, &mc.mutex);
+    g_mutex_unlock(&mc.mutex);
+    g_mutex_clear(&mc.mutex);
+    g_cond_clear(&mc.cond);
+}
+
+/* Envoi sur le port principal, exécuté sur le thread principal. */
+typedef struct {
+    const char *data;
+    gint        len;
+    gint        written;
+} MainSendData;
+
+static gboolean main_send_cb(gpointer user_data)
+{
+    MainSendData *d = user_data;
+    d->written = d->len > 0 ? send_serial((gchar *)d->data, d->len) : 0;
+    return G_SOURCE_REMOVE;
+}
+
+static gint main_port_send(const char *data, gint len)
+{
+    MainSendData d = { data, len, 0 };
+    run_on_main_sync(main_send_cb, &d);
+    return d.written;
+}
+
+/* Écriture sur un port Lua : MSG_NOSIGNAL en TCP, un pair fermé renvoie EPIPE au lieu de tuer GTKTerm (C2). */
+static ssize_t lua_port_write(lua_port_t *p, const void *data, size_t len)
+{
+    if (p->type == PORT_SERIAL)
+        return write(p->fd, data, len);
+    return send(p->fd, data, len, MSG_NOSIGNAL);
 }
 
 /* ------------------------------------------------------------------ */
@@ -343,13 +415,13 @@ static int l_open(lua_State *L)
     return 1;
 }
 
-static int l_close(lua_State *L)
+/* Ferme un port Lua ; appelée par gtkterm.close et par le nettoyage de fin de script, sans passer par la pile Lua (C1). */
+static void lua_port_close(int handle)
 {
-    int handle = (int)luaL_checkinteger(L, 1);
-    if (handle < 1 || handle >= MAX_LUA_PORTS) return 0;
+    if (handle < 1 || handle >= MAX_LUA_PORTS) return;
 
     lua_port_t *p = &ports[handle];
-    if (!p->open) return 0;
+    if (!p->open) return;
 
     if (p->watch_in)  { g_source_remove(p->watch_in);  p->watch_in  = 0; }
     if (p->watch_err) { g_source_remove(p->watch_err); p->watch_err = 0; }
@@ -362,6 +434,11 @@ static int l_close(lua_State *L)
     g_mutex_unlock(&p->mutex);
 
     p->open = FALSE;
+}
+
+static int l_close(lua_State *L)
+{
+    lua_port_close((int)luaL_checkinteger(L, 1));
     return 0;
 }
 
@@ -376,8 +453,7 @@ static int l_send(lua_State *L)
     const char *data = luaL_checklstring(L, 2, &len);
 
     if (handle == 0) {
-        send_serial((gchar *)data, (gint)len);
-        lua_pushboolean(L, 1);
+        lua_pushboolean(L, main_port_send(data, (gint)len) == (gint)len);
         return 1;
     }
 
@@ -389,7 +465,7 @@ static int l_send(lua_State *L)
     lua_port_t *p = &ports[handle];
     if (!p->open || p->fd < 0) { lua_pushboolean(L, 0); return 1; }
 
-    ssize_t written = write(p->fd, data, len);
+    ssize_t written = lua_port_write(p, data, len);
     lua_pushboolean(L, written == (ssize_t)len);
     return 1;
 }
@@ -415,27 +491,29 @@ static int l_send_hex(lua_State *L)
         i += 2;
     }
 
+    gboolean ok = FALSE;
     if (handle == 0) {
-        send_serial(bin, (gint)bin_len);
+        ok = main_port_send(bin, (gint)bin_len) == (gint)bin_len;
     } else if (handle >= 1 && handle < MAX_LUA_PORTS) {
         lua_port_t *p = &ports[handle];
         if (p->open && p->fd >= 0)
-            write(p->fd, bin, bin_len);
+            ok = lua_port_write(p, bin, bin_len) == (ssize_t)bin_len;
     }
 
     g_free(bin);
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, ok);
     return 1;
 }
 
 /* ------------------------------------------------------------------ */
-/* Lua API: wait_for(handle, pattern, timeout_ms) -> matched, data   */
+/* Lua API: wait_for(handle, pattern, timeout_ms) -> data (jusqu'au motif inclus) ou nil */
 /* ------------------------------------------------------------------ */
 
 static int l_wait_for(lua_State *L)
 {
     int handle     = (int)luaL_checkinteger(L, 1);
-    const char *pat = luaL_checkstring(L, 2);
+    size_t pat_len;
+    const char *pat = luaL_checklstring(L, 2, &pat_len);
     int timeout_ms  = (int)luaL_optinteger(L, 3, 5000);
 
     if (handle < 0 || handle >= MAX_LUA_PORTS) {
@@ -448,14 +526,13 @@ static int l_wait_for(lua_State *L)
 
     while (!stop_requested) {
         g_mutex_lock(&p->mutex);
-        char *found = g_strstr_len(p->rx_buf->str, (gssize)p->rx_buf->len, pat);
+        char *found = memmem(p->rx_buf->str, p->rx_buf->len, pat, pat_len);
         if (found) {
-            size_t end = (size_t)(found - p->rx_buf->str) + strlen(pat);
-            char *captured = g_strndup(p->rx_buf->str, end);
+            /* Données binaires : recherche et résultat avec longueurs explicites, un octet nul n'arrête rien (M26). */
+            size_t end = (size_t)(found - p->rx_buf->str) + pat_len;
+            lua_pushlstring(L, p->rx_buf->str, end);
             g_string_erase(p->rx_buf, 0, (gssize)end);
             g_mutex_unlock(&p->mutex);
-            lua_pushstring(L, captured);
-            g_free(captured);
             return 1;
         }
         g_mutex_unlock(&p->mutex);
@@ -572,29 +649,97 @@ static int l_save_csv(lua_State *L)
 /* Lua API: get_lists() -> {{name, entries={{display,value},...}}, ...} */
 /* ------------------------------------------------------------------ */
 
-static int l_get_lists(lua_State *L)
+/* Instantanés des listes et des macros, pris sur le thread principal puis poussés vers Lua (C10). */
+typedef struct {
+    gchar     *name;
+    GPtrArray *displays;
+    GPtrArray *values;
+} ListSnapshot;
+
+static void list_snapshot_free(gpointer p)
 {
+    ListSnapshot *s = p;
+    g_free(s->name);
+    g_ptr_array_unref(s->displays);
+    g_ptr_array_unref(s->values);
+    g_free(s);
+}
+
+static gboolean main_snapshot_lists_cb(gpointer user_data)
+{
+    GPtrArray *out = user_data;
     gint n_lists = macro_list_count();
-    lua_newtable(L);
     for (int i = 0; i < n_lists; i++) {
-        lua_newtable(L);
-        lua_pushstring(L, macro_list_name(i) ? macro_list_name(i) : "");
-        lua_setfield(L, -2, "name");
-        gint n_entries = macro_list_entry_count(i);
-        lua_newtable(L);
-        for (int e = 0; e < n_entries; e++) {
-            lua_newtable(L);
+        ListSnapshot *s = g_new0(ListSnapshot, 1);
+        s->name = g_strdup(macro_list_name(i) ? macro_list_name(i) : "");
+        s->displays = g_ptr_array_new_with_free_func(g_free);
+        s->values = g_ptr_array_new_with_free_func(g_free);
+        for (int e = 0; e < macro_list_entry_count(i); e++) {
             const gchar *disp = macro_list_entry_display(i, e);
             const gchar *val  = macro_list_entry_value(i, e);
-            lua_pushstring(L, disp ? disp : "");
+            g_ptr_array_add(s->displays, g_strdup(disp ? disp : ""));
+            g_ptr_array_add(s->values, g_strdup(val ? val : ""));
+        }
+        g_ptr_array_add(out, s);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+typedef struct {
+    gchar            *label;
+    gint              n_args;
+    macro_arg_info_t *infos;
+} MacroSnapshot;
+
+static void macro_snapshot_free(gpointer p)
+{
+    MacroSnapshot *s = p;
+    g_free(s->label);
+    macro_arg_infos_free(s->infos, s->n_args);
+    g_free(s);
+}
+
+static gboolean main_snapshot_macros_cb(gpointer user_data)
+{
+    GPtrArray *out = user_data;
+    gint count = 0;
+    macro_t *macros = get_shortcuts(&count);
+    for (int i = 0; macros != NULL && i < count; i++) {
+        MacroSnapshot *s = g_new0(MacroSnapshot, 1);
+        s->label = g_strdup(macros[i].label ? macros[i].label : "");
+        s->infos = macros[i].action ? macro_get_arg_infos(macros[i].action, &s->n_args) : NULL;
+        g_ptr_array_add(out, s);
+    }
+    return G_SOURCE_REMOVE;
+}
+
+/* ------------------------------------------------------------------ */
+/* Lua API: get_lists() -> {{name, entries={{display,value},...}}, ...} */
+/* ------------------------------------------------------------------ */
+
+static int l_get_lists(lua_State *L)
+{
+    GPtrArray *lists = g_ptr_array_new_with_free_func(list_snapshot_free);
+    run_on_main_sync(main_snapshot_lists_cb, lists);
+    lua_newtable(L);
+    for (guint i = 0; i < lists->len; i++) {
+        ListSnapshot *s = g_ptr_array_index(lists, i);
+        lua_newtable(L);
+        lua_pushstring(L, s->name);
+        lua_setfield(L, -2, "name");
+        lua_newtable(L);
+        for (guint e = 0; e < s->displays->len; e++) {
+            lua_newtable(L);
+            lua_pushstring(L, g_ptr_array_index(s->displays, e));
             lua_setfield(L, -2, "display");
-            lua_pushstring(L, val  ? val  : "");
+            lua_pushstring(L, g_ptr_array_index(s->values, e));
             lua_setfield(L, -2, "value");
             lua_rawseti(L, -2, e + 1);
         }
         lua_setfield(L, -2, "entries");
         lua_rawseti(L, -2, i + 1);
     }
+    g_ptr_array_unref(lists);
     return 1;
 }
 
@@ -604,41 +749,33 @@ static int l_get_lists(lua_State *L)
 
 static int l_get_macros(lua_State *L)
 {
-    gint count = 0;
-    macro_t *macros = get_shortcuts(&count);
+    GPtrArray *snap = g_ptr_array_new_with_free_func(macro_snapshot_free);
+    run_on_main_sync(main_snapshot_macros_cb, snap);
     lua_newtable(L);
-
-    if (!macros) return 1;
-
-    for (int i = 0; i < count; i++) {
+    for (guint i = 0; i < snap->len; i++) {
+        MacroSnapshot *s = g_ptr_array_index(snap, i);
         lua_newtable(L);
         lua_pushinteger(L, i);
         lua_setfield(L, -2, "index");
-        lua_pushstring(L, macros[i].label ? macros[i].label : "");
+        lua_pushstring(L, s->label);
         lua_setfield(L, -2, "label");
-
-        gint n_args = 0;
-        macro_arg_info_t *infos = macro_get_arg_infos(macros[i].action, &n_args);
-        lua_pushinteger(L, n_args);
+        lua_pushinteger(L, s->n_args);
         lua_setfield(L, -2, "n_args");
-
-        /* args = {{type, label, list}, ...} */
         lua_newtable(L);
-        for (int a = 0; a < n_args; a++) {
+        for (int a = 0; a < s->n_args; a++) {
             lua_newtable(L);
-            lua_pushstring(L, infos[a].type      ? infos[a].type      : "s");
+            lua_pushstring(L, s->infos[a].type      ? s->infos[a].type      : "s");
             lua_setfield(L, -2, "type");
-            lua_pushstring(L, infos[a].label     ? infos[a].label     : "");
+            lua_pushstring(L, s->infos[a].label     ? s->infos[a].label     : "");
             lua_setfield(L, -2, "label");
-            lua_pushstring(L, infos[a].list_name ? infos[a].list_name : "");
+            lua_pushstring(L, s->infos[a].list_name ? s->infos[a].list_name : "");
             lua_setfield(L, -2, "list");
             lua_rawseti(L, -2, a + 1);
         }
         lua_setfield(L, -2, "args");
-        macro_arg_infos_free(infos, n_args);
-
         lua_rawseti(L, -2, i + 1);
     }
+    g_ptr_array_unref(snap);
     return 1;
 }
 
@@ -647,31 +784,40 @@ static int l_get_macros(lua_State *L)
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int    index;
-    int    n_args;
-    gchar **args;
-} SendMacroData;
+    int          index;     /* -1 : chercher par libellé */
+    const char  *label;
+    int          n_args;
+    gchar      **args;
+    gboolean     found;
+    gint         expected;
+    gint         written;
+} MainMacroData;
 
-static gboolean send_macro_idle(gpointer user_data)
+/* Résolution, mise en forme et envoi sur le thread principal : l'ordre avec gtkterm.send est respecté (M27). */
+static gboolean main_send_macro_cb(gpointer user_data)
 {
-    SendMacroData *d = user_data;
+    MainMacroData *d = user_data;
     gint count = 0;
     macro_t *macros = get_shortcuts(&count);
-    if (macros && d->index >= 0 && d->index < count && macros[d->index].action) {
-        gchar *formatted = format_action_with_args(macros[d->index].action,
-                                                   (const gchar **)d->args,
-                                                   d->n_args);
-        GByteArray *buf = parse_macro_string(formatted);
-        g_free(formatted);
-        if (buf) {
-            send_serial((gchar *)buf->data, buf->len);
-            g_byte_array_free(buf, TRUE);
-        }
+    int idx = d->index;
+
+    if (idx < 0 && d->label && macros) {
+        for (int i = 0; i < count; i++)
+            if (macros[i].label && strcmp(macros[i].label, d->label) == 0) { idx = i; break; }
     }
-    g_strfreev(d->args);
-    g_free(d);
+    d->found = (macros != NULL && idx >= 0 && idx < count && macros[idx].action != NULL);
+    if (!d->found)
+        return G_SOURCE_REMOVE;
+
+    gchar *formatted = format_action_with_args(macros[idx].action, (const gchar **)d->args, d->n_args);
+    GByteArray *buf = parse_macro_string(formatted);
+    g_free(formatted);
+    d->expected = (gint)buf->len;
+    d->written = buf->len > 0 ? send_serial((gchar *)buf->data, (gint)buf->len) : 0;
+    g_byte_array_free(buf, TRUE);
     return G_SOURCE_REMOVE;
 }
+
 
 /* ------------------------------------------------------------------ */
 /* Lua API: send_macro(index_or_label [, arg1, arg2, ...])           */
@@ -679,41 +825,29 @@ static gboolean send_macro_idle(gpointer user_data)
 
 static int l_send_macro(lua_State *L)
 {
-    gint count = 0;
-    macro_t *macros = get_shortcuts(&count);
-    int idx = -1;
+    MainMacroData d = { -1, NULL, 0, NULL, FALSE, 0, 0 };
 
-    if (lua_type(L, 1) == LUA_TNUMBER) {
-        idx = (int)lua_tointeger(L, 1);
-    } else {
-        const char *label = luaL_checkstring(L, 1);
-        if (macros) {
-            for (int i = 0; i < count; i++) {
-                if (macros[i].label && strcmp(macros[i].label, label) == 0) { idx = i; break; }
-            }
-        }
+    if (lua_type(L, 1) == LUA_TNUMBER)
+        d.index = (int)lua_tointeger(L, 1);
+    else
+        d.label = luaL_checkstring(L, 1);
+
+    d.n_args = lua_gettop(L) - 1;
+    d.args = g_new0(gchar *, d.n_args + 1);
+    for (int i = 0; i < d.n_args; i++) {
+        const char *s = lua_tostring(L, i + 2);
+        d.args[i] = g_strdup(s ? s : "");
     }
 
-    if (idx < 0 || idx >= count) {
+    run_on_main_sync(main_send_macro_cb, &d);
+    g_strfreev(d.args);
+
+    if (!d.found) {
         lua_pushboolean(L, 0);
         lua_pushstring(L, "macro not found");
         return 2;
     }
-
-    int n_lua_args = lua_gettop(L) - 1;
-    gchar **args = n_lua_args > 0 ? g_new0(gchar *, n_lua_args + 1) : NULL;
-    for (int i = 0; i < n_lua_args; i++) {
-        const char *s = lua_tostring(L, i + 2);
-        args[i] = g_strdup(s ? s : "");
-    }
-
-    SendMacroData *d = g_new(SendMacroData, 1);
-    d->index  = idx;
-    d->n_args = n_lua_args;
-    d->args   = args;
-    g_idle_add(send_macro_idle, d);
-
-    lua_pushboolean(L, 1);
+    lua_pushboolean(L, d.written == d.expected);
     return 1;
 }
 
@@ -755,6 +889,16 @@ static void register_api(lua_State *L)
 
 static gboolean done_idle_cb(gpointer user_data)
 {
+    GThread *finished;
+
+    /* Le thread Lua a fini : on le joint ici, sur le thread principal, jamais pendant qu'il peut attendre ce thread (M30). */
+    g_mutex_lock(&engine_mutex);
+    finished = lua_thread;
+    lua_thread = NULL;
+    g_mutex_unlock(&engine_mutex);
+    if (finished)
+        g_thread_join(finished);
+
     if (done_func)
         done_func(done_data);
     return G_SOURCE_REMOVE;
@@ -767,6 +911,11 @@ static gboolean done_idle_cb(gpointer user_data)
 static gpointer lua_thread_func(gpointer user_data)
 {
     char *script = user_data;
+
+    /* Nombres Lua avec un point quelle que soit la langue (M9) : locale « C » propre à ce thread. */
+    locale_t c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+    if (c_locale)
+        uselocale(c_locale);
 
     lua_State *L = luaL_newstate();
     luaL_openlibs(L);
@@ -790,23 +939,22 @@ static gpointer lua_thread_func(gpointer user_data)
     g_mutex_unlock(&ports[0].mutex);
 
     /* Close any Lua-opened ports */
-    for (int i = 1; i < MAX_LUA_PORTS; i++) {
-        if (ports[i].open) {
-            lua_pushinteger(L, i);
-            l_close(L);
-            lua_pop(L, 0);
-        }
-    }
+    for (int i = 1; i < MAX_LUA_PORTS; i++)
+        lua_port_close(i);
 
     lua_close(L);
     g_free(script);
 
     g_mutex_lock(&engine_mutex);
     L_global    = NULL;
-    lua_thread  = NULL;
     g_mutex_unlock(&engine_mutex);
 
-    g_idle_add(done_idle_cb, NULL);
+    if (c_locale) {
+        uselocale(LC_GLOBAL_LOCALE);
+        freelocale(c_locale);
+    }
+
+    g_idle_add_full(G_PRIORITY_DEFAULT, done_idle_cb, NULL, NULL);
     return NULL;
 }
 

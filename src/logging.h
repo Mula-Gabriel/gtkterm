@@ -19,5 +19,6 @@ void logging_pause_resume(void);
 void logging_stop(void);
 void logging_clear(void);
 void log_chars(const gchar *chars, guint size);
+void logging_set_suspended(gboolean suspended);
 
 #endif /* LOGGING_H_ */

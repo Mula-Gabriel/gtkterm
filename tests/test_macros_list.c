@@ -134,6 +134,18 @@ test_liberation_puis_reutilisation(void)
 	macro_lists_free();
 }
 
+static void
+test_init_idempotent(void)
+{
+	macro_lists_free();
+	macro_lists_init();
+	macro_list_add("L", "x", NULL);
+	macro_lists_init();
+	g_assert_cmpint(macro_list_count(), ==, 1);
+	g_assert_cmpint(macro_list_entry_count(0), ==, 1);
+	macro_lists_free();
+}
+
 int
 main(int argc, char **argv)
 {
@@ -148,5 +160,6 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_list/suppression-entree", test_suppression_entree);
 	g_test_add_func("/macros_list/indices-hors-bornes", test_indices_hors_bornes);
 	g_test_add_func("/macros_list/liberation-puis-reutilisation", test_liberation_puis_reutilisation);
+	g_test_add_func("/macros_list/init-idempotent", test_init_idempotent);
 	return g_test_run();
 }

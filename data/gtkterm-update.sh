@@ -94,5 +94,6 @@ if [ -n "$OLD_PID" ]; then
 	kill "$OLD_PID" 2>/dev/null || true
 	sleep 1
 fi
-gtkterm &
-disown
+# Relancer l'exécutable qui vient d'être installé (pas le premier gtkterm du PATH). nohup le protège du SIGHUP envoyé à la fermeture
+# du terminal de mise à jour ; « disown » n'existe pas sous /bin/sh (dash) (M8).
+nohup "$PREFIX/bin/gtkterm" >/dev/null 2>&1 &

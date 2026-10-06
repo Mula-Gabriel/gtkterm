@@ -18,6 +18,10 @@ core_sources = [
 	'macros_list.h',
 	'parsecfg.c',
 	'parsecfg.h',
+	'serial_termios.c',
+	'serial_termios.h',
+	'config_file.c',
+	'config_file.h',
 	'serial.h',
 ]
 

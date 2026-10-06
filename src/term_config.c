@@ -47,6 +47,7 @@
 
 #include "serial.h"
 #include "term_config.h"
+#include "config_file.h"
 #include "interface.h"
 #include "parsecfg.h"
 #include "macros.h"
@@ -162,7 +163,6 @@ static void load_config(GtkDialog *, gint, GtkTreeSelection *);
 static void delete_config(GtkDialog *, gint, GtkTreeSelection *);
 static void save_config(GtkDialog *, gint, GtkWidget *);
 static void really_save_config(GtkDialog *, gint, gpointer);
-static gint remove_section(const gchar *, gchar *);
 static gboolean cursor_block(GtkSwitch *, gboolean, gpointer);
 static void Selec_couleur(GdkRGBA *, gfloat, gfloat, gfloat, gfloat);
 void config_fg_color(GtkWidget *button, gpointer data);
@@ -173,20 +173,11 @@ extern GtkWidget *display;
 
 void config_file_init(void)
 {
-	/*
-	 * Old location of configuration file was $HOME/.gtktermrc
-	 * New location is $XDG_CONFIG_HOME/.gtktermrc
-	 *
-	 * If configuration file exists at new location, use that one.
-	 * Otherwise, if file exists at old location, move file to new location.
-	 */
-	GFile *config_file_old = g_file_new_build_filename(getenv("HOME"), CONFIGURATION_FILENAME, NULL);
-	config_file = g_file_new_build_filename(g_get_user_config_dir(), CONFIGURATION_FILENAME, NULL);
+	/* $XDG_CONFIG_HOME/.gtktermrc ; ancien $HOME/.gtktermrc migré (config_file_prepare). */
+	gchar *path = config_file_prepare(g_get_user_config_dir(), g_get_home_dir());
 
-	if (!g_file_query_exists(config_file, NULL) && g_file_query_exists(config_file_old, NULL))
-		g_file_move(config_file_old, config_file, G_FILE_COPY_NONE, NULL, NULL, NULL, NULL);
-
-	g_object_unref(config_file_old);
+	config_file = g_file_new_for_path(path);
+	g_free(path);
 }
 
 const gchar *get_config_file_path(void)
@@ -194,81 +185,25 @@ const gchar *get_config_file_path(void)
 	return g_file_get_path(config_file);
 }
 
-/* Section names written by GKeyFile (must be invisible to parsecfg). */
-static const gchar * const kf_groups[] = {
-	"window", "colors", "layout", "session", NULL
-};
-
-/* Remove kf_groups from .gtktermrc so parsecfg doesn't see them.
-   Returns the stripped content as an allocated string; caller must g_free. */
-static gchar *cfg_strip_kf_sections(void)
-{
-	const gchar *path = get_config_file_path();
-	gchar *contents = NULL;
-	gsize  len;
-
-	if (!g_file_get_contents(path, &contents, &len, NULL))
-		return g_strdup("");
-
-	GString *kept   = g_string_new(NULL);
-	GString *extras = g_string_new(NULL);
-	gchar  **lines  = g_strsplit(contents, "\n", -1);
-	g_free(contents);
-
-	gboolean in_protected = FALSE;
-	for (int i = 0; lines[i] != NULL; i++) {
-		const gchar *line = lines[i];
-		if (line[0] == '[') {
-			in_protected = FALSE;
-			for (int j = 0; kf_groups[j]; j++) {
-				gchar *tag = g_strdup_printf("[%s]", kf_groups[j]);
-				if (g_str_has_prefix(line, tag))
-					in_protected = TRUE;
-				g_free(tag);
-				if (in_protected) break;
-			}
-		}
-		GString *dest = in_protected ? extras : kept;
-		g_string_append(dest, line);
-		if (lines[i + 1] != NULL)
-			g_string_append_c(dest, '\n');
-	}
-	g_strfreev(lines);
-
-	g_file_set_contents(path, kept->str, kept->len, NULL);
-	g_string_free(kept, TRUE);
-	return g_string_free(extras, FALSE);
-}
-
-/* Append previously extracted kf_section content back to .gtktermrc. */
-static void cfg_restore_kf_sections(gchar *extras)
-{
-	if (!extras || !extras[0]) return;
-
-	const gchar *path = get_config_file_path();
-	gchar *existing = NULL;
-	gsize  elen;
-
-	if (!g_file_get_contents(path, &existing, &elen, NULL)) {
-		existing = g_strdup("");
-		elen = 0;
-	}
-	GString *out = g_string_new_len(existing, elen);
-	g_free(existing);
-
-	if (out->len && out->str[out->len - 1] != '\n')
-		g_string_append_c(out, '\n');
-	g_string_append(out, extras);
-
-	g_file_set_contents(path, out->str, out->len, NULL);
-	g_string_free(out, TRUE);
-}
-
 void save_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_paned, gboolean script_visible)
 {
 	const gchar *path = get_config_file_path();
 	GKeyFile *kf = g_key_file_new();
-	g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL); /* load existing, preserve other sections */
+	GError *lerr = NULL;
+
+	/* Charger l'existant pour préserver les autres sections. Fichier présent mais illisible (M12) : ne rien écrire,
+	   sinon il serait remplacé par la seule section [window] et les profils seraient perdus. */
+	if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &lerr))
+	{
+		if (!g_error_matches(lerr, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+		{
+			g_printerr("Cannot save window state: cannot read %s: %s\n", path, lerr->message);
+			g_error_free(lerr);
+			g_key_file_free(kf);
+			return;
+		}
+		g_clear_error(&lerr);
+	}
 
 	gint x, y, w, h;
 	gtk_window_get_position(GTK_WINDOW(window), &x, &y);
@@ -651,7 +586,8 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 	       	  *content_area, *serial_box, *tcp_frame,
 	          *TransportCombo;
 
-	static GtkWidget *Combos[13];
+	static GtkWidget *port_dialog = NULL;	/* dialogue ouvert, remis à NULL à sa destruction (pointeur faible) */
+	GtkWidget **Combos;
 	GtkAdjustment *adj;
 	gchar *string;
 	char *prev;
@@ -659,6 +595,13 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 	const struct device_path *device_paths;
 	GPtrArray *ports;
 	int speed_index;
+
+	/* Un seul dialogue Port à la fois (C12) : une seconde demande le ramène au premier plan au lieu d'en créer un autre */
+	if(port_dialog != NULL)
+	{
+		gtk_window_present(GTK_WINDOW(port_dialog));
+		return;
+	}
 
 	device_paths = get_device_paths();
 	ports = find_serial_ports(device_paths);
@@ -679,6 +622,15 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 	free_device_paths(device_paths);
 
 	Dialogue = gtk_dialog_new();
+	port_dialog = Dialogue;
+	g_object_add_weak_pointer(G_OBJECT(Dialogue), (gpointer *)&port_dialog);
+	gtk_window_set_modal(GTK_WINDOW(Dialogue), TRUE);
+	gtk_window_set_transient_for(GTK_WINDOW(Dialogue), GTK_WINDOW(Fenetre));
+
+	/* Widgets lus par Lis_Config : tableau propre à ce dialogue et libéré avec lui, il ne peut plus être relu après sa destruction */
+	Combos = g_new0(GtkWidget *, 13);
+	g_object_set_data_full(G_OBJECT(Dialogue), "combos", Combos, g_free);
+
 	content_area = gtk_dialog_get_content_area(GTK_DIALOG(Dialogue));
 
 	gtk_window_set_title(GTK_WINDOW(Dialogue), _("Configuration"));
@@ -948,7 +900,7 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 
 	if(config.car != -1)
 	{
-		gchar car_str[2] = {config.car, '\0'};
+		gchar car_str[2] = {(gchar)config.car, '\0'};
 		gtk_entry_set_text(GTK_ENTRY(Entry), car_str);
 		gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(CheckBouton), TRUE);
 	}
@@ -1064,7 +1016,7 @@ gint Lis_Config(GtkWidget *bouton, GtkWidget **Combos)
 
 		if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(Combos[7])))
 		{
-			config.car = *gtk_entry_get_text(GTK_ENTRY(Entry));
+			config.car = (guchar)*gtk_entry_get_text(GTK_ENTRY(Entry));
 			config.delai = 0;
 		}
 		else
@@ -1130,27 +1082,29 @@ void select_config_callback(GtkAction *action, gpointer data)
 
 void save_config_silent(void)
 {
-	int max, cfg_num, i;
+	int max, cfg_num;
 	const gchar *name = active_config_name ? active_config_name : "default";
 	const gchar *path = get_config_file_path();
 
-	gchar *kf_backup = cfg_strip_kf_sections();
+	/* Nom réservé (window, colors, layout, session) : jamais un profil, l'enregistrement le refuse (C13). */
+	if(config_file_is_reserved_name(name))
+	{
+		show_message(_("This configuration name is reserved."), MSG_ERR);
+		return;
+	}
+
+	gchar *kf_backup = config_file_strip_reserved_groups(path);
 
 	max = cfgParse(path, cfg, CFG_INI);
 	if(max == -1)
 	{
-		cfg_restore_kf_sections(kf_backup);
+		config_file_restore_reserved_groups(path, kf_backup);
 		g_free(kf_backup);
 		show_message(_("Cannot save configuration file!\nConfig file may contain invalid parameter.\n"), MSG_ERR);
 		return;
 	}
 
-	cfg_num = -1;
-	for(i = 0; i < max; i++)
-	{
-		if(!strcmp(name, cfgSectionNumberToName(i)))
-			cfg_num = i;
-	}
+	cfg_num = config_file_find_profile(name, max);
 
 	if(cfg_num == -1)
 	{
@@ -1159,16 +1113,16 @@ void save_config_silent(void)
 	}
 	else
 	{
-		if(remove_section(path, (char *)name) == -1)
+		if(config_file_remove_section(path, name) == -1)
 		{
-			cfg_restore_kf_sections(kf_backup);
+			config_file_restore_reserved_groups(path, kf_backup);
 			g_free(kf_backup);
 			show_message(_("Cannot overwrite section!"), MSG_ERR);
 			return;
 		}
 		if(max == cfgParse(path, cfg, CFG_INI))
 		{
-			cfg_restore_kf_sections(kf_backup);
+			config_file_restore_reserved_groups(path, kf_backup);
 			g_free(kf_backup);
 			show_message(_("Cannot read configuration file!"), MSG_ERR);
 			return;
@@ -1179,7 +1133,7 @@ void save_config_silent(void)
 
 	Copy_configuration(cfg_num);
 	cfgDump(path, cfg, CFG_INI, max);
-	cfg_restore_kf_sections(kf_backup);
+	config_file_restore_reserved_groups(path, kf_backup);
 	g_free(kf_backup);
 }
 
@@ -1275,7 +1229,7 @@ void Select_config(gchar *title, void *callback)
 
 	/* Parse the config file */
 
-	max = cfgParse(g_file_get_path(config_file), cfg, CFG_INI);
+	max = config_file_parse_profiles(get_config_file_path(), cfg);
 
 	if(max == -1)
 	{
@@ -1387,30 +1341,26 @@ void Save_config_file(void)
 
 void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 {
-	int max, cfg_num, i;
+	int max, cfg_num;
 
 	cfg_num = -1;
 
 	if(id == GTK_RESPONSE_ACCEPT)
 	{
 		const gchar *path = get_config_file_path();
-		gchar *kf_backup = cfg_strip_kf_sections();
+		gchar *kf_backup = config_file_strip_reserved_groups(path);
 
 		max = cfgParse(path, cfg, CFG_INI);
 
 		if(max == -1)
 		{
-			cfg_restore_kf_sections(kf_backup);
+			config_file_restore_reserved_groups(path, kf_backup);
 			g_free(kf_backup);
 			show_message(_("Cannot save configuration file!\nConfig file may contain invalid parameter.\n"), MSG_ERR);
 			return;
 		}
 
-		for(i = 0; i < max; i++)
-		{
-			if(!strcmp((char *)data, cfgSectionNumberToName(i)))
-				cfg_num = i;
-		}
+		cfg_num = config_file_find_profile((const gchar *)data, max);
 
 		/* not overwriting */
 		if(cfg_num == -1)
@@ -1420,16 +1370,16 @@ void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 		}
 		else
 		{
-			if(remove_section(path, (char *)data) == -1)
+			if(config_file_remove_section(path, (const gchar *)data) == -1)
 			{
-				cfg_restore_kf_sections(kf_backup);
+				config_file_restore_reserved_groups(path, kf_backup);
 				g_free(kf_backup);
 				show_message(_("Cannot overwrite section!"), MSG_ERR);
 				return;
 			}
 			if(max == cfgParse(path, cfg, CFG_INI))
 			{
-				cfg_restore_kf_sections(kf_backup);
+				config_file_restore_reserved_groups(path, kf_backup);
 				g_free(kf_backup);
 				show_message(_("Cannot read configuration file!"), MSG_ERR);
 				return;
@@ -1440,7 +1390,7 @@ void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 
 		Copy_configuration(cfg_num);
 		cfgDump(path, cfg, CFG_INI, max);
-		cfg_restore_kf_sections(kf_backup);
+		config_file_restore_reserved_groups(path, kf_backup);
 		g_free(kf_backup);
 	}
 	else
@@ -1449,12 +1399,12 @@ void really_save_config(GtkDialog *Fenetre, gint id, gpointer data)
 
 void save_config(GtkDialog *Fenetre, gint id, GtkWidget *edit)
 {
-	int max, i;
+	int max;
 	const gchar *config_name;
 
 	if(id == GTK_RESPONSE_ACCEPT)
 	{
-		max = cfgParse(g_file_get_path(config_file), cfg, CFG_INI);
+		max = config_file_parse_profiles(get_config_file_path(), cfg);
 
 		if(max == -1)
 		{
@@ -1464,34 +1414,37 @@ void save_config(GtkDialog *Fenetre, gint id, GtkWidget *edit)
 
 		config_name = gtk_entry_get_text(GTK_ENTRY(edit));
 
-		for(i = 0; i < max; i++)
+		/* window, colors, layout, session : groupes GKeyFile du même fichier, jamais des profils (C13). */
+		if(config_file_is_reserved_name(config_name))
 		{
-			if(!strcmp(config_name, cfgSectionNumberToName(i)))
-			{
-				GtkWidget *message_dialog;
-				message_dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(Fenetre),
-				                 GTK_DIALOG_DESTROY_WITH_PARENT,
-				                 GTK_MESSAGE_QUESTION,
-				                 GTK_BUTTONS_NONE,
-				                 _("<b>Section [%s] already exists.</b>\n\nDo you want to overwrite it ?"),
-				                 config_name);
-
-				gtk_dialog_add_buttons(GTK_DIALOG(message_dialog),
-				                       "_Cancel",
-				                       GTK_RESPONSE_NONE,
-				                       "_Yes",
-				                       GTK_RESPONSE_ACCEPT,
-				                       NULL);
-
-				if (gtk_dialog_run(GTK_DIALOG(message_dialog)) == GTK_RESPONSE_ACCEPT)
-					really_save_config(Fenetre, GTK_RESPONSE_ACCEPT, (gpointer)config_name);
-
-				gtk_widget_destroy(message_dialog);
-
-				i = max + 1;
-			}
+			show_message((gchar *)_("This configuration name is reserved."), MSG_ERR);
+			return;
 		}
-		if(i == max) /* Section does not exist */
+
+		/* Comparaison sans casse, comme parsecfg : « Default » propose d'écraser « default » (C6). */
+		if(config_file_find_profile(config_name, max) >= 0)
+		{
+			GtkWidget *message_dialog;
+			message_dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(Fenetre),
+			                 GTK_DIALOG_DESTROY_WITH_PARENT,
+			                 GTK_MESSAGE_QUESTION,
+			                 GTK_BUTTONS_NONE,
+			                 _("<b>Section [%s] already exists.</b>\n\nDo you want to overwrite it ?"),
+			                 config_name);
+
+			gtk_dialog_add_buttons(GTK_DIALOG(message_dialog),
+			                       "_Cancel",
+			                       GTK_RESPONSE_NONE,
+			                       "_Yes",
+			                       GTK_RESPONSE_ACCEPT,
+			                       NULL);
+
+			if (gtk_dialog_run(GTK_DIALOG(message_dialog)) == GTK_RESPONSE_ACCEPT)
+				really_save_config(Fenetre, GTK_RESPONSE_ACCEPT, (gpointer)config_name);
+
+			gtk_widget_destroy(message_dialog);
+		}
+		else
 			really_save_config(Fenetre, GTK_RESPONSE_ACCEPT, (gpointer)config_name);
 	}
 }
@@ -1532,7 +1485,7 @@ void delete_config(GtkDialog *Fenetre, gint id, GtkTreeSelection *Selection_List
 		if(gtk_tree_selection_get_selected(Selection_Liste, &Modele, &iter))
 		{
 			gtk_tree_model_get(GTK_TREE_MODEL(Modele), &iter, 0, &txt, -1);
-			if(remove_section(g_file_get_path(config_file), txt) == -1)
+			if(config_file_remove_section(get_config_file_path(), txt) == -1)
 				show_message(_("Cannot delete section!"), MSG_ERR);
 		}
 	}
@@ -1541,11 +1494,9 @@ void delete_config(GtkDialog *Fenetre, gint id, GtkTreeSelection *Selection_List
 gint Load_configuration_from_file(gchar *config_name)
 {
 	int max, i;
-	g_free(active_config_name);
-	active_config_name = g_strdup(config_name);
 	gchar *string = NULL;
 
-	max = cfgParse(g_file_get_path(config_file), cfg, CFG_INI);
+	max = config_file_parse_profiles(get_config_file_path(), cfg);
 
 	if(max == -1)
 	{
@@ -1557,9 +1508,13 @@ gint Load_configuration_from_file(gchar *config_name)
 	{
 		for(i = 0; i < max; i++)
 		{
-			if(!strcmp(config_name, cfgSectionNumberToName(i)))
+			if(g_ascii_strcasecmp(config_name, cfgSectionNumberToName(i)) == 0)
 			{
 				Hard_default_configuration();
+
+				/* Le nom actif n'est retenu qu'une fois le profil trouvé : un nom réservé ou inconnu ne doit pas créer de section à l'enregistrement (C13). */
+				g_free(active_config_name);
+				active_config_name = g_strdup(config_name);
 
 				if(port[i] != NULL)
 					g_strlcpy(config.port, port[i], sizeof(config.port));
@@ -1592,10 +1547,7 @@ gint Load_configuration_from_file(gchar *config_name)
 
 				config.delai = wait_delay[i];
 
-				if(wait_char[i] != 0)
-					config.car = (signed char)wait_char[i];
-				else
-					config.car = -1;
+				config.car = config_wait_char_from_file(wait_char[i]);
 
 				config.rs485_rts_time_before_transmit = rts_time_before_tx[i];
 				config.rs485_rts_time_after_transmit = rts_time_after_tx[i];
@@ -1851,6 +1803,7 @@ void Hard_default_configuration(void)
 void Copy_configuration(int pos)
 {
 	gchar *string = NULL;
+	gchar nombre[G_ASCII_DTOSTR_BUF_SIZE];	/* Flottants toujours écrits avec un point : la locale de l'utilisateur est active (M9). */
 
 	string = g_strdup(config.port);
 	cfgStoreValue(cfg, "port", string, CFG_INI, pos);
@@ -1991,31 +1944,15 @@ void Copy_configuration(int pos)
 	cfgStoreValue(cfg, "term_visual_bell", string, CFG_INI, pos);
 	g_free(string);
 
-	string = g_strdup_printf("%f", term_conf.foreground_color.red);
-	cfgStoreValue(cfg, "term_foreground_red", string, CFG_INI, pos);
-	g_free(string);
-	string = g_strdup_printf("%f", term_conf.foreground_color.green);
-	cfgStoreValue(cfg, "term_foreground_green", string, CFG_INI, pos);
-	g_free(string);
-	string = g_strdup_printf("%f", term_conf.foreground_color.blue);
-	cfgStoreValue(cfg, "term_foreground_blue", string, CFG_INI, pos);
-	g_free(string);
-	string = g_strdup_printf("%f", term_conf.foreground_color.alpha);
-	cfgStoreValue(cfg, "term_foreground_alpha", string, CFG_INI, pos);
-	g_free(string);
+	cfgStoreValue(cfg, "term_foreground_red", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.foreground_color.red), CFG_INI, pos);
+	cfgStoreValue(cfg, "term_foreground_green", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.foreground_color.green), CFG_INI, pos);
+	cfgStoreValue(cfg, "term_foreground_blue", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.foreground_color.blue), CFG_INI, pos);
+	cfgStoreValue(cfg, "term_foreground_alpha", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.foreground_color.alpha), CFG_INI, pos);
 
-	string = g_strdup_printf("%f", term_conf.background_color.red);
-	cfgStoreValue(cfg, "term_background_red", string, CFG_INI, pos);
-	g_free(string);
-	string = g_strdup_printf("%f", term_conf.background_color.green);
-	cfgStoreValue(cfg, "term_background_green", string, CFG_INI, pos);
-	g_free(string);
-	string = g_strdup_printf("%f", term_conf.background_color.blue);
-	cfgStoreValue(cfg, "term_background_blue", string, CFG_INI, pos);
-	g_free(string);
-	string = g_strdup_printf("%f", term_conf.background_color.alpha);
-	cfgStoreValue(cfg, "term_background_alpha", string, CFG_INI, pos);
-	g_free(string);
+	cfgStoreValue(cfg, "term_background_red", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.background_color.red), CFG_INI, pos);
+	cfgStoreValue(cfg, "term_background_green", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.background_color.green), CFG_INI, pos);
+	cfgStoreValue(cfg, "term_background_blue", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.background_color.blue), CFG_INI, pos);
+	cfgStoreValue(cfg, "term_background_alpha", g_ascii_formatd(nombre, sizeof(nombre), "%f", term_conf.background_color.alpha), CFG_INI, pos);
 
 	string = g_strdup_printf("%d", config.transport_type);
 	cfgStoreValue(cfg, "transport_type", string, CFG_INI, pos);
@@ -2042,92 +1979,6 @@ void Copy_configuration(int pos)
 		cfgStoreValue(cfg, "macros_file", string, CFG_INI, pos);
 		g_free(string);
 	}
-}
-
-
-gint remove_section(const gchar *cfg_file, gchar *section)
-{
-	FILE *f = NULL;
-	char *buffer = NULL;
-	char *buf;
-	long size;
-	gchar *to_search;
-	long i, j, length, sect;
-
-	f = fopen(cfg_file, "r");
-	if(f == NULL)
-	{
-		perror(cfg_file);
-		return -1;
-	}
-
-	fseek(f, 0L, SEEK_END);
-	size = ftell(f);
-	rewind(f);
-
-	buffer = g_malloc(size);
-	if(buffer == NULL)
-	{
-		perror("malloc");
-		return -1;
-	}
-
-	if(fread(buffer, 1, size, f) != size)
-	{
-		perror(cfg_file);
-		fclose(f);
-		return -1;
-	}
-
-	to_search = g_strdup_printf("[%s]", section);
-	length = strlen(to_search);
-
-	/* Search section */
-	for(i = 0; i < size - length; i++)
-	{
-		for(j = 0; j < length; j++)
-		{
-			if(to_search[j] != buffer[i + j])
-				break;
-		}
-		if(j == length)
-			break;
-	}
-
-	if(i == size - length)
-	{
-		i18n_printf(_("Cannot find section %s\n"), to_search);
-		return -1;
-	}
-
-	sect = i;
-
-	/* Search for next section */
-	for(i = sect + length; i < size; i++)
-	{
-		if(buffer[i] == '[')
-			break;
-	}
-
-	f = fopen(cfg_file, "w");
-	if(f == NULL)
-	{
-		perror(cfg_file);
-		return -1;
-	}
-
-	fwrite(buffer, 1, sect, f);
-	if(i < size)
-	{
-		buf = buffer + i;
-		fwrite(buf, 1, size - i, f);
-	}
-	fclose(f);
-
-	g_free(to_search);
-	g_free(buffer);
-
-	return 0;
 }
 
 
@@ -2198,48 +2049,18 @@ void Selec_couleur(GdkRGBA *color, gfloat R, gfloat G, gfloat B, gfloat A)
 
 void config_fg_color(GtkWidget *button, gpointer data)
 {
-	gchar *string;
-
 	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &term_conf.foreground_color);
 
 	vte_terminal_set_color_foreground (VTE_TERMINAL(display), &term_conf.foreground_color);
 	gtk_widget_queue_draw (display);
-
-	string = g_strdup_printf ("%f", term_conf.foreground_color.red);
-	cfgStoreValue (cfg, "term_foreground_red", string, CFG_INI, 0);
-	g_free (string);
-	string = g_strdup_printf ("%f", term_conf.foreground_color.green);
-	cfgStoreValue (cfg, "term_foreground_green", string, CFG_INI, 0);
-	g_free (string);
-	string = g_strdup_printf ("%f", term_conf.foreground_color.blue);
-	cfgStoreValue (cfg, "term_foreground_blue", string, CFG_INI, 0);
-	g_free (string);
-	string = g_strdup_printf ("%f", term_conf.foreground_color.alpha);
-	cfgStoreValue (cfg, "term_foreground_alpha", string, CFG_INI, 0);
-	g_free (string);
 }
 
 void config_bg_color(GtkWidget *button, gpointer data)
 {
-	gchar *string;
-
 	gtk_color_chooser_get_rgba(GTK_COLOR_CHOOSER(button), &term_conf.background_color);
 
 	vte_terminal_set_color_background (VTE_TERMINAL(display), &term_conf.background_color);
 	gtk_widget_queue_draw (display);
-
-	string = g_strdup_printf ("%f", term_conf.background_color.red);
-	cfgStoreValue (cfg, "term_background_red", string, CFG_INI, 0);
-	g_free (string);
-	string = g_strdup_printf ("%f", term_conf.background_color.green);
-	cfgStoreValue (cfg, "term_background_green", string, CFG_INI, 0);
-	g_free (string);
-	string = g_strdup_printf ("%f", term_conf.background_color.blue);
-	cfgStoreValue (cfg, "term_background_blue", string, CFG_INI, 0);
-	g_free (string);
-	string = g_strdup_printf ("%f", term_conf.background_color.alpha);
-	cfgStoreValue (cfg, "term_background_alpha", string, CFG_INI, 0);
-	g_free (string);
 }
 
 void scrollback_set(GtkAdjustment *Adjustment, gpointer data)

@@ -5,7 +5,7 @@
 -- ou qu'un équipement renvoyant l'écho soit connecté.
 
 local N          = 50        -- nombre de cycles
-local TIMEOUT_MS = 10      -- timeout echo par cycle
+local TIMEOUT_MS = 500       -- timeout écho par cycle (10 ms ne laissait pas le temps à l'écho)
 local DELAY_MS   = 100       -- pause entre cycles
 
 local ok_count  = 0

@@ -38,6 +38,7 @@ static gboolean	  Logging;
 static gchar     *LoggingFileName;
 static FILE      *LoggingFile;
 static gchar     *logfile_default = NULL;
+static gboolean   LoggingSuspended = FALSE;	/* vrai pendant le rejeu du tampon : ces octets sont déjà journalisés */
 
 static gint OpenLogFile(gchar *filename)
 {
@@ -62,7 +63,8 @@ static gint OpenLogFile(gchar *filename)
 
 	LoggingFileName = filename;
 
-	LoggingFile = fopen(LoggingFileName, "a");
+	/* Le sélecteur a fait confirmer le remplacement d'un fichier existant (set_do_overwrite_confirmation) : écraser, pas ajouter (M39) */
+	LoggingFile = fopen(LoggingFileName, "w");
 	if(LoggingFile == NULL)
 	{
 		str = g_strdup_printf(_("Cannot open file %s: %s\n"), LoggingFileName, strerror(errno));
@@ -127,6 +129,9 @@ void logging_clear(void)
 		g_free(LoggingFileName);
 		LoggingFileName = NULL;
 		Logging = FALSE;
+		/* Plus de journal ouvert : menus remis dans leur état initial, sinon on ne pourrait plus en relancer un (M39) */
+		toggle_logging_sensitivity(Logging);
+		toggle_logging_pause_resume(Logging);
 	}
 }
 
@@ -164,13 +169,19 @@ void logging_stop(void)
 	toggle_logging_pause_resume(Logging);
 }
 
+/* Suspend (TRUE) ou reprend (FALSE) la journalisation sans fermer le journal (M31) */
+void logging_set_suspended(gboolean suspended)
+{
+	LoggingSuspended = suspended;
+}
+
 void log_chars(const gchar *chars, guint size)
 {
 	guint writeAttempts = 0;
 	guint bytesWritten = 0;
 
 	/* if we are not logging exit */
-	if(LoggingFile == NULL || Logging == FALSE)
+	if(LoggingFile == NULL || Logging == FALSE || LoggingSuspended)
 	{
 		return;
 	}

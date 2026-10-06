@@ -72,8 +72,8 @@ void search_callback(GtkWidget *widget, gpointer data)
 													   flags,
 													   GTK_MESSAGE_ERROR,
 													   GTK_BUTTONS_OK,
-													   error->message,
-													   NULL);
+													   "%s",
+													   error->message);
 			gtk_dialog_run(GTK_DIALOG(dialog));
 			gtk_widget_destroy(dialog);
 			g_error_free(error);

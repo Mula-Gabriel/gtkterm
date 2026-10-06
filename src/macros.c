@@ -66,12 +66,23 @@ get_shortcuts (gint *size)
   return macros;
 }
 
+/* Nom affiché d'une macro : son libellé, à défaut son raccourci (C8 : le libellé peut être absent). */
+static const gchar *
+macro_display_name (gint macro_index)
+{
+  const gchar *label = macros[macro_index].label;
+
+  if (label != NULL && label[0] != '\0')
+    return label;
+  return macros[macro_index].shortcut != NULL ? macros[macro_index].shortcut : "";
+}
+
 void
 send_macro_with_args (gint macro_index, const gchar **args, gint n_args)
 {
   gint nb_macros = 0;
   get_shortcuts (&nb_macros);
-  if (macro_index >= nb_macros || macros[macro_index].action == NULL)
+  if (macro_index < 0 || macro_index >= nb_macros || macros[macro_index].action == NULL)
     return;
 
   gchar *formatted = format_action_with_args (macros[macro_index].action, args, n_args);
@@ -83,7 +94,7 @@ send_macro_with_args (gint macro_index, const gchar **args, gint n_args)
   g_byte_array_free (buffer, TRUE);
 
   gchar *message = g_strdup_printf (_ ("Macro \"%s\" sent!"),
-                                    strlen (macros[macro_index].label) > 0 ? macros[macro_index].label : macros[macro_index].shortcut);
+                                    macro_display_name (macro_index));
   Put_temp_message (message, 800);
   g_free (message);
 }
@@ -95,37 +106,30 @@ send_macro_with_arg (gint macro_index, const gchar *arg_str)
   send_macro_with_args (macro_index, args, 1);
 }
 
-/* Fonction principale de callback pour l'exécution d'une macro */
-void
+/* Fonction principale de callback pour l'exécution d'une macro (raccourci clavier, polling sans arguments).
+   Retourne TRUE quand la macro a été traitée : GTK ne propage alors pas la touche au terminal (M43).
+   Indice inconnu ou macro sans action : FALSE, la touche suit son cours. */
+gboolean
 shortcut_callback (gpointer number)
 {
   gint macro_index = GPOINTER_TO_INT (number);
+  gint nb_macros = 0;
+  gchar **args;
 
-  if (macros == NULL || macros[macro_index].action == NULL)
-    return;
+  get_shortcuts (&nb_macros);
+  if (macro_index < 0 || macro_index >= nb_macros || macros[macro_index].action == NULL)
+    return FALSE;
 
-  gchar *macro_string = macros[macro_index].action;
-
-  /* Parser et construire le buffer */
-  GByteArray *buffer = parse_macro_string (macro_string);
-
-  /* Envoyer tout le buffer d'un seul coup */
-  if (buffer->len > 0)
-    send_serial ((gchar *) buffer->data, buffer->len);
-
-  /* Libérer le buffer */
-  g_byte_array_free (buffer, TRUE);
-
-  /* Afficher le message de confirmation */
-  gchar *message = g_strdup_printf (_ ("Macro \"%s\" sent!"), strlen (macros[macro_index].label) > 0 ? macros[macro_index].label : macros[macro_index].shortcut);
-  Put_temp_message (message, 800);
-  g_free (message);
+  /* Même chemin que le panneau : expansion avec les arguments enregistrés de la macro (M15). */
+  args = macros[macro_index].args;
+  send_macro_with_args (macro_index, (const gchar **) args, args != NULL ? (gint) g_strv_length (args) : 0);
+  return TRUE;
 }
 
 void
 create_shortcuts (macro_t *macro, gint size)
 {
-  macros = g_malloc ((size + 1) * sizeof (macro_t));
+  macros = g_malloc0 ((size + 1) * sizeof (macro_t));
   if (macros != NULL)
     {
       memcpy (macros, macro, size * sizeof (macro_t));
@@ -141,42 +145,48 @@ create_shortcuts (macro_t *macro, gint size)
 void
 add_shortcuts (void)
 {
-  long i = 0;
+  gint nb_macros = 0;
   guint acc_key;
   GdkModifierType mod;
 
   if (macros == NULL)
     return;
 
-  while (macros[i].shortcut != NULL)
+  get_shortcuts (&nb_macros);
+  for (gint i = 0; i < nb_macros; i++)
     {
-      macros[i].closure = g_cclosure_new_swap (G_CALLBACK (shortcut_callback), (gpointer) i, NULL);
+      /* add_shortcuts est appelé à plusieurs endroits : une seule connexion par macro (M17). */
+      if (macros[i].closure != NULL)
+        {
+          gtk_accel_group_disconnect (shortcuts, macros[i].closure);
+          macros[i].closure = NULL;
+        }
+      if (macros[i].shortcut == NULL)
+        continue;
       gtk_accelerator_parse (macros[i].shortcut, &acc_key, &mod);
-      if (acc_key != 0)
-        gtk_accel_group_connect (shortcuts, acc_key, mod, GTK_ACCEL_MASK, macros[i].closure);
-      i++;
+      if (acc_key == 0)
+        continue;
+      macros[i].closure = g_cclosure_new_swap (G_CALLBACK (shortcut_callback), GINT_TO_POINTER (i), NULL);
+      gtk_accel_group_connect (shortcuts, acc_key, mod, GTK_ACCEL_MASK, macros[i].closure);
     }
 }
 
 static void
 macros_destroy (void)
 {
-  gint i = 0;
+  gint nb_macros = 0;
 
   if (macros == NULL)
     return;
 
-  while (macros[i].shortcut != NULL)
+  get_shortcuts (&nb_macros);
+  for (gint i = 0; i < nb_macros; i++)
     {
       g_free (macros[i].shortcut);
       g_free (macros[i].action);
       g_free (macros[i].label);
       g_free (macros[i].tab);
       g_strfreev (macros[i].args);
-      /*
-      g_closure_unref(macros[i].closure);
-      */
-      i++;
     }
   g_free (macros);
   macros = NULL;
@@ -185,16 +195,18 @@ macros_destroy (void)
 void
 remove_shortcuts (void)
 {
-  gint i = 0;
+  gint nb_macros = 0;
 
   if (macros == NULL)
     return;
 
-  while (macros[i].shortcut != NULL)
-    {
-      gtk_accel_group_disconnect (shortcuts, macros[i].closure);
-      i++;
-    }
+  get_shortcuts (&nb_macros);
+  for (gint i = 0; i < nb_macros; i++)
+    if (macros[i].closure != NULL)
+      {
+        gtk_accel_group_disconnect (shortcuts, macros[i].closure);
+        macros[i].closure = NULL;
+      }
 
   macros_destroy ();
 }
@@ -595,6 +607,10 @@ Save_shortcuts (GtkWidget *button, gpointer pointer)
 
   remove_shortcuts ();
 
+  /* Les listes d'abord : « %#Nom » n'est une liste que si elle existe, ce qui conditionne le décompte des arguments restaurés ci-dessous (F1). */
+  if (lists_model)
+    save_lists_from_model (lists_model);
+
   if (gtk_tree_model_get_iter_first (model, &iter))
     {
       do
@@ -616,6 +632,14 @@ Save_shortcuts (GtkWidget *button, gpointer pointer)
                                   COLUMN_ACTION, &(macros[i].action),
                                   COLUMN_TAB, &(macros[i].tab),
                                   -1);
+
+              /* Une ligne sans libellé ni raccourci ne doit pas ressembler à la sentinelle de fin du tableau (M42). */
+              if (macros[i].label == NULL)
+                macros[i].label = g_strdup ("");
+              if (macros[i].shortcut == NULL)
+                macros[i].shortcut = g_strdup ("None");
+              if (macros[i].action == NULL)
+                macros[i].action = g_strdup ("");
 
               /* Restaurer les args si le nombre de spécificateurs est identique */
               if (i < old_count && saved_args[i] != NULL &&
@@ -660,10 +684,6 @@ Save_shortcuts (GtkWidget *button, gpointer pointer)
   g_free (saved_polling_period);
 
   add_shortcuts ();
-
-  /* Sauvegarder les listes depuis le modèle */
-  if (lists_model)
-    save_lists_from_model (lists_model);
 
   rebuild_macro_buttons ();
   macros_file_save (NULL);
@@ -783,7 +803,7 @@ Help_screen (GtkWidget *button, gpointer pointer)
                                    GTK_DIALOG_DESTROY_WITH_PARENT,
                                    GTK_MESSAGE_INFO,
                                    GTK_BUTTONS_CLOSE,
-                                   _ ("The \"action\" field of a macro is the data to be sent on the port. Text can be entered, but also special chars, like \\n, \\t, \\r, etc. You can also enter hexadecimal data preceded by a '\\'. The hexadecimal data should not begin with a letter (eg. use \\0FF and not \\FF)\nExamples:\n\t\"Hello\\n\" sends \"Hello\" followed by a Line Feed\n\t\"Hello\\0A\" does the same thing but the LF is entered in hexadecimal"));
+                                   _ ("The \"action\" field of a macro is the data to be sent on the port. Text can be entered, but also special chars: \\r (carriage return), \\n (line feed), \\t (tab) and \\\\ (a backslash). You can also enter a byte in hexadecimal with \\xHH (two hexadecimal digits, eg. \\xFF)\nExamples:\n\t\"Hello\\n\" sends \"Hello\" followed by a Line Feed\n\t\"Hello\\x0A\" does the same thing but the LF is entered in hexadecimal"));
 
   gtk_dialog_run (GTK_DIALOG (Dialog));
   gtk_widget_destroy (Dialog);
@@ -1301,8 +1321,51 @@ macros_file_load (const gchar *path)
   macros_file_path = g_strdup (load_path);
   g_free (load_path);
 
+  /* Charger les listes d'abord : « %#Nom » n'est une liste que si elle existe, ce qui conditionne le décompte des arguments des macros (F1). */
+  macro_lists_free ();
+  macro_lists_init ();
+
+  gchar **list_keys = g_key_file_get_keys (kf, "lists", NULL, NULL);
+  if (list_keys)
+    {
+      for (gint i = 0; list_keys[i] != NULL; i++)
+        {
+          gchar *val = g_key_file_get_string (kf, "lists", list_keys[i], NULL);
+          if (val)
+            {
+              gchar *colon = strchr (val, ':');
+              if (colon)
+                {
+                  gchar *list_name = g_strndup (val, colon - val);
+                  gchar *entries_str = colon + 1;
+                  gchar **entries = g_strsplit (entries_str, "|", -1);
+                  for (gint ei = 0; entries[ei] != NULL; ei++)
+                    {
+                      gchar *eq = strchr (entries[ei], '=');
+                      if (eq)
+                        {
+                          gchar *display = g_strndup (entries[ei], eq - entries[ei]);
+                          gchar *value = g_strdup (eq + 1);
+                          macro_list_add (list_name, display, value);
+                          g_free (display);
+                          g_free (value);
+                        }
+                      else
+                        {
+                          macro_list_add (list_name, entries[ei], entries[ei]);
+                        }
+                    }
+                  g_strfreev (entries);
+                  g_free (list_name);
+                }
+              g_free (val);
+            }
+        }
+      g_strfreev (list_keys);
+    }
+
   /* Charger les macros */
-  gchar **macro_keys = g_key_file_get_keys (kf, "macros", NULL, &error);
+  gchar **macro_keys = g_key_file_get_keys (kf, "macros", NULL, NULL);
   if (macro_keys)
     {
       gint count = g_strv_length (macro_keys);
@@ -1422,49 +1485,7 @@ macros_file_load (const gchar *path)
       create_shortcuts (new_macros, count);
 
       g_free (new_macros);
-    }
-
-  /* Charger les listes */
-  macro_lists_free ();
-  macro_lists_init ();
-
-  gchar **list_keys = g_key_file_get_keys (kf, "lists", NULL, &error);
-  if (list_keys)
-    {
-      for (gint i = 0; list_keys[i] != NULL; i++)
-        {
-          gchar *val = g_key_file_get_string (kf, "lists", list_keys[i], NULL);
-          if (val)
-            {
-              gchar *colon = strchr (val, ':');
-              if (colon)
-                {
-                  gchar *list_name = g_strndup (val, colon - val);
-                  gchar *entries_str = colon + 1;
-                  gchar **entries = g_strsplit (entries_str, "|", -1);
-                  for (gint ei = 0; entries[ei] != NULL; ei++)
-                    {
-                      gchar *eq = strchr (entries[ei], '=');
-                      if (eq)
-                        {
-                          gchar *display = g_strndup (entries[ei], eq - entries[ei]);
-                          gchar *value = g_strdup (eq + 1);
-                          macro_list_add (list_name, display, value);
-                          g_free (display);
-                          g_free (value);
-                        }
-                      else
-                        {
-                          macro_list_add (list_name, entries[ei], entries[ei]);
-                        }
-                    }
-                  g_strfreev (entries);
-                  g_free (list_name);
-                }
-              g_free (val);
-            }
-        }
-      g_strfreev (list_keys);
+      g_strfreev (macro_keys);
     }
 
   g_key_file_free (kf);

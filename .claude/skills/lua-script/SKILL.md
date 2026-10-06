@@ -21,20 +21,20 @@ Lua 5.4 engine (`src/script_engine.c`). Match the existing examples in tone and 
 
 | Call | Returns | Notes |
 |------|---------|-------|
-| `log(...)` | – | logs any value(s) to the GtkTerm log view |
+| `log(value)` | – | logs one value (converted with tostring) to the GtkTerm script console |
 | `sleep(ms)` | – | block the script ms milliseconds |
 | `time()` | number | monotonic time, for timing/duration |
-| `send(handle, str)` | ok, err | send a string |
-| `send_hex(handle, "DEADBEEF")` | ok | send raw bytes from a hex string |
+| `send(handle, str)` | boolean | send a string; true if fully written (handle 0 = main port) |
+| `send_hex(handle, "DEADBEEF")` | boolean | send raw bytes from a hex string; true if fully written |
 | `read(handle)` | string | drain everything currently buffered (may be "") |
 | `wait_for(handle, pattern, timeout_ms)` | string \| nil | data up to and including pattern, or nil on timeout |
 | `open(handle, "serial", dev, baud, bits, stop, parity, flow)` | ok, err | e.g. `(1,"serial","/dev/ttyUSB0",115200,8,1,0,0)` |
 | `open(handle, "tcp_client", host, port)` | ok, err | |
-| `open(handle, "tcp_server", host, port)` | ok, err | |
+| `open(handle, "tcp_server", port)` | ok, err | listen on all interfaces; the first client is accepted |
 | `close(handle)` | – | |
-| `clear()` | – | clear the terminal/buffer |
-| `save_csv(file, col1, col2, ...)` | – | append a CSV row; first call with header strings |
-| `send_macro(index_or_label, ...args)` | ok, err | fire a configured macro by index or label |
+| `clear(handle)` | – | empty the receive buffer of handle (not the terminal) |
+| `save_csv(file, col1, col2, ...)` | ok, err | append a CSV row; first call with header strings |
+| `send_macro(index_or_label, ...args)` | ok, err | send a configured macro (0-based index or label); true once actually sent |
 | `get_macros()` | table | `{ {index=, label=, ...}, ... }` |
 | `get_lists()` | table | configured macro lists |
 

@@ -41,7 +41,7 @@ local deadline = gtkterm.time() + DURATION_S
 local forwarded = 0
 
 while gtkterm.time() < deadline do
-    -- Port 0 → Port 2 : ce que l'utilisateur tape dans GTKTerm part en TCP
+    -- Port 0 → Port 2 : ce qui est reçu sur le port principal part en TCP
     local from_main = gtkterm.read(0)
     if #from_main > 0 then
         gtkterm.send(2, from_main)

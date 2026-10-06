@@ -28,7 +28,8 @@ local function send_cmd(cmd, expect, timeout_ms, retries)
         gtkterm.send(1, cmd .. "\r\n")
         local r = gtkterm.wait_for(1, expect, timeout_ms or 2000)
         if r then
-            return r
+            -- wait_for s'arrête juste après le motif : lire aussi la fin de la ligne de réponse
+            return r .. (gtkterm.wait_for(1, "\n", 500) or "")
         end
         if attempt < retries then
             gtkterm.log(string.format("  Retry %d/%d pour '%s'...", attempt, retries, cmd))
@@ -68,7 +69,8 @@ if not ver then
     gtkterm.close(1)
     return
 end
-gtkterm.log("Version courante : " .. ver:match("VER:([^\r\n]+)") or "?")
+local version = ver:match("VER:%s*([^\r\n]+)")
+gtkterm.log("Version courante : " .. (version or "?"))
 
 -- Étape 2 : passer en mode bootloader
 gtkterm.log("=== Étape 2 : Mode bootloader ===")
@@ -90,7 +92,7 @@ for i, page in ipairs(pages) do
     local ack = send_cmd(cmd, "ACK", 2000, RETRIES)
     if ack then
         -- Vérifier le CRC retourné
-        local remote_crc = ack:match("ACK%s+([%x]+)")
+        local remote_crc = ack:match("ACK%s+(%x+)")
         if remote_crc and remote_crc:upper() == page.crc:upper() then
             gtkterm.log(string.format("  Page %d/%d OK  CRC=%s", i, #pages, page.crc))
         else

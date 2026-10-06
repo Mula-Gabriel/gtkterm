@@ -5,6 +5,7 @@
 #include <glib/gstdio.h>
 #include <locale.h>
 #include <string.h>
+#include <sys/resource.h>
 
 #include "parsecfg.h"
 #include "test_util.h"
@@ -152,7 +153,7 @@ test_locale_preservee(void)
 
 	apres = setlocale(LC_ALL, NULL);
 	detail = g_strdup_printf("locale apres cfgParse/cfgDump : attendu C.UTF-8, obtenu %s", apres);
-	test_conclude(g_strcmp0(apres, "C.UTF-8") == 0, "M9", detail);
+	test_conclude(g_strcmp0(apres, "C.UTF-8") == 0, NULL, detail);
 
 	g_free(detail);
 	setlocale(LC_ALL, "C");
@@ -172,16 +173,20 @@ test_fichier_vide_puis_ecriture(void)
 
 	if(g_test_subprocess())
 	{
+		/* Pas de fichier core si le sous-processus plante (remarque de la relecture du sous-projet 0). */
+		struct rlimit sans_core = { 0, 0 };
+		setrlimit(RLIMIT_CORE, &sans_core);
+
 		/* Processus neuf : les tableaux de cfg[] sont encore NULL, comme au premier démarrage de GTKTerm. */
 		g_assert_cmpint(cfgParse(g_getenv(VAR_FICHIER_VIDE), cfg, CFG_INI), ==, 0);
-		cfgStoreValue(cfg, "port", "/dev/ttyS0", CFG_INI, 0);
+		g_assert_cmpint(cfgStoreValue(cfg, "port", "/dev/ttyS0", CFG_INI, 0), ==, -1);
 		return;
 	}
 	dir = nouveau_repertoire();
 	chemin = test_write_file(dir, "vide.ini", "");
 	g_setenv(VAR_FICHIER_VIDE, chemin, TRUE);
 	g_test_trap_subprocess(NULL, 0, G_TEST_SUBPROCESS_DEFAULT);
-	test_conclude(g_test_trap_has_passed(), "C7", "cfgStoreValue apres la lecture d'un fichier vide ne doit pas planter");
+	test_conclude(g_test_trap_has_passed(), NULL, "cfgStoreValue apres la lecture d'un fichier vide ne doit pas planter");
 	g_unsetenv(VAR_FICHIER_VIDE);
 	g_free(chemin);
 	test_rmdir(dir);

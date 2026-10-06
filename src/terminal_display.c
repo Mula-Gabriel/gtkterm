@@ -113,12 +113,6 @@ send_serial (gchar *string, gint len)
 {
   gint bytes_written;
 
-  if (esc_clear_screen_on && len == 1 && (guchar)string[0] == '\x1b')
-    {
-      clear_buffer ();
-      return 1;
-    }
-
   bytes_written = Send_chars (string, len);
   if (bytes_written > 0)
     {
@@ -156,6 +150,14 @@ send_serial (gchar *string, gint len)
 void
 Got_Input (VteTerminal *widget, gchar *text, guint length, gpointer ptr)
 {
+  /* « ESC efface l'écran » : seule la touche Échap tapée dans le terminal efface l'écran local, sans rien envoyer (M32).
+     Les macros, Lua, la saisie hexadécimale et l'envoi de fichier passent par send_serial et envoient toujours 0x1B. */
+  if (esc_clear_screen_on && length == 1 && (guchar)text[0] == '\x1b')
+    {
+      clear_buffer ();
+      return;
+    }
+
   send_serial (text, length);
 }
 

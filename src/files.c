@@ -56,12 +56,13 @@ gboolean waiting_for_timer = FALSE;
 gboolean input_running = FALSE;
 gchar *str = NULL;
 FILE *Fic;
+static guint transfer_msg_id = 0;	/* message « transfert en cours » de la barre d'état, 0 si aucun */
 
 /* Local functions prototype */
 gint Envoie_fichier(GtkFileChooser *FS);
 gint Sauve_fichier(GtkFileChooser *FS);
 gint close_all(void);
-void ecriture(gpointer data, gint source);
+gboolean ecriture(GIOChannel *source, GIOCondition condition, gpointer data);
 gboolean timer(gpointer pointer);
 gboolean idle(gpointer pointer);
 void remove_input(void);
@@ -119,7 +120,7 @@ void send_raw_file(GtkAction *action, gpointer data)
 			fic_defaut = g_strdup(fileName);
 			msg = g_strdup_printf(_("%s: transfer in progress..."), fileName);
 
-			gtk_statusbar_push(GTK_STATUSBAR(StatusBar), id, msg);
+			transfer_msg_id = gtk_statusbar_push(GTK_STATUSBAR(StatusBar), id, msg);
 			car_written = 0;
 			current_buffer_position = 0;
 			bytes_read = 0;
@@ -161,13 +162,16 @@ void send_raw_file(GtkAction *action, gpointer data)
 	gtk_widget_destroy(file_select);
 }
 
-void ecriture(gpointer data, gint source)
+/* Rappel GIOFunc de la surveillance G_IO_OUT (M35) : TRUE pour continuer, FALSE quand le transfert est terminé,
+   interrompu ou mis en attente (la source est alors déjà retirée par close_all ou remove_input). */
+gboolean ecriture(GIOChannel *source, GIOCondition condition, gpointer data)
 {
 	static gchar buffer[BUFFER_EMISSION];
 	static gchar *current_buffer;
 	static gint bytes_to_write;
 	gint bytes_written;
 	gchar *car;
+	gboolean lf_found = FALSE;
 
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(ProgressBar), (gfloat)car_written/(gfloat)nb_car );
 
@@ -177,6 +181,23 @@ void ecriture(gpointer data, gint source)
 		if(current_buffer_position == bytes_read)
 		{
 			bytes_read = read(Fichier, buffer, BUFFER_EMISSION);
+
+			if(bytes_read <= 0)
+			{
+				/* 0 : fin du fichier avant la taille annoncée (fichier raccourci) : fin normale du transfert.
+				   -1 : erreur de lecture : transfert interrompu avec un message. Fermer d'abord : show_message fait tourner
+				   une boucle imbriquée pendant laquelle la surveillance rappellerait ce rappel. */
+				gint read_errno = errno;
+
+				close_all();
+				if(bytes_read < 0)
+				{
+					g_free(str);
+					str = g_strdup_printf(_("Error sending file: %s\n"), strerror(read_errno));
+					show_message(str, MSG_ERR);
+				}
+				return FALSE;
+			}
 
 			current_buffer_position = 0;
 			current_buffer = buffer;
@@ -190,22 +211,26 @@ void ecriture(gpointer data, gint source)
 			str = g_strdup_printf(_("Error sending file\n"));
 			show_message(str, MSG_ERR);
 			close_all();
-			return;
+			return FALSE;
 		}
 
 		car = current_buffer;
 
 		if(config.delai != 0 || config.car != -1)
 		{
-			/* search for next LF */
+			/* search for next LF, sans lire au-delà des données (borne testée avant *car) */
 			bytes_to_write = current_buffer_position;
-			while(*car != LINE_FEED && bytes_to_write < bytes_read)
+			while(bytes_to_write < bytes_read && *car != LINE_FEED)
 			{
 				car++;
 				bytes_to_write++;
 			}
-			if(*car == LINE_FEED)
+			if(bytes_to_write < bytes_read)
+			{
+				/* *car est le LF : il part avec sa ligne */
+				lf_found = TRUE;
 				bytes_to_write++;
+			}
 		}
 
 		/* write to serial port */
@@ -218,7 +243,7 @@ void ecriture(gpointer data, gint source)
 			str = g_strdup_printf(_("Error sending file: %s\n"), strerror(errno));
 			show_message(str, MSG_ERR);
 			close_all();
-			return;
+			return FALSE;
 		}
 
 		car_written += bytes_written;
@@ -227,24 +252,26 @@ void ecriture(gpointer data, gint source)
 
 		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(ProgressBar), (gfloat)car_written/(gfloat)nb_car );
 
-		if(config.delai != 0 && *car == LINE_FEED)
+		if(config.delai != 0 && lf_found)
 		{
 			remove_input();
 			g_timeout_add(config.delai, (GSourceFunc)timer, NULL);
 			waiting_for_timer = TRUE;
+			return FALSE;
 		}
-		else if(config.car != -1 && *car == LINE_FEED)
+		else if(config.car != -1 && lf_found)
 		{
 			remove_input();
 			waiting_for_char = TRUE;
+			return FALSE;
 		}
 	}
 	else
 	{
 		close_all();
-		return;
+		return FALSE;
 	}
-	return;
+	return TRUE;
 }
 
 gboolean timer(gpointer pointer)
@@ -259,15 +286,19 @@ gboolean timer(gpointer pointer)
 
 void add_input(void)
 {
+	GIOChannel *channel;
+
 	if(input_running == FALSE)
 	{
 		input_running = TRUE;
-		callback_handler = g_io_add_watch_full(g_io_channel_unix_new(transport_get_fd()),
+		channel = g_io_channel_unix_new(transport_get_fd());
+		callback_handler = g_io_add_watch_full(channel,
 		                                       10,
 		                                       G_IO_OUT,
-		                                       (GIOFunc)ecriture,
+		                                       ecriture,
 		                                       NULL, NULL);
-
+		/* La source garde sa propre référence sur le canal (M35) ; g_io_channel_unix_new ne ferme pas le descripteur à la libération */
+		g_io_channel_unref(channel);
 	}
 }
 
@@ -285,7 +316,12 @@ gint close_all(void)
 	remove_input();
 	waiting_for_char = FALSE;
 	waiting_for_timer = FALSE;
-	gtk_statusbar_pop(GTK_STATUSBAR(StatusBar), id);
+	/* Retirer le message du transfert lui-même : un message temporaire (macro en polling) peut être au sommet de la pile */
+	if(transfer_msg_id != 0)
+	{
+		gtk_statusbar_remove(GTK_STATUSBAR(StatusBar), id, transfer_msg_id);
+		transfer_msg_id = 0;
+	}
 	close(Fichier);
 	gtk_widget_destroy(Window);
 
