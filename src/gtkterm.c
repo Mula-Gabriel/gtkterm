@@ -19,6 +19,7 @@
 #include <gtk/gtk.h>
 #include <gdk/gdk.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include "interface.h"
 #include "update.h"
@@ -48,6 +49,8 @@ int main(int argc, char *argv[])
 {
 	gchar *message;
 
+	/* Une écriture vers un pair TCP fermé (port principal ou port Lua) ne doit jamais tuer l'application (C2). */
+	signal(SIGPIPE, SIG_IGN);
 	config_file_init();
 	bindtextdomain(PACKAGE, LOCALEDIR);
 	bind_textdomain_codeset(PACKAGE, "UTF-8");

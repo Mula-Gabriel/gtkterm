@@ -570,6 +570,12 @@ void rebuild_macro_buttons(void)
 	if (macro_tab_flowbox == NULL || macro_notebook == NULL)
 		return;
 
+	/* Les boutons vont être détruits : oublier leurs références et arrêter tout polling (C9). Sinon le clignotement toucherait des boutons
+	   libérés, et après le chargement d'un autre .ini l'ancien polling enverrait la macro de même indice du nouveau fichier.
+	   Le polling est restauré en fin de fonction, depuis macro_t, pour les seules macros qui ont encore un bouton. */
+	g_hash_table_remove_all(macro_button_table);
+	g_hash_table_remove_all(macro_polling_table);
+
 	/* Supprimer tous les boutons-onglets et pages existants */
 	GList *old_tabs = gtk_container_get_children(GTK_CONTAINER(macro_tab_flowbox));
 	for (GList *c = old_tabs; c != NULL; c = c->next)

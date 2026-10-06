@@ -34,6 +34,7 @@
 #include "buffer.h"
 #include "i18n.h"
 #include "transport.h"
+#include "serial_termios.h"
 
 #include <config.h>
 #include <glib/gi18n.h>
@@ -100,7 +101,7 @@ static gboolean transport_read_cb(GIOChannel *src, GIOCondition cond, gpointer d
 				i = 0;
 				while(i < (guint)bytes_read)
 				{
-					if(c[i] == config.car)
+					if((guchar)c[i] == config.car)
 					{
 						waiting_for_char = FALSE;
 						add_input();
@@ -287,60 +288,7 @@ static gboolean transport_open_serial(void)
 	tcgetattr(fd, &termios_p);
 	memcpy(&termios_save, &termios_p, sizeof(struct termios));
 
-	switch(config.bits)
-	{
-	case 5:
-		termios_p.c_cflag |= CS5;
-		break;
-	case 6:
-		termios_p.c_cflag |= CS6;
-		break;
-	case 7:
-		termios_p.c_cflag |= CS7;
-		break;
-	case 8:
-		termios_p.c_cflag |= CS8;
-		break;
-	}
-	switch(config.parite)
-	{
-	case 1:
-		termios_p.c_cflag |= PARODD | PARENB;
-		break;
-	case 2:
-		termios_p.c_cflag |= PARENB;
-		break;
-	default:
-		break;
-	}
-	if(config.stops == 2)
-		termios_p.c_cflag |= CSTOPB;
-	termios_p.c_cflag |= CREAD;
-	termios_p.c_iflag = IGNPAR | IGNBRK;
-	switch(config.flux)
-	{
-	case 1:
-		termios_p.c_iflag |= IXON | IXOFF;
-		break;
-	case 2:
-#ifdef CRTSCTS
-		termios_p.c_cflag |= CRTSCTS;
-#endif
-#ifdef CRTS_IFLOW
-		termios_p.c_cflag |= CRTS_IFLOW;
-#endif
-#ifdef CCTS_OFLOW
-		termios_p.c_cflag |= CCTS_OFLOW;
-#endif
-		break;
-	default:
-		termios_p.c_cflag |= CLOCAL;
-		break;
-	}
-	termios_p.c_oflag = 0;
-	termios_p.c_lflag = 0;
-	termios_p.c_cc[VTIME] = 0;
-	termios_p.c_cc[VMIN] = 1;
+	serial_termios_apply(&termios_p, config.bits, config.parite, config.stops, config.flux);
 	tcsetattr(fd, TCSANOW, &termios_p);
 	tcflush(fd, TCOFLUSH);
 	tcflush(fd, TCIFLUSH);
@@ -734,7 +682,11 @@ int transport_send(const char *buf, int len)
 			usleep(config.rs485_rts_time_before_transmit * 1000);
 	}
 
-	bytes_written = write(fd, buf, len);
+	/* En TCP, MSG_NOSIGNAL : un pair déjà fermé renvoie EPIPE au lieu de tuer GTKTerm par SIGPIPE (C2). */
+	if(config.transport_type == TRANSPORT_SERIAL)
+		bytes_written = write(fd, buf, len);
+	else
+		bytes_written = send(fd, buf, len, MSG_NOSIGNAL);
 
 	if(config.transport_type == TRANSPORT_SERIAL && config.flux == 3)
 	{
@@ -772,11 +724,6 @@ int transport_get_signals(void)
 
 	if(config.transport_type != TRANSPORT_SERIAL)
 		return 0;
-
-	if(config.flux == 3)
-	{
-		transport_set_signal(1);
-	}
 
 	if(transport_fd != -1)
 	{

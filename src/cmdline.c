@@ -145,7 +145,7 @@ int read_command_line(int argc, char **argv)
 			break;
 
 		case 'r':
-			config.car = *optarg;
+			config.car = (guchar)*optarg;
 			break;
 
 		case 'e':

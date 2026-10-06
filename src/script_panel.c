@@ -141,7 +141,21 @@ static void save_script_colors(void)
 {
     const gchar *path = get_config_file_path();
     GKeyFile *kf   = g_key_file_new();
-    g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL);
+    GError *lerr   = NULL;
+
+    /* Fichier présent mais illisible (M12) : ne rien écrire, sinon il serait remplacé par les seules sections [colors], [layout] et [session]. */
+    if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &lerr)) {
+        if (!g_error_matches(lerr, G_FILE_ERROR, G_FILE_ERROR_NOENT)) {
+            g_printerr("Cannot save script state: cannot read %s: %s\n", path, lerr->message);
+            g_error_free(lerr);
+            g_key_file_free(kf);
+            /* Comme après une sauvegarde : les couleurs de la session restent celles de l'éditeur */
+            sc_has_custom_bg = TRUE;
+            sc_has_custom_fg = TRUE;
+            return;
+        }
+        g_clear_error(&lerr);
+    }
 
 #define SAVE_COLOR(field, key) do {                          \
     gchar *_s = gdk_rgba_to_string(&sc.field);               \

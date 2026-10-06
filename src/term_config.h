@@ -55,7 +55,7 @@ struct configuration_port
 	gint delai;                  // end of char delay: in ms
 	gint rs485_rts_time_before_transmit;
 	gint rs485_rts_time_after_transmit;
-	gchar car;                   // caractere attendre
+	gint car;                    // caractère attendu (0-255), -1 : aucun
 	gboolean echo;               // echo local
 	gboolean crlfauto;           // line feed auto
 	gboolean autoreconnect_enabled;	// enable autoreconnect

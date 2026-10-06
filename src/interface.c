@@ -158,7 +158,7 @@ void view_index_toggled_callback(GSimpleAction *action, GVariant *parameter, gpo
 void view_send_hex_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
 void view_script_panel_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
 gboolean Send_Hexadecimal(GtkWidget *, GdkEventKey *, gpointer);
-gboolean pop_message(void);
+gboolean pop_message(gpointer data);
 void edit_copy_callback(GtkWidget *widget, gpointer data);
 void update_copy_sensivity(VteTerminal *terminal, gpointer data);
 void edit_paste_callback(GtkWidget *widget, gpointer data);
@@ -234,7 +234,10 @@ void set_view(guint type)
 	default:
 		set_display_func(NULL);
 	}
+	/* Rejeu du tampon dans la nouvelle vue : ces octets ont été journalisés à leur réception (M31) */
+	logging_set_suspended(TRUE);
 	write_buffer();
+	logging_set_suspended(FALSE);
 }
 
 void view_radio_callback(GtkWidget *widget, gpointer data)
@@ -1063,7 +1066,7 @@ void show_message(gchar *message, gint type_msg)
 		                                     GTK_DIALOG_DESTROY_WITH_PARENT,
 		                                     GTK_MESSAGE_ERROR,
 		                                     GTK_BUTTONS_OK,
-		                                     message, NULL);
+		                                     "%s", message);	/* le message n'est jamais un format (M38) */
 	}
 	else if(type_msg==MSG_WRN)
 	{
@@ -1071,7 +1074,7 @@ void show_message(gchar *message, gint type_msg)
 		                                     GTK_DIALOG_DESTROY_WITH_PARENT,
 		                                     GTK_MESSAGE_WARNING,
 		                                     GTK_BUTTONS_OK,
-		                                     message, NULL);
+		                                     "%s", message);	/* le message n'est jamais un format (M38) */
 	}
 	else
 		return;
@@ -1129,14 +1132,18 @@ gboolean Send_Hexadecimal(GtkWidget *widget, GdkEventKey *event, gpointer pointe
 
 void Put_temp_message(const gchar *text, gint time)
 {
+	guint msg_id;
+
 	/* time in ms */
-	gtk_statusbar_push(GTK_STATUSBAR(StatusBar), id, text);
-	g_timeout_add(time, (GSourceFunc)pop_message, NULL);
+	msg_id = gtk_statusbar_push(GTK_STATUSBAR(StatusBar), id, text);
+	g_timeout_add(time, pop_message, GUINT_TO_POINTER(msg_id));
 }
 
-gboolean pop_message(void)
+/* Retire ce message temporaire-là (M40), et non le sommet de la pile, qui peut être entre-temps le nom du port poussé par
+   Set_status_message. Sans effet si le message n'est plus dans la pile. */
+gboolean pop_message(gpointer data)
 {
-	gtk_statusbar_pop(GTK_STATUSBAR(StatusBar), id);
+	gtk_statusbar_remove(GTK_STATUSBAR(StatusBar), id, GPOINTER_TO_UINT(data));
 
 	return FALSE;
 }

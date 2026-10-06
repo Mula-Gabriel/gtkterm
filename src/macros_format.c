@@ -14,6 +14,7 @@
 #include <string.h>
 #include <errno.h>
 #include <limits.h>
+#include <locale.h>
 
 #include "macros_format.h"
 #include "macros_list.h"
@@ -178,8 +179,16 @@ try_parse_list_spec (const gchar *action, gint start,
     return FALSE;
 
   gchar *name = g_strndup (&action[name_start], j - name_start);
+  /* « %#x » n'est une liste que si une liste de ce nom existe ; sinon « # » est le drapeau printf (M18). */
+  if (macro_list_find (name) < 0)
+    {
+      g_free (name);
+      return FALSE;
+    }
   if (name_out)
     *name_out = name;
+  else
+    g_free (name);
   if (end_out)
     *end_out = j - 1;
   return TRUE;
@@ -217,6 +226,34 @@ spec_rebuild (const gchar *spec, gchar length_mod)
   return g_string_free (out, FALSE);
 }
 
+/* Met en forme un flottant sous une locale « C » propre au thread : le point décimal est imposé quelle que soit la langue (M9). */
+static gchar *
+format_double_c_locale (const gchar *spec, gboolean long_double, gdouble value)
+{
+  locale_t c_locale = newlocale (LC_ALL_MASK, "C", (locale_t) 0);
+  if (c_locale)
+    {
+      locale_t previous = uselocale (c_locale);
+      gchar *out = long_double ? g_strdup_printf (spec, (long double) value) : g_strdup_printf (spec, value);
+      uselocale (previous);
+      freelocale (c_locale);
+      return out;
+    }
+
+  return long_double ? g_strdup_printf (spec, (long double) value) : g_strdup_printf (spec, value);
+}
+
+/* Base de lecture d'un argument entier : hexadécimal avec le préfixe 0x/0X, décimal sinon — jamais d'octal (M23). */
+static gint
+int_arg_base (const gchar *s)
+{
+  while (*s == ' ' || *s == '\t')
+    s++;
+  if (*s == '+' || *s == '-')
+    s++;
+  return (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) ? 16 : 10;
+}
+
 static gchar *
 apply_spec (const gchar *spec, const gchar *fmt_type, const gchar *arg_str)
 {
@@ -228,40 +265,40 @@ apply_spec (const gchar *spec, const gchar *fmt_type, const gchar *arg_str)
   if (conv == 'd' || conv == 'i')
     {
       if (g_strcmp0 (fmt_type, "ld") == 0 || g_strcmp0 (fmt_type, "li") == 0)
-        return g_strdup_printf (spec, (long) strtol (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (long) strtol (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "lld") == 0 || g_strcmp0 (fmt_type, "lli") == 0)
-        return g_strdup_printf (spec, (long long) strtoll (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (long long) strtoll (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "hd") == 0 || g_strcmp0 (fmt_type, "hi") == 0)
-        return g_strdup_printf (spec, (short) strtol (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (short) strtol (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "hhd") == 0 || g_strcmp0 (fmt_type, "hhi") == 0)
-        return g_strdup_printf (spec, (signed char) strtol (arg_str, NULL, 10));
-      return g_strdup_printf (spec, (int) strtol (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (signed char) strtol (arg_str, NULL, int_arg_base (arg_str)));
+      return g_strdup_printf (spec, (int) strtol (arg_str, NULL, int_arg_base (arg_str)));
     }
 
   if (conv == 'u' || conv == 'o')
     {
       if (g_strcmp0 (fmt_type, "lu") == 0 || g_strcmp0 (fmt_type, "lo") == 0)
-        return g_strdup_printf (spec, (unsigned long) strtoul (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (unsigned long) strtoul (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "llu") == 0 || g_strcmp0 (fmt_type, "llo") == 0)
-        return g_strdup_printf (spec, (unsigned long long) strtoull (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (unsigned long long) strtoull (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "hu") == 0 || g_strcmp0 (fmt_type, "ho") == 0)
-        return g_strdup_printf (spec, (unsigned short) strtoul (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (unsigned short) strtoul (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "hhu") == 0 || g_strcmp0 (fmt_type, "hho") == 0)
-        return g_strdup_printf (spec, (unsigned char) strtoul (arg_str, NULL, 10));
-      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, 10));
+        return g_strdup_printf (spec, (unsigned char) strtoul (arg_str, NULL, int_arg_base (arg_str)));
+      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, int_arg_base (arg_str)));
     }
 
   if (conv == 'x' || conv == 'X')
     {
       if (g_strcmp0 (fmt_type, "lx") == 0 || g_strcmp0 (fmt_type, "lX") == 0)
-        return g_strdup_printf (spec, (unsigned long) strtoul (arg_str, NULL, 0));
+        return g_strdup_printf (spec, (unsigned long) strtoul (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "llx") == 0 || g_strcmp0 (fmt_type, "llX") == 0)
-        return g_strdup_printf (spec, (unsigned long long) strtoull (arg_str, NULL, 0));
+        return g_strdup_printf (spec, (unsigned long long) strtoull (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "hx") == 0 || g_strcmp0 (fmt_type, "hX") == 0)
-        return g_strdup_printf (spec, (unsigned short) strtoul (arg_str, NULL, 0));
+        return g_strdup_printf (spec, (unsigned short) strtoul (arg_str, NULL, int_arg_base (arg_str)));
       if (g_strcmp0 (fmt_type, "hhx") == 0 || g_strcmp0 (fmt_type, "hhX") == 0)
-        return g_strdup_printf (spec, (unsigned char) strtoul (arg_str, NULL, 0));
-      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, 0));
+        return g_strdup_printf (spec, (unsigned char) strtoul (arg_str, NULL, int_arg_base (arg_str)));
+      return g_strdup_printf (spec, (unsigned int) strtoul (arg_str, NULL, int_arg_base (arg_str)));
     }
 
   if (strchr ("fFeEgGaA", conv))
@@ -273,17 +310,10 @@ apply_spec (const gchar *spec, const gchar *fmt_type, const gchar *arg_str)
       if ((conv == 'f' || conv == 'F') && arg_str[0] != '\0' && spec_is_bare (spec))
         return g_strdup (arg_str);
 
-      if (fmt_type[0] == 'L')
-        {
-          gchar *lspec = spec_rebuild (spec, 'L');
-          gchar *out = g_strdup_printf (lspec, strtold (arg_str, NULL));
-          g_free (lspec);
-          return out;
-        }
-
-      gchar *dspec = spec_rebuild (spec, '\0');
-      gchar *out = g_strdup_printf (dspec, strtod (arg_str, NULL));
-      g_free (dspec);
+      gboolean long_double = (fmt_type[0] == 'L');
+      gchar *rspec = spec_rebuild (spec, long_double ? 'L' : '\0');
+      gchar *out = format_double_c_locale (rspec, long_double, g_ascii_strtod (arg_str, NULL));
+      g_free (rspec);
       return out;
     }
 
@@ -486,7 +516,7 @@ macro_type_value_valid (const gchar *type, const gchar *value)
     {
       gchar *end = NULL;
       errno = 0;
-      strtod (value, &end);
+      g_ascii_strtod (value, &end);
       if (errno == ERANGE || end == value || *end != '\0')
         return FALSE;
 
@@ -510,7 +540,7 @@ macro_type_value_valid (const gchar *type, const gchar *value)
 
     if (conv == 'd' || conv == 'i')
       {
-        gint64 v = g_ascii_strtoll (value, &end, 10);
+        gint64 v = g_ascii_strtoll (value, &end, int_arg_base (value));
         if (errno == ERANGE || end == value || *end != '\0')
           return FALSE;
         if (g_strcmp0 (type, "hd") == 0 || g_strcmp0 (type, "hi") == 0)
@@ -526,7 +556,7 @@ macro_type_value_valid (const gchar *type, const gchar *value)
 
     if (conv == 'u' || conv == 'o' || conv == 'x' || conv == 'X')
       {
-        gint base = (conv == 'x' || conv == 'X') ? 0 : 10;
+        gint base = int_arg_base (value);
         guint64 v = g_ascii_strtoull (value, &end, base);
         if (errno == ERANGE || end == value || *end != '\0')
           return FALSE;
@@ -550,6 +580,21 @@ macro_type_value_valid (const gchar *type, const gchar *value)
 }
 
 /* ─── Format action with arguments ─────────────────────────────────── */
+
+/* Nombre de caractères que action[from..to[ a produits dans le résultat : « %% » n'en produit qu'un (M20). */
+static gsize
+expanded_length (const gchar *action, gint from, gint to)
+{
+  gsize n = 0;
+
+  for (gint k = from; k < to; k++)
+    {
+      if (action[k] == '%' && k + 1 < to && action[k + 1] == '%')
+        k++;
+      n++;
+    }
+  return n;
+}
 
 /* Doubles every backslash in an arg value so that parse_macro_string,
    applied later to the full string, treats them as literal backslashes
@@ -588,7 +633,7 @@ format_action_with_args (const gchar *action, const gchar **args,
       {
         gint label_start = try_parse_label (action, i, NULL);
         if (label_start >= 0)
-          g_string_truncate (result, result->len - (i - label_start));
+          g_string_truncate (result, result->len - expanded_length (action, label_start, i));
       }
 
       {
@@ -620,11 +665,12 @@ format_action_with_args (const gchar *action, const gchar **args,
       if (arg_idx < n_args)
         {
           gchar *spec = g_strndup (&action[i], spec_end - i + 1);
-          gchar *escaped_arg = escape_arg_backslashes (args[arg_idx]);
-          gchar *formatted = apply_spec (spec, fmt_type, escaped_arg);
-          g_string_append (result, formatted);
+          /* Mise en forme d'abord (largeur, précision), protection des antislashs ensuite (M19). */
+          gchar *formatted = apply_spec (spec, fmt_type, args[arg_idx]);
+          gchar *escaped = escape_arg_backslashes (formatted);
+          g_string_append (result, escaped);
+          g_free (escaped);
           g_free (formatted);
-          g_free (escaped_arg);
           g_free (spec);
           arg_idx++;
         }

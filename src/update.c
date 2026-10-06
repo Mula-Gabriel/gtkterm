@@ -130,9 +130,16 @@ static void run_update_script(GtkWindow *parent)
 
 typedef struct
 {
-	GtkWindow *parent;
+	GtkWindow *parent;	/* pointeur faible : remis à NULL si le dialogue parent est détruit pendant la vérification (M34) */
 	gboolean manual;
 } CheckCtx;
+
+static void check_ctx_free(CheckCtx *ctx)
+{
+	if(ctx->parent != NULL)
+		g_object_remove_weak_pointer(G_OBJECT(ctx->parent), (gpointer *)&ctx->parent);
+	g_free(ctx);
+}
 
 static void offer_update(GtkWindow *parent, const gchar *remote_sha)
 {
@@ -180,7 +187,7 @@ static void on_ls_remote_done(GObject *source, GAsyncResult *res, gpointer data)
 		}
 		g_clear_error(&error);
 		g_free(stdout_buf);
-		g_free(ctx);
+		check_ctx_free(ctx);
 		return;
 	}
 
@@ -208,7 +215,7 @@ static void on_ls_remote_done(GObject *source, GAsyncResult *res, gpointer data)
 		offer_update(ctx->parent, remote_sha);
 	}
 
-	g_free(ctx);
+	check_ctx_free(ctx);
 }
 
 void update_check(GtkWindow *parent, gboolean manual)
@@ -222,10 +229,12 @@ void update_check(GtkWindow *parent, gboolean manual)
 		return;
 
 	GError *error = NULL;
-	GSubprocess *proc = g_subprocess_new(
-			G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE,
-			&error,
-			"git", "ls-remote", config.update_url, "HEAD", NULL);
+	/* « -- » : l'URL configurée ne peut pas être prise pour une option de git ; GIT_TERMINAL_PROMPT=0 : un dépôt qui demande
+	   une authentification échoue au lieu d'attendre une saisie dans un terminal invisible (M34). */
+	GSubprocessLauncher *launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE);
+	g_subprocess_launcher_setenv(launcher, "GIT_TERMINAL_PROMPT", "0", TRUE);
+	GSubprocess *proc = g_subprocess_launcher_spawn(launcher, &error, "git", "ls-remote", "--", config.update_url, "HEAD", NULL);
+	g_object_unref(launcher);
 
 	if(proc == NULL)
 	{
@@ -243,6 +252,8 @@ void update_check(GtkWindow *parent, gboolean manual)
 
 	CheckCtx *ctx = g_new0(CheckCtx, 1);
 	ctx->parent = parent;
+	if(parent != NULL)
+		g_object_add_weak_pointer(G_OBJECT(parent), (gpointer *)&ctx->parent);
 	ctx->manual = manual;
 	g_subprocess_communicate_utf8_async(proc, NULL, NULL, on_ls_remote_done, ctx);
 	g_object_unref(proc);
