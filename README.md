@@ -132,22 +132,22 @@ gtkterm.send_macro("Reset")    -- send macro by label
 
 
 <p align="center">
-    <img src="Capture1.png" width="60%"/>
+    <img src="docs/images/Capture1.png" width="60%"/>
 </p>
 <p align="center">
-    <img src="Capture2.png" width="60%"/>
+    <img src="docs/images/Capture2.png" width="60%"/>
 </p>
 <p align="center">
-    <img src="Capture3.png" width="60%"/>
+    <img src="docs/images/Capture3.png" width="60%"/>
 </p>
 <p align="center">
-    <img src="Capture4.png" width="60%"/>
+    <img src="docs/images/Capture4.png" width="60%"/>
     </p>
 <p align="center">
-    <img src="Capture5.png" width="60%"/>
+    <img src="docs/images/Capture5.png" width="60%"/>
     </p>
 <p align="center">
-    <img src="Capture6.png" width="60%"/>
+    <img src="docs/images/Capture6.png" width="60%"/>
 </p>
 # GTKTerm: A GTK+ Serial Port Terminal
 <img src="data/gtkterm_256x256.png" align="right" width="20%"/>
@@ -209,10 +209,12 @@ Once these dependencies are installed, most people should simply run:
 	meson build
 	ninja -C build
 
-To install GTKTerm system-wide, run:
+To install GTKTerm system-wide, run (after building as your user):
 
-	ninja -C build install
+	sudo meson install -C build --no-rebuild
 	gtk-update-icon-cache
+
+`--no-rebuild` keeps root from rebuilding (and from leaving root-owned files in `build/`).
 
 If you wish to install GTKTerm someplace other than the default directory, e.g. in `/usr`, use:
 

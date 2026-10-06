@@ -1,0 +1,7 @@
+/* Généré par vcs_tag() (src/meson.build) à chaque construction : ne pas modifier git_revision.h. */
+#ifndef GIT_REVISION_H_
+#define GIT_REVISION_H_
+
+#define GIT_REVISION "@GIT_REVISION@"
+
+#endif
