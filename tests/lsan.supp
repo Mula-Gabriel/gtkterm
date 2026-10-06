@@ -1,10 +1,4 @@
 # Fuites connues de parsecfg.c (revue §5 : chaque cfgParse abandonne les tableaux précédents).
 # parsecfg est remplacé par GKeyFile au sous-projet 3 : supprimer ce fichier à ce moment-là.
-# Ne jamais ajouter ici une fonction qui n'est pas dans parsecfg.c.
-leak:alloc_for_new_section
-leak:store_value
-leak:parse_word
-leak:parse_ini
-leak:cfgAllocForNewSection
-leak:dynamic_fgets
-leak:get_single_line_without_first_spaces
+# Filtre sur le fichier source : ne masque rien hors de parsecfg.c.
+leak:parsecfg.c

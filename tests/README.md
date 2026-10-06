@@ -8,7 +8,7 @@ Tests unitaires GLib GTest des modules sans GTK (bibliothèque `gtkterm_core`, v
 meson test -C build                 # tout
 meson test -C build --suite unit    # tests unitaires seulement
 meson test -C build --suite lint    # syntaxe des exemples Lua (luac -p)
-meson test -C build test_parsecfg -v   # un test, sortie TAP détaillée
+meson test -C build test_parsecfg -v   # un test, statut de chaque sous-test (le détail est dans build/meson-logs/testlog.txt)
 ```
 
 `ninja -C build` construit aussi les exécutables de test (meson les rattache toujours à la cible par défaut). Pour une construction sans tests : `meson setup build -Dtests=false` (c'est ce que fait `data/gtkterm-update.sh`).
@@ -36,6 +36,7 @@ Corriger un bogue = rendre le cas conforme **et** remplacer son identifiant par 
 - Un cas par fonction de test ; pour une table de cas, une entrée par cas avec `g_test_add_data_func`. Ne jamais appeler `test_conclude()` deux fois dans un même cas.
 - Un cas qui peut planter le processus s'exécute dans un sous-processus (`g_test_trap_subprocess`), voir `test_fichier_vide_puis_ecriture` dans `test_parsecfg.c`.
 - Fichiers temporaires : `g_dir_make_tmp`, `test_write_file()`, `test_rmdir()`.
+- Test d'intégration d'un module de src/ qui dépend de l'interface : compiler le vrai fichier avec les bouchons de tests/stubs/ (dictionnaire integration_tests de tests/meson.build) ; un bouchon enregistre l'appel (stub_record) et ne contient aucune logique métier.
 - Style : celui de `.clang-format` (tabulations, Allman, `if(`).
 
 ## Sanitizers et valgrind
@@ -52,3 +53,5 @@ valgrind, pour les erreurs mémoire (les fuites sont vérifiées par ASan) :
 ```sh
 meson test -C build --suite unit --wrap='valgrind --error-exitcode=1 --leak-check=no'
 ```
+
+Les fuites ne sont pas vérifiées par valgrind ici (--leak-check=no) : celles, connues, de parsecfg.c le feraient échouer ; elles sont vérifiées par LeakSanitizer (build-asan), qui les ignore grâce à tests/lsan.supp.

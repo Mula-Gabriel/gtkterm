@@ -10,6 +10,8 @@ unit_tests = {
 	'test_macros_format' : [],
 	'test_baudrates' : [util_dep],
 	'test_parsecfg' : [],
+	'test_serial_termios' : [],
+	'test_config_file' : [],
 }
 
 # Sans effet hors construction avec -Db_sanitize=address ; voir tests/README.md.
@@ -17,6 +19,8 @@ test_env = environment()
 test_env.set('LSAN_OPTIONS', 'suppressions=' + meson.current_source_dir() / 'lsan.supp')
 # UBSan ne fait qu'afficher par défaut : on veut qu'un comportement indéfini fasse échouer le test.
 test_env.set('UBSAN_OPTIONS', 'halt_on_error=1:print_stacktrace=1')
+test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
+test_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 
 foreach name, extra_deps : unit_tests
 	exe = executable(name, name + '.c',
@@ -24,20 +28,37 @@ foreach name, extra_deps : unit_tests
 	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env)
 endforeach
 
-# Syntaxe des exemples Lua (luac -p : analyse seule, aucun fichier produit).
-luac = find_program('luac5.4', 'luac', required : false)
-if luac.found()
-	lua_examples = files(
-		'../scripts/01_hello.lua',
-		'../scripts/02_at_commands.lua',
-		'../scripts/03_wait_for_demo.lua',
-		'../scripts/04_csv_logger.lua',
-		'../scripts/05_macros_demo.lua',
-		'../scripts/06_hex_protocol.lua',
-		'../scripts/07_tcp_client.lua',
-		'../scripts/08_stress_loop.lua',
-		'../scripts/09_multi_port.lua',
-		'../scripts/10_firmware_update.lua',
-	)
-	test('lua-syntax', luac, args : ['-p'] + lua_examples, suite : 'lint')
-endif
+# Tests d'intégration : vrais modules de src/ compilés avec des bouchons d'interface (tests/stubs/), sans fenêtre.
+stub_journal = files('stubs/stub_journal.c')
+stub_ui = files('stubs/stub_ui.c')
+stub_display = files('stubs/stub_display.c')
+stubs_inc = include_directories('stubs')
+
+integration_tests = {
+	'test_transport' : {
+		'sources' : files('../src/transport.c') + stub_journal + stub_ui + stub_display,
+		'deps' : [gtk_deps, util_dep],
+		'link_args' : ['-Wl,--wrap=ioctl'],
+	},
+	'test_macros_send' : {
+		'sources' : files('../src/macros.c') + stub_journal + stub_ui + stub_display,
+		'deps' : [gtk_deps],
+		'link_args' : [],
+	},
+	'test_script_engine' : {
+		'sources' : files('../src/script_engine.c', 'stubs/stub_macros.c') + stub_journal + stub_display,
+		'deps' : [gtk_deps, lua_dep, util_dep],
+		'link_args' : [],
+	},
+}
+
+foreach name, t : integration_tests
+	exe = executable(name, [name + '.c'] + t['sources'],
+		include_directories : stubs_inc,
+		dependencies : [gtkterm_core_dep] + t['deps'],
+		link_args : t['link_args'])
+	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env, timeout : 60)
+endforeach
+
+# Syntaxe de tous les exemples Lua de scripts/ au moment du test ; sauté (code 77) si luac est absent.
+test('lua-syntax', find_program('sh'), args : [files('lua-syntax.sh'), meson.project_source_root() / 'scripts'], suite : 'lint')

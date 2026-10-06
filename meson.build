@@ -12,7 +12,7 @@ vte_deps = dependency('vte-2.91', version : '>= 0.28.0')
 gudev_deps = dependency('gudev-1.0', version: '>= 230')
 lua_dep = dependency('lua5.4', required: true)
 gsv_dep = dependency('gtksourceview-4', required: true)
-glib_dep = dependency('glib-2.0')
+glib_dep = dependency('glib-2.0', version : '>= 2.70')	# g_test_incomplete_printf / g_test_fail_printf
 
 # Find install paths
 prefix = get_option('prefix')

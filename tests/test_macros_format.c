@@ -85,12 +85,17 @@ static const cas_expansion_t cas_expansions[] =
 	{ "%X", "255", NULL, "FF", NULL },
 	{ "%02X", "10", NULL, "0A", NULL },
 	{ "%x", "0x1f", NULL, "1f", NULL },
-	{ "%x", "ff", NULL, "ff", "M23" },		/* argument d'un %x saisi en hexadécimal */
-	{ "%x", "010", NULL, "10", "M23" },
+	{ "%X", "0x1f", NULL, "1F", NULL },
+	{ "%d", "0x10", NULL, "16", NULL },		/* décision 2 : 0x accepté pour tous les entiers */
+	{ "%u", "0x10", NULL, "16", NULL },
+	{ "%d", "010", NULL, "10", NULL },
+	{ "%o", "010", NULL, "12", NULL },
+	{ "%x", "ff", NULL, "0", NULL },	/* « ff » sans 0x n'est pas un nombre : refusé à la validation */
+	{ "%x", "010", NULL, "a", NULL },	/* décision 2 : décimal, jamais d'octal */
 	{ "%o", "8", NULL, "10", NULL },
-	{ "%#x", "255", NULL, "0xff", "M18" },		/* aucune liste « x » : drapeau # de printf */
-	{ "%#08x", "255", NULL, "0x0000ff", "M18" },
-	{ "%#o", "8", NULL, "010", "M18" },
+	{ "%#x", "255", NULL, "0xff", NULL },		/* aucune liste « x » : drapeau # de printf */
+	{ "%#08x", "255", NULL, "0x0000ff", NULL },
+	{ "%#o", "8", NULL, "010", NULL },
 	{ "%f", "2.00000", NULL, "2.00000", NULL },	/* 9f48921 : zéros de fin conservés */
 	{ "%f", "1e3", NULL, "1e3", NULL },		/* comportement actuel : valeur brute */
 	{ "%f", "abc", NULL, "abc", NULL },		/* comportement actuel : la validation refuse « abc » en amont */
@@ -106,8 +111,8 @@ static const cas_expansion_t cas_expansions[] =
 	{ "%s", "\\x41", NULL, "\\x41", NULL },		/* f26847f : pas d'interprétation dans %s */
 	{ "%s", "\\r", NULL, "\\r", NULL },
 	{ "%s", "50%", NULL, "50%", NULL },
-	{ "%5s", "a\\b", NULL, "  a\\b", "M19" },	/* largeur : 5 octets attendus */
-	{ "%cn", "\\", NULL, "\\n", "M19" },		/* « \ » puis « n », pas un saut de ligne */
+	{ "%5s", "a\\b", NULL, "  a\\b", NULL },	/* largeur : 5 octets attendus */
+	{ "%cn", "\\", NULL, "\\n", NULL },		/* « \ » puis « n », pas un saut de ligne */
 	{ "%c", "A", NULL, "A", NULL },
 	{ "%c", "", NULL, " ", NULL },			/* comportement actuel, à décider */
 	{ "100%%", "1", NULL, "100%", NULL },
@@ -118,7 +123,7 @@ static const cas_expansion_t cas_expansions[] =
 	{ "[Speed] %d", "5", NULL, "5", NULL },
 	{ "[a] %d [b] %d", "1", "2", "1 2", NULL },
 	{ "XY[a]%d", "5", NULL, "XY5", NULL },
-	{ "XY[a%%]%d", "5", NULL, "XY5", "M20" },	/* le « Y » disparaît */
+	{ "XY[a%%]%d", "5", NULL, "XY5", NULL },	/* le « Y » disparaît */
 	{ "arr[0] %d", "5", NULL, "arr5", NULL },	/* à décider : « [0] » pris pour un libellé */
 	{ "50% off", "9", NULL, "5011ff", NULL },	/* à décider : « % o » est un spécificateur valide */
 	{ "%#Mode", "S", NULL, "S", NULL },
@@ -169,8 +174,11 @@ static const cas_validation_t cas_validations[] =
 	{ "u", "-1", FALSE, NULL },
 	{ "u", "4294967295", TRUE, NULL },
 	{ "x", "0x10", TRUE, NULL },
-	{ "x", "ff", TRUE, "M23" },
-	{ "x", "09", TRUE, "M23" },
+	{ "x", "010", TRUE, NULL },
+	{ "d", "0x10", TRUE, NULL },
+	{ "u", "0x10", TRUE, NULL },
+	{ "x", "ff", FALSE, NULL },
+	{ "x", "09", TRUE, NULL },
 	{ "f", "2.5", TRUE, NULL },
 	{ "f", "2,5", FALSE, NULL },
 	{ "f", "1234567890", FALSE, NULL },	/* comportement actuel, à décider : limite de chiffres */
@@ -200,6 +208,33 @@ test_types_flottants(void)
 	g_assert_true(macro_type_is_float("lf"));
 	g_assert_true(macro_type_is_float("e"));
 	g_assert_false(macro_type_is_float("d"));
+}
+
+/* M9 : la locale n'est plus forcée à « C » par parsecfg ; le point reste le séparateur décimal des macros. */
+static void
+test_flottants_sous_locale_fr(void)
+{
+	gchar *ancienne = g_strdup(setlocale(LC_ALL, NULL));
+	const gchar *args[1] = { "3.14159" };
+	gchar *texte;
+	gboolean point_valide, virgule_valide;
+
+	if(setlocale(LC_ALL, "fr_FR.UTF-8") == NULL)
+	{
+		g_free(ancienne);
+		g_test_skip("locale fr_FR.UTF-8 indisponible");
+		return;
+	}
+	texte = format_action_with_args("%.2f", args, 1);
+	point_valide = macro_type_value_valid("f", "2.5");
+	virgule_valide = macro_type_value_valid("f", "2,5");
+	setlocale(LC_ALL, ancienne);
+	g_free(ancienne);
+
+	g_assert_cmpstr(texte, ==, "3.14");
+	g_assert_true(point_valide);
+	g_assert_false(virgule_valide);
+	g_free(texte);
 }
 
 /* ---- Description des arguments --------------------------------------- */
@@ -240,12 +275,25 @@ test_arguments(gconstpointer data)
 
 /* ---- Enregistrement --------------------------------------------------- */
 
-#define AJOUTER_TABLE(prefixe, table, fonction) \
+/* Étiquette de chemin GTest à partir d'un texte : lettres et chiffres gardés, le reste remplacé par « - », 24 caractères au plus. */
+static gchar *
+etiquette(const gchar *texte)
+{
+	GString *e = g_string_new(NULL);
+
+	for(const gchar *p = texte; *p != '\0' && e->len < 24; p++)
+		g_string_append_c(e, g_ascii_isalnum(*p) ? *p : '-');
+	return g_string_free(e, FALSE);
+}
+
+#define AJOUTER_TABLE(prefixe, table, champ, fonction) \
 	for(guint i = 0; i < G_N_ELEMENTS(table); i++) \
 	{ \
-		gchar *chemin = g_strdup_printf("/macros_format/" prefixe "/%02u", i); \
+		gchar *nom = etiquette(table[i].champ); \
+		gchar *chemin = g_strdup_printf("/macros_format/" prefixe "/%02u-%s", i, nom); \
 		g_test_add_data_func(chemin, &table[i], fonction); \
 		g_free(chemin); \
+		g_free(nom); \
 	}
 
 int
@@ -260,11 +308,12 @@ main(int argc, char **argv)
 	macro_list_add("Mode", "Run", "R");
 	macro_list_add("Mode", "Stop", "S");
 
-	AJOUTER_TABLE("echappement", cas_echappements, test_echappement);
-	AJOUTER_TABLE("expansion", cas_expansions, test_expansion);
-	AJOUTER_TABLE("validation", cas_validations, test_validation);
-	AJOUTER_TABLE("arguments", cas_arguments, test_arguments);
+	AJOUTER_TABLE("echappement", cas_echappements, entree, test_echappement);
+	AJOUTER_TABLE("expansion", cas_expansions, action, test_expansion);
+	AJOUTER_TABLE("validation", cas_validations, valeur, test_validation);
+	AJOUTER_TABLE("arguments", cas_arguments, action, test_arguments);
 	g_test_add_func("/macros_format/types-flottants", test_types_flottants);
+	g_test_add_func("/macros_format/flottants-sous-locale-fr", test_flottants_sous_locale_fr);
 
 	resultat = g_test_run();
 	macro_lists_free();
