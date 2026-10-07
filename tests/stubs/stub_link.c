@@ -18,6 +18,7 @@ static GMutex octets_mutex;
 static GByteArray *envoyes = NULL;
 static GThread *thread_envoi = NULL;
 static GtSendOrigin derniere_origine = GT_SEND_KEYBOARD;
+static gboolean ecriture_en_echec = FALSE;	/* port fermé ou perdu simulé : rien n'est écrit */
 
 static void
 gt_link_class_init(GtkTermLinkClass *klass)
@@ -42,6 +43,11 @@ gt_link_get_default(void)
 gssize
 gt_link_send(GtkTermLink *link, const guint8 *data, gsize len, GtSendOrigin origin)
 {
+	if(ecriture_en_echec)
+	{
+		stub_record("gt_link_send", "echec");
+		return 0;
+	}
 	g_mutex_lock(&octets_mutex);
 	if(envoyes == NULL)
 		envoyes = g_byte_array_new();
@@ -61,7 +67,15 @@ stub_link_reset(void)
 		g_byte_array_set_size(envoyes, 0);
 	thread_envoi = NULL;
 	derniere_origine = GT_SEND_KEYBOARD;
+	ecriture_en_echec = FALSE;
 	g_mutex_unlock(&octets_mutex);
+}
+
+/* Simule un port fermé ou perdu : gt_link_send n'écrit rien et renvoie 0 (remis à FALSE par stub_reset) */
+void
+stub_link_set_write_fails(gboolean fails)
+{
+	ecriture_en_echec = fails;
 }
 
 GByteArray *

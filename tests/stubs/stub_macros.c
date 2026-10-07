@@ -1,28 +1,49 @@
-/* Bouchon de get_shortcuts : renvoie le tableau fourni par le test et mémorise le thread appelant. */
+/* Bouchon de l'état des macros (macros.c) pour test_script_engine : jeu fourni par le test, fil appelant mémorisé. */
 
+#include "link.h"
 #include "stub_macros.h"
 
-static macro_t *macros_test = NULL;
-static gint nb_macros_test = 0;
-static GThread *thread_get_shortcuts = NULL;
+static GtMacroSet *jeu = NULL;
+static GThread *thread_acces = NULL;
 
 void
-stub_set_macros(macro_t *tab, gint n)
+stub_set_macro_set(GtMacroSet *set)
 {
-	macros_test = tab;
-	nb_macros_test = n;
+	gt_macro_set_free(jeu);
+	jeu = set;
 }
 
 GThread *
-stub_get_shortcuts_thread(void)
+stub_macros_thread(void)
 {
-	return thread_get_shortcuts;
+	return thread_acces;
 }
 
-macro_t *
-get_shortcuts(gint *size)
+GtMacroSet *
+macros_get_set(void)
 {
-	thread_get_shortcuts = g_thread_self();
-	*size = nb_macros_test;
-	return macros_test;
+	thread_acces = g_thread_self();
+	if(jeu == NULL)
+		jeu = gt_macro_set_new();
+	return jeu;
+}
+
+/* Même contrat que macros.c : macro inconnue ou non envoyable → FALSE ; n_args < 0 → arguments enregistrés */
+gboolean
+macros_send(guint id, const gchar *const *args, gint n_args)
+{
+	const GtMacro *m = gt_macro_set_find(macros_get_set(), id);
+	GBytes *bytes;
+	const guint8 *data;
+	gsize len = 0;
+	gssize written = 0;
+
+	if(!gt_macro_is_sendable(m))
+		return FALSE;
+	bytes = gt_macro_expand(jeu, m, args, n_args);
+	data = g_bytes_get_data(bytes, &len);
+	if(len > 0)
+		written = gt_link_send(gt_link_get_default(), data, len, GT_SEND_MACRO);
+	g_bytes_unref(bytes);
+	return len == 0 || (written >= 0 && (gsize)written == len);
 }

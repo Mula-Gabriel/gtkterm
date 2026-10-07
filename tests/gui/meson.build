@@ -7,6 +7,7 @@ gui_guard = shared_module('gtkterm_guard', 'guard.c',
 gui_env = environment()
 gui_env.set('GTKTERM_BIN', gtkterm_exe.full_path())
 gui_env.set('GTKTERM_GUARD', gui_guard.full_path())
+gui_env.set('GTKTERM_TEST_MACROS_SEND', integration_exes['test_macros_send'].full_path())
 gui_env.set('GTKTERM_GUI_RUNS', meson.current_build_dir() / 'runs')
 
 gui_scenarios = [
@@ -20,6 +21,9 @@ gui_scenarios = [
 	'test_envoi_fichier',
 	'test_raccourcis_macros',
 	'test_polling',
+	'test_macros_edition',
+	'test_macros_migration',
+	'test_macros_send_affichage',
 	'test_fermeture_fenetre',
 	'test_config_migration',
 	'test_config_profils',
@@ -34,7 +38,7 @@ foreach s : gui_scenarios
 		args : [files('run-gui-test.sh'), files(s + '.py')],
 		suite : 'gui',
 		env : gui_env,
-		depends : [gtkterm_exe, gui_guard],
+		depends : [gtkterm_exe, gui_guard, integration_exes['test_macros_send']],
 		timeout : 300,
 		is_parallel : false)
 endforeach

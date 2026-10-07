@@ -1,5 +1,5 @@
 /* Tests d'intégration du vrai moteur Lua (script_engine.c) sans interface : bouchons pour la liaison (envois, signal
- * « received ») et get_shortcuts. Le thread principal fait tourner une GMainLoop pendant le script. */
+ * « received ») et l'état des macros (jeu fourni par le test). Le thread principal fait tourner une GMainLoop pendant le script. */
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -94,16 +94,16 @@ test_erreur_avec_ports_ouverts(void)
 
 /* ---- C10, C11, M27 : thread principal et ordre ------------------------ */
 
-static macro_t macros_test[1];
-
 static void
 installer_macro_a(void)
 {
-	memset(macros_test, 0, sizeof(macros_test));
-	macros_test[0].label = "A";
-	macros_test[0].shortcut = "None";
-	macros_test[0].action = "A";
-	stub_set_macros(macros_test, 1);
+	GtMacroSet *set = gt_macro_set_new();
+	guint v;
+
+	gt_macro_set_append(set, "A", "", "A", "");
+	v = gt_macro_set_append(set, "V", "", "V%d", "");
+	gt_macro_set_set_arg(set, v, 0, "42");
+	stub_set_macro_set(set);
 }
 
 static void
@@ -129,8 +129,8 @@ test_get_macros_sur_le_thread_principal(void)
 	installer_macro_a();
 	g_assert_true(executer("local m = gtkterm.get_macros()\n"
 	                       "gtkterm.log(#m .. ' ' .. m[1].label)\n", 5000));
-	g_assert_nonnull(strstr(journal->str, "1 A"));
-	g_assert_true(stub_get_shortcuts_thread() == thread_principal);
+	g_assert_nonnull(strstr(journal->str, "2 A"));	/* deux macros : A et V */
+	g_assert_true(stub_macros_thread() == thread_principal);
 }
 
 static void
@@ -146,12 +146,32 @@ test_macro_absente(void)
 static void
 test_get_lists(void)
 {
-	macro_lists_free();
-	macro_list_add("Mode", "Marche", "M");
+	GtMacroSet *set = gt_macro_set_new();
+	GtMacroLists *l = gt_macro_lists_new();
+
+	gt_macro_lists_add(l, "Mode", "Marche", "M");
+	gt_macro_set_take_lists(set, l);
+	stub_set_macro_set(set);
 	g_assert_true(executer("local l = gtkterm.get_lists()\n"
 	                       "gtkterm.log(l[1].name .. ' ' .. l[1].entries[1].value)\n", 5000));
 	g_assert_nonnull(strstr(journal->str, "Mode M"));
-	macro_lists_free();
+	g_assert_true(stub_macros_thread() == thread_principal);
+}
+
+/* Sans argument Lua, les arguments enregistrés ; avec, ceux fournis ; par indice (0-based) comme par libellé. */
+static void
+test_send_macro_arguments(void)
+{
+	GByteArray *octets;
+
+	stub_reset();
+	installer_macro_a();
+	g_assert_true(executer("assert(gtkterm.send_macro('V'))\n"
+	                       "assert(gtkterm.send_macro('V', 7))\n"
+	                       "assert(gtkterm.send_macro(1))\n", 5000));
+	octets = stub_sent();
+	g_assert_cmpmem(octets->data, octets->len, "V42V7V42", 8);
+	g_assert_true(stub_send_thread() == thread_principal);
 }
 
 /* ---- M26 : wait_for binaire ------------------------------------------- */
@@ -346,6 +366,7 @@ main(int argc, char **argv)
 	g_test_add_func("/script_engine/get-macros-sur-le-thread-principal", test_get_macros_sur_le_thread_principal);
 	g_test_add_func("/script_engine/macro-absente", test_macro_absente);
 	g_test_add_func("/script_engine/get-lists", test_get_lists);
+	g_test_add_func("/script_engine/send-macro-arguments", test_send_macro_arguments);
 	g_test_add_func("/script_engine/wait-for-binaire", test_wait_for_binaire);
 	g_test_add_func("/script_engine/pair-tcp-ferme", test_pair_tcp_ferme);
 	g_test_add_func("/script_engine/executions-successives", test_executions_successives);

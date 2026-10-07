@@ -10,6 +10,8 @@
 #include "macros_list.h"
 #include "test_util.h"
 
+static GtMacroLists *listes = NULL;	/* « Mode » : Run=R, Stop=S ; aucune liste « x » ni « o » (cas M18) */
+
 /* ---- Échappements ---------------------------------------------------- */
 
 typedef struct
@@ -137,7 +139,7 @@ test_expansion(gconstpointer data)
 	const cas_expansion_t *c = data;
 	const gchar *args[2] = { c->arg1, c->arg2 };
 	gint n_args = c->arg2 ? 2 : (c->arg1 ? 1 : 0);
-	gchar *texte = format_action_with_args(c->action, args, n_args);
+	gchar *texte = format_action_with_args(listes, c->action, args, n_args);
 	GByteArray *octets = parse_macro_string(texte);
 	gchar *attendu = test_hex((const guint8 *)c->attendu, strlen(c->attendu));
 	gchar *obtenu = test_hex(octets->data, octets->len);
@@ -225,7 +227,7 @@ test_flottants_sous_locale_fr(void)
 		g_test_skip("locale fr_FR.UTF-8 indisponible");
 		return;
 	}
-	texte = format_action_with_args("%.2f", args, 1);
+	texte = format_action_with_args(listes, "%.2f", args, 1);
 	point_valide = macro_type_value_valid("f", "2.5");
 	virgule_valide = macro_type_value_valid("f", "2,5");
 	setlocale(LC_ALL, ancienne);
@@ -261,12 +263,12 @@ test_arguments(gconstpointer data)
 {
 	const cas_arguments_t *c = data;
 	gint n = -1;
-	macro_arg_info_t *infos = macro_get_arg_infos(c->action, &n);
+	macro_arg_info_t *infos = macro_get_arg_infos(listes, c->action, &n);
 	GString *texte = g_string_new(NULL);
 
 	for(gint i = 0; i < n; i++)
 		g_string_append_printf(texte, "%s%s:%s:%s", i ? "|" : "", infos[i].type, infos[i].list_name ? infos[i].list_name : "-", infos[i].label ? infos[i].label : "-");
-	g_assert_cmpint(macro_count_format_args(c->action), ==, c->nombre);
+	g_assert_cmpint(macro_count_format_args(listes, c->action), ==, c->nombre);
 	g_assert_cmpint(n, ==, c->nombre);
 	g_assert_cmpstr(texte->str, ==, c->infos);
 	g_string_free(texte, TRUE);
@@ -296,6 +298,26 @@ etiquette(const gchar *texte)
 		g_free(nom); \
 	}
 
+/* « %#x » : liste si une liste « x » existe dans les listes passées, drapeau printf sinon (listes NULL comprises). */
+static void
+test_listes_en_parametre(void)
+{
+	GtMacroLists *avec_x = gt_macro_lists_new();
+	const gchar *args[] = { "255" };
+	gchar *texte;
+
+	gt_macro_lists_add(avec_x, "x", "Huit", "8");
+	texte = format_action_with_args(NULL, "%#x", args, 1);
+	g_assert_cmpstr(texte, ==, "0xff");
+	g_free(texte);
+	texte = format_action_with_args(avec_x, "%#x", args, 1);
+	g_assert_cmpstr(texte, ==, "255");
+	g_free(texte);
+	g_assert_cmpint(macro_count_format_args(NULL, "%#Mode %d"), ==, 1);
+	g_assert_cmpint(macro_count_format_args(listes, "%#Mode %d"), ==, 2);
+	gt_macro_lists_free(avec_x);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -305,8 +327,9 @@ main(int argc, char **argv)
 	/* strtod dépend aujourd'hui de la locale « C » imposée en douce par parsecfg (bogue M9). */
 	setlocale(LC_NUMERIC, "C");
 	/* Liste « Mode » pour %#Mode ; aucune liste « x » ni « o » (cas M18). */
-	macro_list_add("Mode", "Run", "R");
-	macro_list_add("Mode", "Stop", "S");
+	listes = gt_macro_lists_new();
+	gt_macro_lists_add(listes, "Mode", "Run", "R");
+	gt_macro_lists_add(listes, "Mode", "Stop", "S");
 
 	AJOUTER_TABLE("echappement", cas_echappements, entree, test_echappement);
 	AJOUTER_TABLE("expansion", cas_expansions, action, test_expansion);
@@ -314,8 +337,9 @@ main(int argc, char **argv)
 	AJOUTER_TABLE("arguments", cas_arguments, action, test_arguments);
 	g_test_add_func("/macros_format/types-flottants", test_types_flottants);
 	g_test_add_func("/macros_format/flottants-sous-locale-fr", test_flottants_sous_locale_fr);
+	g_test_add_func("/macros_format/listes-en-parametre", test_listes_en_parametre);
 
 	resultat = g_test_run();
-	macro_lists_free();
+	gt_macro_lists_free(listes);
 	return resultat;
 }

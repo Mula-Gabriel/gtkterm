@@ -15,5 +15,6 @@ GByteArray  *stub_sent(void);
 GThread     *stub_send_thread(void);
 GtSendOrigin stub_last_origin(void);
 void         stub_inject_rx(const gchar *data, guint len);
+void         stub_link_set_write_fails(gboolean fails);
 
 #endif
