@@ -30,13 +30,10 @@
 #include <lualib.h>
 
 #include "script_engine.h"
-#include "buffer.h"
+#include "link.h"
 #include "macros.h"
 #include "macros_format.h"
 #include "macros_list.h"
-
-/* Forward declaration to avoid pulling in vte headers */
-extern gint send_serial(gchar *string, gint len);
 
 #define MAX_LUA_PORTS 16
 #define RX_BUF_MAX    (256 * 1024)
@@ -153,7 +150,7 @@ typedef struct {
 static gboolean main_send_cb(gpointer user_data)
 {
     MainSendData *d = user_data;
-    d->written = d->len > 0 ? send_serial((gchar *)d->data, d->len) : 0;
+    d->written = d->len > 0 ? (gint)gt_link_send(gt_link_get_default(), (const guint8 *)d->data, (gsize)d->len, GT_SEND_LUA) : 0;
     return G_SOURCE_REMOVE;
 }
 
@@ -176,14 +173,40 @@ static ssize_t lua_port_write(lua_port_t *p, const void *data, size_t len)
 /* Main port tap (handle 0)                                            */
 /* ------------------------------------------------------------------ */
 
-static void lua_main_port_tap(const char *data, unsigned int size)
+/* Octets reçus sur le port principal (signal « received » de la liaison, thread principal) */
+static void lua_main_port_received(GtkTermLink *link, GBytes *bytes, gint64 wall_time_us, gpointer user_data)
 {
     lua_port_t *p = &ports[0];
-    if (!p->open) return;
+    gsize size;
+    const gchar *data = g_bytes_get_data(bytes, &size);
+
     g_mutex_lock(&p->mutex);
-    if (p->rx_buf->len + size <= RX_BUF_MAX)
-        g_string_append_len(p->rx_buf, data, size);
+    if (p->open && p->rx_buf->len + size <= RX_BUF_MAX)
+        g_string_append_len(p->rx_buf, data, (gssize)size);
     g_mutex_unlock(&p->mutex);
+}
+
+static gulong main_port_handler = 0;
+
+/* Connexion et déconnexion du gestionnaire sur le thread principal (run_on_main_sync) : l'objet GLib n'est jamais
+   manipulé depuis le thread Lua (remarque reportée du sous-projet 1). */
+static gboolean main_port_connect_cb(gpointer data)
+{
+    GtkTermLink *link = gt_link_get_default();
+
+    if (link != NULL && main_port_handler == 0)
+        main_port_handler = g_signal_connect(link, "received", G_CALLBACK(lua_main_port_received), NULL);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean main_port_disconnect_cb(gpointer data)
+{
+    GtkTermLink *link = gt_link_get_default();
+
+    if (link != NULL && main_port_handler != 0)
+        g_signal_handler_disconnect(link, main_port_handler);
+    main_port_handler = 0;
+    return G_SOURCE_REMOVE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -813,7 +836,7 @@ static gboolean main_send_macro_cb(gpointer user_data)
     GByteArray *buf = parse_macro_string(formatted);
     g_free(formatted);
     d->expected = (gint)buf->len;
-    d->written = buf->len > 0 ? send_serial((gchar *)buf->data, (gint)buf->len) : 0;
+    d->written = buf->len > 0 ? (gint)gt_link_send(gt_link_get_default(), buf->data, buf->len, GT_SEND_MACRO) : 0;
     g_byte_array_free(buf, TRUE);
     return G_SOURCE_REMOVE;
 }
@@ -921,9 +944,11 @@ static gpointer lua_thread_func(gpointer user_data)
     luaL_openlibs(L);
     register_api(L);
 
-    /* Tap the main port */
-    set_tap_func(lua_main_port_tap);
+    /* Écoute du port principal */
+    g_mutex_lock(&ports[0].mutex);
     ports[0].open = TRUE;
+    g_mutex_unlock(&ports[0].mutex);
+    run_on_main_sync(main_port_connect_cb, NULL);
 
     int ret = luaL_dostring(L, script);
     if (ret != LUA_OK) {
@@ -931,10 +956,10 @@ static gpointer lua_thread_func(gpointer user_data)
         engine_log("Lua error: %s\n", err ? err : "(unknown)");
     }
 
-    /* Cleanup main port tap */
-    unset_tap_func();
-    ports[0].open = FALSE;
+    /* Fin de l'écoute du port principal */
+    run_on_main_sync(main_port_disconnect_cb, NULL);
     g_mutex_lock(&ports[0].mutex);
+    ports[0].open = FALSE;
     g_string_truncate(ports[0].rx_buf, 0);
     g_mutex_unlock(&ports[0].mutex);
 

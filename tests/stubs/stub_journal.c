@@ -47,7 +47,7 @@ stub_last(const gchar *nom)
 	return texte;
 }
 
-void stub_display_reset(void);
+void stub_link_reset(void);
 
 void
 stub_reset(void)
@@ -56,5 +56,5 @@ stub_reset(void)
 	if(journal != NULL)
 		g_ptr_array_set_size(journal, 0);
 	g_mutex_unlock(&journal_mutex);
-	stub_display_reset();
+	stub_link_reset();
 }

@@ -23,13 +23,11 @@
 
 #include "interface.h"
 #include "update.h"
-#include "serial.h"
 #include "term_config.h"
 #include "cmdline.h"
 #include "parsecfg.h"
-#include "buffer.h"
+#include "link.h"
 #include "macros.h"
-#include "device_monitor.h"
 #include "user_signals.h"
 #include "script_panel.h"
 
@@ -47,7 +45,7 @@ static gboolean startup_update_check(gpointer data)
 
 int main(int argc, char *argv[])
 {
-	gchar *message;
+	GtkTermLink *link;
 
 	/* Une écriture vers un pair TCP fermé (port principal ou port Lua) ne doit jamais tuer l'application (C2). */
 	signal(SIGPIPE, SIG_IGN);
@@ -58,30 +56,27 @@ int main(int argc, char *argv[])
 
 	gtk_init(&argc, &argv);
 
-	create_buffer();
+	link = gt_link_new();
+	gt_link_set_default(link);
 
 	create_main_window();
+	interface_connect_link(link);
 
 	if(read_command_line(argc, argv) < 0)
 	{
-		delete_buffer();
+		g_object_unref(link);
 		exit(1);
 	}
 
-	Config_port();
 	ConfigFlags();
 	script_panel_refresh_colors();
-
-	message = get_port_string();
-	Set_window_title(message);
-	Set_status_message(message);
-	g_free(message);
 
 	add_shortcuts();
 
 	set_view(ASCII_VIEW);
 
-	device_monitor_start();
+	/* Une seule ouverture au démarrage, après la configuration et la ligne de commande (M4) ; échec : une boîte de dialogue */
+	interface_open_port();
 
 	user_signals_catch();
 
@@ -89,9 +84,10 @@ int main(int argc, char *argv[])
 
 	gtk_main();
 
-	delete_buffer();
-
-	Close_port();
+	/* La fenêtre peut être détruite (bouton « Fermer » de la barre de titre) : plus aucun gestionnaire de l'interface sur la liaison */
+	interface_disconnect_link(link);
+	gt_link_close(link);
+	g_object_unref(link);
 
 	return 0;
 }

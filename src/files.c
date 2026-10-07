@@ -33,9 +33,11 @@
 
 #include "term_config.h"
 #include "interface.h"
-#include "serial.h"
-#include "buffer.h"
-#include "transport.h"
+#include "link.h"
+#include "rx_transform.h"
+
+#define BUFFER_EMISSION 4096
+#define LINE_FEED 0x0A
 
 #include <config.h>
 #include <glib/gi18n.h>
@@ -51,7 +53,7 @@ gint Fichier;
 guint callback_handler;
 gchar *fic_defaut = NULL;
 GtkWidget *Window;
-gboolean waiting_for_char = FALSE;
+static gboolean waiting_for_char = FALSE;
 gboolean waiting_for_timer = FALSE;
 gboolean input_running = FALSE;
 gchar *str = NULL;
@@ -67,9 +69,10 @@ gboolean timer(gpointer pointer);
 gboolean idle(gpointer pointer);
 void remove_input(void);
 void add_input(void);
-void write_file(const char *, unsigned int);
 
 extern struct configuration_port config;
+extern gboolean crlfauto_on;
+extern gboolean timestamp_on;
 
 
 void send_raw_file(GtkAction *action, gpointer data)
@@ -173,6 +176,15 @@ gboolean ecriture(GIOChannel *source, GIOCondition condition, gpointer data)
 	gchar *car;
 	gboolean lf_found = FALSE;
 
+	/* Perte de liaison pendant l'envoi : le descripteur est fermé, GLib signale ERR/HUP/NVAL en boucle et gt_link_send renvoie 0 (rien d'ouvert),
+	   donc aucun chemin d'erreur ne serait pris. Fermer d'abord : show_message fait tourner une boucle imbriquée. */
+	if((condition & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) || gt_link_get_fd(gt_link_get_default()) < 0)
+	{
+		close_all();
+		show_message(_("Error sending file\n"), MSG_ERR);
+		return FALSE;
+	}
+
 	gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(ProgressBar), (gfloat)car_written/(gfloat)nb_car );
 
 	if(car_written < nb_car)
@@ -234,15 +246,19 @@ gboolean ecriture(GIOChannel *source, GIOCondition condition, gpointer data)
 		}
 
 		/* write to serial port */
-		bytes_written = send_serial(current_buffer, bytes_to_write - current_buffer_position);
+		bytes_written = (gint)gt_link_send(gt_link_get_default(), (const guint8 *)current_buffer, (gsize)(bytes_to_write - current_buffer_position),
+		                                   GT_SEND_FILE);
 
 		if(bytes_written == -1)
 		{
-			/* Problem while writing, stop file transfer */
-			g_free(str);
-			str = g_strdup_printf(_("Error sending file: %s\n"), strerror(errno));
-			show_message(str, MSG_ERR);
+			/* Problem while writing, stop file transfer. Fermer d'abord (la fenêtre de progression ne doit pas rester derrière la boîte
+			   d'erreur, et la surveillance ne doit pas rappeler ce rappel pendant la boucle imbriquée de show_message) */
+			gint write_errno = errno;
+
 			close_all();
+			g_free(str);
+			str = g_strdup_printf(_("Error sending file: %s\n"), strerror(write_errno));
+			show_message(str, MSG_ERR);
 			return FALSE;
 		}
 
@@ -287,11 +303,20 @@ gboolean timer(gpointer pointer)
 void add_input(void)
 {
 	GIOChannel *channel;
+	gint fd;
 
 	if(input_running == FALSE)
 	{
+		fd = gt_link_get_fd(gt_link_get_default());
+		if(fd < 0)
+		{
+			/* Plus de port ouvert (perte de liaison) : le transfert s'arrête au lieu d'attendre indéfiniment */
+			close_all();
+			show_message(_("Error sending file\n"), MSG_ERR);
+			return;
+		}
 		input_running = TRUE;
-		channel = g_io_channel_unix_new(transport_get_fd());
+		channel = g_io_channel_unix_new(fd);
 		callback_handler = g_io_add_watch_full(channel,
 		                                       10,
 		                                       G_IO_OUT,
@@ -300,6 +325,45 @@ void add_input(void)
 		/* La source garde sa propre référence sur le canal (M35) ; g_io_channel_unix_new ne ferme pas le descripteur à la libération */
 		g_io_channel_unref(channel);
 	}
+}
+
+/* La comparaison avec config.car a quitté le transport (sous-projet 2) : faite ici, sur les octets reçus par la liaison */
+void files_on_received(GtkTermLink *link, GBytes *data, gint64 wall_time_us, gpointer user_data)
+{
+	gsize len;
+	const guint8 *p = g_bytes_get_data(data, &len);
+
+	if(!waiting_for_char || config.car == -1)
+		return;
+	for(gsize i = 0; i < len; i++)
+	{
+		if(p[i] == (guint8)config.car)
+		{
+			waiting_for_char = FALSE;
+			add_input();
+			return;
+		}
+	}
+}
+
+static gboolean files_lost_message_idle(gpointer data)
+{
+	show_message(_("Error sending file\n"), MSG_ERR);
+	return G_SOURCE_REMOVE;
+}
+
+/* Pendant l'attente du caractère ou du délai, la surveillance G_IO_OUT est retirée : seul l'état de la liaison signale la perte.
+   Ce gestionnaire tourne sous la surveillance du transport, sous udev ou dans une boucle imbriquée : message différé (pas de show_message ici). */
+void files_on_link_state(GObject *object, GParamSpec *pspec, gpointer user_data)
+{
+	GtLinkState state = gt_link_get_state(GT_LINK(object));
+
+	if(state != GT_LINK_LOST && state != GT_LINK_RECONNECTING && state != GT_LINK_CLOSED)
+		return;
+	if(!input_running && !waiting_for_char && !waiting_for_timer)
+		return;
+	close_all();
+	g_idle_add(files_lost_message_idle, NULL);
 }
 
 void remove_input(void)
@@ -328,29 +392,50 @@ gint close_all(void)
 	return FALSE;
 }
 
-void write_file(const char *data, unsigned int size)
+typedef struct
 {
-	fwrite(data, size, 1, Fic);
+	GtRxTransform *transform;
+	GString *text;
+} AsciiSave;
+
+static void save_ascii_record(const GtRecord *rec, gpointer user_data)
+{
+	AsciiSave *s = user_data;
+
+	if(rec->kind == GT_RECORD_RX)
+		gt_rx_transform_feed(s->transform, rec->data, rec->len, rec->wall_time_us, s->text);
 }
 
-void write_ascii_file(const char *data, unsigned int size)
+/* Octets reçus bruts : ni écho ni horodatage (spec §5) */
+static void write_raw_history(FILE *f)
 {
-        char *cleanbuff = g_malloc(size);
-        int write_pointer=0;
-        int newsize=0;
-        for (int x=0; x<size; ++x)
-        {
-          if (data[x] > 0x1F || data[x]==0x0A || data[x]==0x0D)
-          {
-            cleanbuff[write_pointer++]=data[x];
-            newsize++;
-          }
-        }
-        fwrite(cleanbuff, newsize, 1, Fic);
-        g_free(cleanbuff);
+	GBytes *rx = gt_history_copy_rx(gt_link_get_history(gt_link_get_default()));
+	gsize n;
+	const guint8 *p = g_bytes_get_data(rx, &n);
+
+	if(n > 0)
+		fwrite(p, 1, n, f);
+	g_bytes_unref(rx);
 }
 
+/* Texte reçu comme la vue ASCII le montre, sans caractères de contrôle autres que CR et LF (octets non signés : l'UTF-8 reste) */
+static void write_ascii_history(FILE *f)
+{
+	AsciiSave s;
 
+	s.transform = gt_rx_transform_new(crlfauto_on, timestamp_on);
+	s.text = g_string_new(NULL);
+	gt_history_foreach(gt_link_get_history(gt_link_get_default()), save_ascii_record, &s);
+	for(gsize i = 0; i < s.text->len; i++)
+	{
+		guchar c = (guchar)s.text->str[i];
+
+		if(c > 0x1F || c == 0x0A || c == 0x0D)
+			fputc(c, f);
+	}
+	g_string_free(s.text, TRUE);
+	gt_rx_transform_free(s.transform);
+}
 
 void save_raw_file(GtkAction *action, gpointer data)
 {
@@ -394,7 +479,7 @@ void save_raw_file(GtkAction *action, gpointer data)
 		{
 			fic_defaut = g_strdup(fileName);
 
-			write_buffer_with_func(write_file);
+			write_raw_history(Fic);
 
 			fclose(Fic);
 		}
@@ -445,7 +530,7 @@ void save_ascii_file(GtkAction *action, gpointer data)
 		{
 			fic_defaut = g_strdup(fileName);
 
-			write_buffer_with_func(write_ascii_file);
+			write_ascii_history(Fic);
 
 			fclose(Fic);
 		}

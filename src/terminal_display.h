@@ -4,7 +4,8 @@
 /*           GTKTerm Software                                          */
 /*                                                                     */
 /*   Purpose                                                           */
-/*      Terminal text/hex display rendering and serial send           */
+/*      Alimentation du terminal VTE : rendu des vues depuis la        */
+/*      liaison et son historique (sous-projet 2)                      */
 /*                                                                     */
 /***********************************************************************/
 
@@ -12,21 +13,23 @@
 #define TERMINAL_DISPLAY_H_
 
 #include <gtk/gtk.h>
+#include <vte/vte.h>
 
-void     initialize_hexadecimal_display (void);
-void     put_hexadecimal     (const gchar *string, guint size);
-void     put_text            (const gchar *string, guint size);
-gint     send_serial         (gchar *string, gint len);
-void     clear_display       (void);
-gboolean Envoie_car          (GtkWidget *widget, GdkEventKey *event,
-                              gpointer pointer);
+#include "link.h"
+#include "view_render.h"
 
+/* Vide la vue et la redessine depuis l'historique avec les options courantes (vue, écho, CR/LF, horodatage, hexadécimal) */
+void     terminal_display_redraw (void);
+void     terminal_display_set_mode (GtViewMode mode);
 void     set_hex_bytes_per_line (gint bpl);
-void     set_hex_show_index    (gboolean show);
+void     set_hex_show_index (gboolean show);
+void     clear_display (void);
 
-void     Got_Input (VteTerminal *widget, gchar *text, guint length,
-                     gpointer ptr);
+/* Gestionnaires des signaux de la liaison */
+void     terminal_display_on_received (GtkTermLink *link, GBytes *data, gint64 wall_time_us, gpointer user_data);
+void     terminal_display_on_sent (GtkTermLink *link, GBytes *data, gint origin, gpointer user_data);
+void     terminal_display_on_history_cleared (GtkTermLink *link, gpointer user_data);
 
-extern guint virt_col_pos;
+void     Got_Input (VteTerminal *widget, gchar *text, guint length, gpointer ptr);
 
 #endif

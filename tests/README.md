@@ -36,7 +36,8 @@ Corriger un bogue = rendre le cas conforme **et** remplacer son identifiant par 
 - Un cas par fonction de test ; pour une table de cas, une entrée par cas avec `g_test_add_data_func`. Ne jamais appeler `test_conclude()` deux fois dans un même cas.
 - Un cas qui peut planter le processus s'exécute dans un sous-processus (`g_test_trap_subprocess`), voir `test_fichier_vide_puis_ecriture` dans `test_parsecfg.c`.
 - Fichiers temporaires : `g_dir_make_tmp`, `test_write_file()`, `test_rmdir()`.
-- Test d'intégration d'un module de src/ qui dépend de l'interface : compiler le vrai fichier avec les bouchons de tests/stubs/ (dictionnaire integration_tests de tests/meson.build) ; un bouchon enregistre l'appel (stub_record) et ne contient aucune logique métier.
+- Tests unitaires du cœur GLib (dictionnaire `unit_tests` de `tests/meson.build`) : `test_history`, `test_rx_transform`, `test_device_match`, `test_view_render`, `test_baudrates`, `test_parsecfg`, `test_macros_format`, `test_macros_list`, `test_serial_termios`, `test_config_file`.
+- Tests d'intégration (dictionnaire `integration_tests` de `tests/meson.build`) : `test_link`, `test_transport` (n'a plus besoin de bouchons : le transport n'appelle plus l'interface), `test_macros_send`, `test_script_engine`. Un module de src/ qui dépend de l'interface se compile avec les bouchons de tests/stubs/ (`stub_link.c` remplace l'ancien `stub_display.c`, `stub_journal.c`, `stub_macros.c`, `stub_ui.c`) ; un bouchon enregistre l'appel (stub_record) et ne contient aucune logique métier.
 - Style : celui de `.clang-format` (tabulations, Allman, `if(`).
 
 ## Sanitizers et valgrind
@@ -55,3 +56,16 @@ meson test -C build --suite unit --wrap='valgrind --error-exitcode=1 --leak-chec
 ```
 
 Les fuites ne sont pas vérifiées par valgrind ici (--leak-check=no) : celles, connues, de parsecfg.c le feraient échouer ; elles sont vérifiées par LeakSanitizer (build-asan), qui les ignore grâce à tests/lsan.supp.
+
+## Suite graphique (`tests/gui/`)
+
+```sh
+meson test -C build --suite gui --print-errorlogs
+```
+
+Exclue de `meson test -C build` (`add_test_setup` dans `tests/meson.build`). Chaque scénario `test_*.py` lance GTKTerm par AT-SPI sur un affichage **broadway privé** (et un faux navigateur broadway, `broadway.py`) : bus D-Bus et AT-SPI privés (`dbus-run-session`, `run-gui-test.sh`), `HOME` / `XDG_*` dans `build/tests/gui/runs/`, ports pty uniquement, faux `git` (aucun réseau). Chaque test est sauté (code 77) si `broadwayd`, `dbus-run-session` ou `python3-gi` (Atspi 2.0) manquent. Résultats détaillés : `build/tests/gui/runs/<scénario>/result.txt` et `gtkterm.stderr`.
+
+- Garde-fou : `guard.c`, chargé par LD_PRELOAD, refuse les vrais ports série et la configuration réelle de l'utilisateur (message `EMGUARD` dans stderr, qui fait échouer le scénario). Il corrige aussi le clavier de GDK broadway, qui ne renseigne pas les modificateurs consommés.
+- Échec : lire `build/tests/gui/runs/<scénario>/result.txt` (une ligne `OK` / `ECHEC` par vérification) et `gtkterm.stderr`.
+- Un scénario finit par `finish(e)` (quitte par le menu, vérifie stderr) puis `sys.exit(conclude())`. Bruit GTK connu sous broadway, sans rapport avec GTKTerm : `KNOWN_NOISE` dans `gtktest.py` ; n'y ajouter qu'une assertion GTK dont la pile ne passe pas par GTKTerm.
+- Pour ajouter un scénario : écrire `tests/gui/test_<nom>.py` avec `from gtktest import *`, des `check(condition, libellé, détail)`, `finish(e)` puis `sys.exit(conclude())`, et l'ajouter à `gui_scenarios` dans `tests/gui/meson.build`.

@@ -45,7 +45,6 @@
 #include <vte/vte.h>
 #include <glib/gi18n.h>
 
-#include "serial.h"
 #include "term_config.h"
 #include "config_file.h"
 #include "interface.h"
@@ -264,10 +263,48 @@ void load_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_pa
 
 void ConfigFlags(void)
 {
+	Set_local_echo(config.echo);
 	Set_crlfauto(config.crlfauto);
 	Set_autoreconnect_enabled(config.autoreconnect_enabled);
 	Set_esc_clear_screen(config.esc_clear_screen);
 	Set_timestamp(config.timestamp);
+}
+
+void config_to_transport_params(const struct configuration_port *c, TransportParams *p)
+{
+	memset(p, 0, sizeof(*p));
+	p->type = c->transport_type;
+	p->port = g_strdup(c->port);
+	p->baudrate = c->vitesse;
+	p->bits = c->bits;
+	p->stopbits = c->stops;
+	p->parity = c->parite;
+	p->flow = c->flux;
+	p->rs485_before_ms = c->rs485_rts_time_before_transmit;
+	p->rs485_after_ms = c->rs485_rts_time_after_transmit;
+	p->lock_port = !c->disable_port_lock;
+	p->host = g_strdup(c->socket_host);
+	p->tcp_port = g_strdup(c->socket_port);
+}
+
+void configure_echo(gboolean echo)
+{
+	config.echo = echo;
+}
+
+void configure_crlfauto(gboolean crlfauto)
+{
+	config.crlfauto = crlfauto;
+}
+
+void configure_autoreconnect_enable(gboolean autoreconnect)
+{
+	config.autoreconnect_enabled = autoreconnect;
+}
+
+void configure_esc_clear_screen(gboolean esc_clear_screen)
+{
+	config.esc_clear_screen = esc_clear_screen;
 }
 
 /* This list should perhaps be added to the configuration? */
@@ -785,13 +822,13 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 
 	switch(config.parite)
 	{
-	case 0:
+	case GT_PARITY_NONE:
 		gtk_combo_box_set_active(GTK_COMBO_BOX(Combo), 0);
 		break;
-	case 1:
+	case GT_PARITY_ODD:
 		gtk_combo_box_set_active(GTK_COMBO_BOX(Combo), 1);
 		break;
-	case 2:
+	case GT_PARITY_EVEN:
 		gtk_combo_box_set_active(GTK_COMBO_BOX(Combo), 2);
 		break;
 	}
@@ -842,16 +879,16 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 
 	switch(config.flux)
 	{
-	case 0:
+	case GT_FLOW_NONE:
 		gtk_combo_box_set_active(GTK_COMBO_BOX(Combo), 0);
 		break;
-	case 1:
+	case GT_FLOW_XONXOFF:
 		gtk_combo_box_set_active(GTK_COMBO_BOX(Combo), 2);
 		break;
-	case 2:
+	case GT_FLOW_RTSCTS:
 		gtk_combo_box_set_active(GTK_COMBO_BOX(Combo), 1);
 		break;
-	case 3:
+	case GT_FLOW_RS485:
 		gtk_combo_box_set_active(GTK_COMBO_BOX(Combo), 3);
 		break;
 	}
@@ -992,11 +1029,11 @@ gint Lis_Config(GtkWidget *bouton, GtkWidget **Combos)
 
 		message = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(Combos[2]));
 		if(!strcmp(message, "odd"))
-			config.parite = 1;
+			config.parite = GT_PARITY_ODD;
 		else if(!strcmp(message, "even"))
-			config.parite = 2;
+			config.parite = GT_PARITY_EVEN;
 		else
-			config.parite = 0;
+			config.parite = GT_PARITY_NONE;
 		g_free(message);
 
 		message = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(Combos[4]));
@@ -1005,13 +1042,13 @@ gint Lis_Config(GtkWidget *bouton, GtkWidget **Combos)
 
 		message = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(Combos[5]));
 		if(!strcmp(message, "Xon/Xoff"))
-			config.flux = 1;
+			config.flux = GT_FLOW_XONXOFF;
 		else if(!strcmp(message, "RTS/CTS"))
-			config.flux = 2;
+			config.flux = GT_FLOW_RTSCTS;
 		else if(!strncmp(message, "RS485",5))
-			config.flux = 3;
+			config.flux = GT_FLOW_RS485;
 		else
-			config.flux = 0;
+			config.flux = GT_FLOW_NONE;
 		g_free(message);
 
 		if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(Combos[7])))
@@ -1031,13 +1068,8 @@ gint Lis_Config(GtkWidget *bouton, GtkWidget **Combos)
 		g_strlcpy(config.socket_port, port, sizeof(config.socket_port));
 	}
 
-	Config_port();
+	interface_open_port();
 	ConfigFlags();
-
-	message = get_port_string();
-	Set_status_message(message);
-	Set_window_title(message);
-	g_free(message);
 
 	return FALSE;
 }
@@ -1453,7 +1485,7 @@ void load_config(GtkDialog *Fenetre, gint id, GtkTreeSelection *Selection_Liste)
 {
 	GtkTreeIter iter;
 	GtkTreeModel *Modele;
-	gchar *txt, *message;
+	gchar *txt;
 
 	if(id == GTK_RESPONSE_ACCEPT)
 	{
@@ -1462,14 +1494,9 @@ void load_config(GtkDialog *Fenetre, gint id, GtkTreeSelection *Selection_Liste)
 			gtk_tree_model_get(GTK_TREE_MODEL(Modele), &iter, 0, &txt, -1);
 			Load_configuration_from_file(txt);
 			Verify_configuration();
-			Config_port();
+			interface_open_port();
 			ConfigFlags();
 			add_shortcuts();
-
-			message = get_port_string();
-			Set_status_message(message);
-			Set_window_title(message);
-			g_free(message);
 		}
 	}
 }
@@ -1527,22 +1554,22 @@ gint Load_configuration_from_file(gchar *config_name)
 				if(parity[i] != NULL)
 				{
 					if(!g_ascii_strcasecmp(parity[i], "none"))
-						config.parite = 0;
+						config.parite = GT_PARITY_NONE;
 					else if(!g_ascii_strcasecmp(parity[i], "odd"))
-						config.parite = 1;
+						config.parite = GT_PARITY_ODD;
 					else if(!g_ascii_strcasecmp(parity[i], "even"))
-						config.parite = 2;
+						config.parite = GT_PARITY_EVEN;
 				}
 				if(flow[i] != NULL)
 				{
 					if(!g_ascii_strcasecmp(flow[i], "none"))
-						config.flux = 0;
+						config.flux = GT_FLOW_NONE;
 					else if(!g_ascii_strcasecmp(flow[i], "xon"))
-						config.flux = 1;
+						config.flux = GT_FLOW_XONXOFF;
 					else if(!g_ascii_strcasecmp(flow[i], "rts"))
-						config.flux = 2;
+						config.flux = GT_FLOW_RTSCTS;
 					else if(!g_ascii_strcasecmp(flow[i], "rs485"))
-						config.flux = 3;
+						config.flux = GT_FLOW_RS485;
 				}
 
 				config.delai = wait_delay[i];
@@ -1823,13 +1850,13 @@ void Copy_configuration(int pos)
 
 	switch(config.parite)
 	{
-	case 0:
+	case GT_PARITY_NONE:
 		string = g_strdup_printf("none");
 		break;
-	case 1:
+	case GT_PARITY_ODD:
 		string = g_strdup_printf("odd");
 		break;
-	case 2:
+	case GT_PARITY_EVEN:
 		string = g_strdup_printf("even");
 		break;
 	default:
@@ -1840,16 +1867,16 @@ void Copy_configuration(int pos)
 
 	switch(config.flux)
 	{
-	case 0:
+	case GT_FLOW_NONE:
 		string = g_strdup_printf("none");
 		break;
-	case 1:
+	case GT_FLOW_XONXOFF:
 		string = g_strdup_printf("xon");
 		break;
-	case 2:
+	case GT_FLOW_RTSCTS:
 		string = g_strdup_printf("rts");
 		break;
-	case 3:
+	case GT_FLOW_RS485:
 		string = g_strdup_printf("rs485");
 		break;
 	default:

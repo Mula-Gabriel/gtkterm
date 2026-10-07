@@ -1,0 +1,6 @@
+#!/bin/sh
+# Faux git : aucune connexion réseau. Journalise l'appel ; renvoie un SHA configurable après un délai.
+echo "FAKEGIT $*" >> "${EM_FAKEGIT_LOG:-/dev/null}"
+sleep "${EM_FAKEGIT_DELAY:-0}"
+if [ -n "$EM_FAKEGIT_SHA" ]; then printf '%s\tHEAD\n' "$EM_FAKEGIT_SHA"; exit 0; fi
+exit 128

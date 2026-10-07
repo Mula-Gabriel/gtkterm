@@ -2,13 +2,12 @@
 # Copyright (C) 1995 Free Software Foundation, Inc.
 
 # Package source files
-src/buffer.c
 src/cmdline.c
-src/device_monitor.c
 src/files.c
 src/gtkterm.c
 src/i18n.c
 src/interface.c
+src/link.c
 src/logging.c
 src/macro_panel.c
 src/macros.c
@@ -17,7 +16,6 @@ src/macros_list.c
 src/parsecfg.c
 src/script_panel.c
 src/search.c
-src/serial.c
 src/term_config.c
 src/terminal_display.c
 src/transport.c

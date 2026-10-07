@@ -29,7 +29,7 @@
 
 #ifdef HAVE_CFSETOBAUD
 
-#include "serial.h"
+#include "transport.h"
 
 unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 {
@@ -58,7 +58,7 @@ unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 
 /* <termios.h> cannot be included here */
 #define NO_TERMIOS
-#include "serial.h"
+#include "transport.h"
 
 #ifndef TCSETS2
 # define termios2 termios
@@ -108,7 +108,7 @@ unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 
 #else  /* No baud_t interface, not Linux */
 
-#include "serial.h"
+#include "transport.h"
 
 int set_port_baudrate(unsigned int baud, int port_fd)
 {

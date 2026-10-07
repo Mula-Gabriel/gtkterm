@@ -46,11 +46,17 @@ Avertissements `-Wall -Wextra` : 165 (151 paramètres inutilisés, 11 `sign-comp
 
 **Transport / série / udev**
 - M1. `transport_close` décide du type de fermeture avec la *nouvelle* configuration (term_config.c:1082 modifie `config` puis rouvre) : `tcsetattr` sur descripteur fermé, termios non restauré ; double `close` en mode serveur (`transport_fd == listen_fd`).
+  Corrigé par le sous-projet 2 (`feature/refonte-transport`).
 - M2. Le moniteur udev ignore le mode de transport (débrancher l'ancien USB ferme une connexion TCP) et n'est démarré qu'une fois (passage TCP → série sans surveillance).
+  Corrigé par le sous-projet 2 (`feature/refonte-transport`).
 - M3. Reconnexion automatique : boîte modale toutes les 2 s ; le minuteur se réarme même après `transport_close` ; en RS485 sur pty, `perror` toutes les 100 ms.
+  Corrigé par le sous-projet 2 (`feature/refonte-transport`).
 - M4. Double ouverture au démarrage avec reconnexion automatique (deux boîtes d'erreur si le port est verrouillé).
+  Corrigé par le sous-projet 2 (`feature/refonte-transport`).
 - M5. TCP client : fin de flux → port fermé sans mise à jour de l'état ; état « tcp://… » affiché pendant la connexion.
+  Corrigé par le sous-projet 2 (`feature/refonte-transport`).
 - M6. Lien utilisateur hors udev (`~/x -> /dev/ttyACM0`) : les événements ne correspondent jamais (comparer `st_rdev` serait robuste).
+  Corrigé par le sous-projet 2 (`feature/refonte-transport`).
 - M7. `gchar car` comparé à -1 (term_config.c:949, files.c:198, transport.c:98) : sur ARM (char non signé), « attendre un caractère » toujours actif ; au-delà de 127 jamais reconnu.
 - M8. `gtkterm-update.sh` : `disown` n'existe pas sous dash ; `pkexec ninja install` laisse des fichiers root dans `build/` ; `gtkterm &` relance celui du PATH.
 
@@ -90,6 +96,7 @@ Avertissements `-Wall -Wextra` : 165 (151 paramètres inutilisés, 11 `sign-comp
 - M35. files.c : rappel `ecriture` typé `void` enregistré comme `GIOFunc` → valeur de retour aléatoire, transfert bloqué ; `read()` -1/0 → boucle à 100 % ; lecture `buffer[bytes_read]` hors données ; `GIOChannel` jamais libéré ; « Save ASCII » supprime ≥ 0x80 et TAB.
 - M36. Les `GAction` ne sont jamais ajoutées à un `GActionMap` : le bouton radio ASCII/Hexa se désynchronise.
 - M37. Écho : en vue texte une ligne `> a\r\n` par touche ; en vue hexa l'index dérive ; l'écho n'est pas dans le tampon et disparaît au changement de vue.
+  Corrigé par le sous-projet 2 (`feature/refonte-transport`).
 - M38. Chaîne de format non maîtrisée (`show_message`, `search.c:75`) : un `%` dans un chemin ou `strerror` → comportement indéfini.
 - M39. Journal : le dialogue demande « écraser ? » mais ouvre en `"a"` ; menus bloqués après un échec ; boîte modale dans le chemin de réception.
 - M40. `Put_temp_message` retire le sommet de la pile de la barre d'état → efface le nom du port.
@@ -129,11 +136,29 @@ Avertissements `-Wall -Wextra` : 165 (151 paramètres inutilisés, 11 `sign-comp
 - **Tâche 5** : libellé contenant un spécificateur ([%d] %d) → longueur retirée fausse (préexistant) ; ligne %x/ff fige le repli 0 ; pas de test d'une liste nommée « x » masquant le drapeau, ni de -0x10 / blancs avant préfixe
 - **Tâche 6** : (1) Load_configuration_from_file affecte active_config_name avant de trouver le profil → `gtkterm -c session` puis save_config_silent crée/empile des [session] parsecfg (nom réservé non refusé sur ce chemin) ; (2) enregistrer « Default » sur [default] renomme la section à la casse saisie (réutiliser cfgSectionNumberToName) ; (3) copie temporaire de .gtktermrc en 0666&umask (g_file_set_contents) au lieu d'écrire dans le fd 0600 ; (4) erreurs parsecfg citent le chemin temporaire, lignes décalées, échec tmp mal libellé ; (5) anciens profils nommés [Session]/[Window]/[Colors] désormais inaccessibles (à mentionner) ; (6) strip ignore l'échec d'écriture (doublon possible) ; (7) préexistant : `if(max == cfgParse(...))` ne détecte pas -1 (term_config.c:1085/1342)
 - **Tâche 7** : test M17 sauté sans affichage (piste broadway/xvfb) ; arguments enregistrés moins nombreux que les spécificateurs non testés ; taille de tab[4] superflue
-- **Tâche 8** : test « envois… » ne vérifie pas stub_get_shortcuts_thread (send_macro synchrone sur le thread Lua passerait) ; set_tap_func/unset_tap_func encore appelés depuis le thread Lua (préexistant) ; courses préexistantes lua_port_close vs port_read_cb/tcp_accept_cb, g_source_remove sur source déjà retirée ; famine possible de l'idle sous flux continu (priorité DEFAULT_IDLE) ; pas de garde contre run_on_main_sync appelé du thread principal ; fermeture de l'appli pendant run_on_main_sync → thread abandonné (pas d'interblocage) ; fuites sur erreur mémoire Lua (longjmp)
+- **Tâche 8** : test « envois… » ne vérifie pas stub_get_shortcuts_thread (send_macro synchrone sur le thread Lua passerait) ; set_tap_func/unset_tap_func encore appelés depuis le thread Lua (préexistant ; traité par le sous-projet 2 : le moteur Lua se connecte au signal `received` sur le fil principal) ; courses préexistantes lua_port_close vs port_read_cb/tcp_accept_cb, g_source_remove sur source déjà retirée ; famine possible de l'idle sous flux continu (priorité DEFAULT_IDLE) ; pas de garde contre run_on_main_sync appelé du thread principal ; fermeture de l'appli pendant run_on_main_sync → thread abandonné (pas d'interblocage) ; fuites sur erreur mémoire Lua (longjmp)
 - **Tâche 9** : descripteurs non fermés si un g_assert échoue après la création du répondeur ; ttyname (tampon statique) utilisé directement
 - **Tâche 10/11** : Set_status_message dépile encore le sommet (préexistant ; si un message temporaire est au sommet, l'ancien nom de port reste dessous, affichage correct) ; transfer_msg_id ne suit pas deux envois simultanés (inatteignable, modal) ; config_name non échappé dans un balisage Pango (term_config.c:1390, noms alphanumériques) ; fuite de logfile_default (préexistant)
 - **Tâche 12/13** : polling_timer_callback itère une copie des valeurs ; un rebuild déclenché par l'envoi libérerait les ps restants (préexistant, improbable) ; on_polling_mode_toggled avec btn NULL appelle update_button_appearance (tolérance à ps->button NULL non vérifiée, préexistant)
-- **Tâche 14/15** : autres écrivains de .gtktermrc (term_config.c save_config_silent/really_save_config via config_file_strip/restore) à vérifier pour le motif M12 ; écho local journalisé via put_hexadecimal (hors périmètre) ; get_config_file_path fuit (préexistant) ; message g_printerr non traduit
+- **Tâche 14/15** : autres écrivains de .gtktermrc (term_config.c save_config_silent/really_save_config via config_file_strip/restore) à vérifier pour le motif M12 ; écho local journalisé via put_hexadecimal (traité par le sous-projet 2 : l'écho vient de l'historique TX, le journal a son propre `GtRxTransform`) ; get_config_file_path fuit (préexistant) ; message g_printerr non traduit
 - **Tâche 16** : files.c chemins « current_buffer == NULL » et erreur d'écriture série affichent avant close_all (ré-entrée possible, préexistant) ; écriture partielle avec lf_found déclenche le délai trop tôt (préexistant)
 - **Tâche 17** : lua-syntax.sh sans .lua → glob littéral (échec franc) ; code 77 sans message
 - **Relecture finale** : journal Lua à G_PRIORITY_DEFAULT — un script qui journalise en boucle serrée peut figer le rafraîchissement (Stop reste opérant) ; gtkterm -c <inconnu> n'enregistre plus dans [inconnu] mais dans le profil précédent (voulu) ; lists_model fuit à chaque ouverture de la fenêtre des macros ; clé .ini sans valeur → entrée à libellé NULL (sentinelle) ; fuite g_path_get_dirname (load_macros_file_callback) ; traductions po/ à régénérer (msgid de l'aide modifié)
+- **Sous-projet 2** : journal dupliqué au rejeu de `set_view()` (suppression de `logging_set_suspended`) — traité par le sous-projet 2 (le journal est alimenté par le signal `received`, jamais par le rejeu de l'affichage).
+
+
+## Remarques mineures reportées par le sous-projet 2 (relectures par tâche et finale)
+
+Non bloquantes à la fusion (triage de la relecture finale de branche) ; à reprendre dans le sous-projet concerné.
+
+- **Historique** (`history.c`) : la capacité compte les octets utiles seulement ; en réception octet par octet le surcoût (en-tête + nœud de liste) porte le pire cas à ~10 Mo. Envisager une coalescence des enregistrements RX consécutifs. Cas `len == 0` et éviction multiple en un ajout non testés.
+- **Transformation** (`rx_transform.c`) : `cr_received` reste vrai si le CR/LF automatique est désactivé avec un CR en attente (parité avec l'ancien `put_chars`) ; cas de test supplémentaires possibles (CRCR + horodatage).
+- **Rendu** (`view_render.c`) : après une ligne d'écho « > », la `GtRxTransform` n'apprend pas le retour à la ligne : la ligne reçue suivante peut manquer son horodatage. Pas de test direct d'un envoi hexadécimal sur plusieurs lignes.
+- **Correspondance udev** (`device_match.c`) : pas de test « numéro différent mais chemin égal ».
+- **Transport** (`transport.c`) : `transport_accept_cb` cesse d'accepter sans événement sur EINVAL/EBADF et boucle sur `i18n_perror` en cas d'erreur persistante (EMFILE) — préexistant.
+- **Liaison** (`link.c`) : changer `reconnect-interval-ms` pendant la minuterie n'agit qu'au prochain démarrage ; « device removed » n'est jamais affiché ; après une ouverture échouée passée en reconnexion, décocher l'option affiche « — lost » pour un port jamais ouvert ; cocher l'option après un échec fait option décochée ne relance rien. Tests absents : reconnexion du client TCP, bascule de l'option pendant une tentative TCP, reconnexion du serveur. Fragilités des tests (`port_libre`, `g_dir_make_tmp` non vérifié, répertoire temporaire laissé en cas d'échec).
+- **Interface** : trois redessins de suite au rechargement d'une configuration ; « Clear scrollback » n'efface que VTE et un redessin ultérieur fait réapparaître le contenu (à trancher) ; `clear_display` déclarée deux fois (`interface.h`, `terminal_display.h`).
+- **Journal** (`logging.c`) : en pause, la transformation n'est pas nourrie ; l'état de ligne est périmé à la reprise.
+- **Fichiers** (`files.c`) : retour de `fwrite` non vérifié dans les sauvegardes (échec silencieux sur disque plein) ; écriture ASCII octet par octet ; chemin `current_buffer == NULL` de `ecriture` affiche avant de fermer (inatteignable) ; la minuterie de délai n'est pas retirée par `close_all` — préexistant.
+- **Macros** (`macro_panel.c`) : `update_button_label` ne libère pas le libellé alloué — préexistant.
+- **Suite graphique** (`tests/gui/`) : lente (~3 à 4 min, chemins tapés touche par touche) ; `GTKTERM_GUARD_REAL_HOME` non vérifié non vide ; garde par préfixes littéraux ; processus orphelins possibles après un dépassement de délai (port broadway fixe 8117) ; `timeout` et `pgrep` absents ne donnent pas un saut.
