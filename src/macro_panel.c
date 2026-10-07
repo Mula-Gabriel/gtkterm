@@ -110,7 +110,7 @@ save_arg_from_widget(GtkWidget *widget)
 	macro_set_arg(macro_index, arg_index, val);
 	g_free(val);
 	macros_file_save(NULL);
-	save_config_silent();
+	config_remember_macros_file();
 }
 
 	static void on_list_action_button_clicked(GtkWidget *widget, gpointer data)

@@ -137,7 +137,6 @@ GtkTextIter iter;
 GList *hex_history = NULL;  // To store the history of entered texts
 GList *current_hex = NULL;  // Pointer to the current item in history
 
-extern struct configuration_port config;
 
 /* Local functions prototype */
 void signals_send_break_callback(GtkAction *action, gpointer data);
@@ -916,7 +915,7 @@ void help_about_callback(GtkAction *action, gpointer data)
 	gtk_widget_set_margin_bottom(url_box, 6);
 	GtkWidget *url_label = gtk_label_new(_("Update source:"));
 	GtkWidget *url_entry = gtk_entry_new();
-	gtk_entry_set_text(GTK_ENTRY(url_entry), config.update_url);
+	gtk_entry_set_text(GTK_ENTRY(url_entry), settings.update_url != NULL ? settings.update_url : "");
 	gtk_entry_set_width_chars(GTK_ENTRY(url_entry), 50);
 	gtk_box_pack_start(GTK_BOX(url_box), url_label, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(url_box), url_entry, TRUE, TRUE, 0);
@@ -935,9 +934,8 @@ void help_about_callback(GtkAction *action, gpointer data)
 	}
 	while(resp == 1);
 
-	/* Save the URL back to config even if dialog was just closed. */
-	g_strlcpy(config.update_url, gtk_entry_get_text(GTK_ENTRY(url_entry)), sizeof(config.update_url));
-	save_config_silent();
+	/* Écriture partielle de [general] : l'URL n'est enregistrée que si elle a changé (rien à la simple fermeture de la boîte) */
+	config_save_update_url(gtk_entry_get_text(GTK_ENTRY(url_entry)));
 
 	gtk_widget_destroy(dialog);
 	if(logo != NULL)
@@ -1001,7 +999,7 @@ void signals_open_port(GtkAction *action, gpointer data)
 gboolean control_signals_read(void)
 {
 	int state;
-	gboolean is_serial = (config.transport_type == TRANSPORT_SERIAL);
+	gboolean is_serial = (config.transport == TRANSPORT_SERIAL);
 
 	if(!is_serial)
 	{
@@ -1091,7 +1089,7 @@ void interface_open_port(void)
 {
 	TransportParams params;
 
-	config_to_transport_params(&config, &params);
+	gt_profile_to_transport_params(&config, &params);
 	gt_link_open(gt_link_get_default(), &params, NULL);	/* un échec émet open-failed : une boîte de dialogue */
 	transport_params_clear(&params);
 }

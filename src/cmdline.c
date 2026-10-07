@@ -29,7 +29,6 @@
 #include <config.h>
 #include <glib/gi18n.h>
 
-extern struct configuration_port config;
 
 void display_help(void)
 {
@@ -105,18 +104,18 @@ int read_command_line(int argc, char **argv)
 			break;
 
 		case 's':
-			config.vitesse = atoi(optarg);
+			config.baudrate = atoi(optarg);
 			break;
 
 		case 'a':
 			if(!strcmp(optarg, "odd"))
-				config.parite = GT_PARITY_ODD;
+				config.parity = GT_PARITY_ODD;
 			else if(!strcmp(optarg, "even"))
-				config.parite = GT_PARITY_EVEN;
+				config.parity = GT_PARITY_EVEN;
 			break;
 
 		case 't':
-			config.stops = atoi(optarg);
+			config.stopbits = atoi(optarg);
 			break;
 
 		case 'b':
@@ -128,24 +127,24 @@ int read_command_line(int argc, char **argv)
 			break;
 
 		case 'p':
-			g_strlcpy(config.port, optarg, sizeof(config.port));
+			gt_profile_set_string(&config.port, optarg);
 			break;
 
 		case 'w':
 			if(!strcmp(optarg, "Xon"))
-				config.flux = GT_FLOW_XONXOFF;
+				config.flow = GT_FLOW_XONXOFF;
 			else if(!strcmp(optarg, "RTS"))
-				config.flux = GT_FLOW_RTSCTS;
+				config.flow = GT_FLOW_RTSCTS;
 			else if(!strcmp(optarg, "RS485"))
-				config.flux = GT_FLOW_RS485;
+				config.flow = GT_FLOW_RS485;
 			break;
 
 		case 'd':
-			config.delai = atoi(optarg);
+			config.wait_delay_ms = atoi(optarg);
 			break;
 
 		case 'r':
-			config.car = (guchar)*optarg;
+			config.wait_char = (guchar)*optarg;
 			break;
 
 		case 'e':
@@ -153,30 +152,30 @@ int read_command_line(int argc, char **argv)
 			break;
 
 		case 'L':
-			config.disable_port_lock = TRUE;
+			config.lock_port = FALSE;
 			break;
 
 		case 'x':
-			config.rs485_rts_time_before_transmit = atoi(optarg);
+			config.rs485_before_ms = atoi(optarg);
 			break;
 
 		case 'y':
-			config.rs485_rts_time_after_transmit = atoi(optarg);
+			config.rs485_after_ms = atoi(optarg);
 			break;
 
 		case 'T':
 			if(!strcmp(optarg, "tcp-client"))
-				config.transport_type = TRANSPORT_TCP_CLIENT;
+				config.transport = TRANSPORT_TCP_CLIENT;
 			else if(!strcmp(optarg, "tcp-server"))
-				config.transport_type = TRANSPORT_TCP_SERVER;
+				config.transport = TRANSPORT_TCP_SERVER;
 			break;
 
 		case 'H':
-			g_strlcpy(config.socket_host, optarg, sizeof(config.socket_host));
+			gt_profile_set_string(&config.host, optarg);
 			break;
 
 		case 'P':
-			g_strlcpy(config.socket_port, optarg, sizeof(config.socket_port));
+			gt_profile_set_string(&config.tcp_port, optarg);
 			break;
 
 		case 'h':

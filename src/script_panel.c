@@ -54,8 +54,8 @@ static gboolean sc_has_custom_fg = FALSE;
 
 static void set_default_colors(void)
 {
-    sc.bg = term_conf.background_color;
-    sc.fg = term_conf.foreground_color;
+    config_color_to_rgba(&config.background, &sc.bg);
+    config_color_to_rgba(&config.foreground, &sc.fg);
 
     gdouble lum = 0.299 * sc.bg.red
                 + 0.587 * sc.bg.green
@@ -90,13 +90,8 @@ static void load_script_colors(void)
 {
     set_default_colors();
 
-    const gchar *path = get_config_file_path();
-    GKeyFile *kf  = g_key_file_new();
-
-    if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)) {
-        g_key_file_free(kf);
-        return;
-    }
+    /* Groupes [colors], [layout], [session] du magasin de configuration */
+    GKeyFile *kf = gt_config_store_get_key_file(config_get_store());
 
 #define LOAD_COLOR(field, key) do {                               \
     gchar *_s = g_key_file_get_string(kf, "colors", key, NULL);  \
@@ -133,29 +128,13 @@ static void load_script_colors(void)
     /* Session */
     g_free(current_script_path);
     current_script_path = g_key_file_get_string(kf, "session", "script_path", NULL);
-
-    g_key_file_free(kf);
 }
 
 static void save_script_colors(void)
 {
-    const gchar *path = get_config_file_path();
-    GKeyFile *kf   = g_key_file_new();
-    GError *lerr   = NULL;
-
-    /* Fichier présent mais illisible (M12) : ne rien écrire, sinon il serait remplacé par les seules sections [colors], [layout] et [session]. */
-    if (!g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, &lerr)) {
-        if (!g_error_matches(lerr, G_FILE_ERROR, G_FILE_ERROR_NOENT)) {
-            g_printerr("Cannot save script state: cannot read %s: %s\n", path, lerr->message);
-            g_error_free(lerr);
-            g_key_file_free(kf);
-            /* Comme après une sauvegarde : les couleurs de la session restent celles de l'éditeur */
-            sc_has_custom_bg = TRUE;
-            sc_has_custom_fg = TRUE;
-            return;
-        }
-        g_clear_error(&lerr);
-    }
+    /* Relire avant d'écrire : un profil enregistré par une autre instance depuis le démarrage n'est pas écrasé */
+    config_reload_store();
+    GKeyFile *kf = gt_config_store_get_key_file(config_get_store());
 
 #define SAVE_COLOR(field, key) do {                          \
     gchar *_s = gdk_rgba_to_string(&sc.field);               \
@@ -191,15 +170,9 @@ static void save_script_colors(void)
     else
         g_key_file_remove_key(kf, "session", "script_path", NULL);
 
-    gsize  length;
-    gchar *data = g_key_file_to_data(kf, &length, NULL);
-    GError *err = NULL;
-    if (!g_file_set_contents(path, data, (gssize)length, &err)) {
-        g_printerr("Cannot save script state: %s\n", err ? err->message : "?");
-        g_clear_error(&err);
-    }
-    g_free(data);
-    g_key_file_free(kf);
+    /* Magasin en lecture seule (fichier illisible) : rien à écrire, l'erreur a déjà été montrée au démarrage */
+    if (!gt_config_store_is_read_only(config_get_store()))
+        config_save_store(FALSE);
 }
 
 /* ------------------------------------------------------------------ */
@@ -763,14 +736,14 @@ void script_panel_save_state(void)
     save_script_colors();
 }
 
-/* Called after term_conf is fully loaded so bg/fg colors are correct. */
+/* Called after config is fully loaded so bg/fg colors are correct. */
 void script_panel_refresh_colors(void)
 {
     if (script_panel == NULL)
         return;
     if (!sc_has_custom_bg)
-        sc.bg = term_conf.background_color;
+        config_color_to_rgba(&config.background, &sc.bg);
     if (!sc_has_custom_fg)
-        sc.fg = term_conf.foreground_color;
+        config_color_to_rgba(&config.foreground, &sc.fg);
     apply_color_scheme();
 }
