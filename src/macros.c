@@ -95,6 +95,14 @@ macros_get_poller (void)
   return poller;
 }
 
+/* gt_macro_poller_free arrête tout sans rappel d'état (gt_macro_poller_reset en émettrait vers des boutons peut-être détruits) */
+void
+macros_shutdown (void)
+{
+  gt_macro_poller_free (poller);
+  poller = NULL;
+}
+
 gboolean
 macros_send (guint id, const gchar *const *args, gint n_args)
 {

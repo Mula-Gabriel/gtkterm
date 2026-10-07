@@ -19,5 +19,6 @@ extern GtkWidget *macro_notebook;
 void create_macro_panel     (void);
 void rebuild_macro_buttons  (void);
 void macro_panel_polling_changed(guint id, gboolean running);	/* rappel d'état de l'ordonnanceur ; identifiant inconnu ou sans bouton toléré */
+void macro_panel_shutdown(void);	/* fermeture de GTKTerm (après gtk_main) : minuterie de clignotement retirée, boutons oubliés */
 
 #endif

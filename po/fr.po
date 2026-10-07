@@ -1024,3 +1024,39 @@ msgstr "%s n'est pas un fichier de macros de GTKTerm"
 #, c-format
 msgid "%s was not overwritten: it is not in the current macros format and its backup %s already exists with a different content"
 msgstr "%s n'a pas été écrasé : il n'est pas au format actuel des macros et sa copie %s existe déjà avec un contenu différent"
+
+#: ../src/script_panel.c
+msgid "[Script finished]\n"
+msgstr "[Script terminé]\n"
+
+#: ../src/script_panel.c
+msgid "[Script stopped]\n"
+msgstr "[Script arrêté]\n"
+
+#: ../src/script_panel.c
+msgid "[Script finished with an error]\n"
+msgstr "[Script terminé avec une erreur]\n"
+
+#: ../src/script_engine.c
+#, c-format
+msgid "Script exited with status %lld"
+msgstr "Script terminé avec le code %lld"
+
+#: ../src/script_engine.c
+#, c-format
+msgid "Port %d: receive buffer full, oldest data dropped"
+msgstr "Port %d : tampon de réception plein, données les plus anciennes jetées"
+
+#: ../src/script_engine.c
+#, c-format
+msgid "[%zu bytes of log output dropped]"
+msgstr "[%zu octets de journal jetés]"
+
+#: ../src/script_engine.c
+#, c-format
+msgid "Lua error: %s"
+msgstr "Erreur Lua : %s"
+
+#: ../src/script_engine.c
+msgid "Script already running."
+msgstr "Un script est déjà en cours."

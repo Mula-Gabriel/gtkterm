@@ -83,6 +83,8 @@ gt_macro_poller_free(GtMacroPoller *poller)
 void
 gt_macro_poller_set_set(GtMacroPoller *poller, GtMacroSet *set)
 {
+	if(poller == NULL)
+		return;
 	gt_macro_poller_reset(poller);
 	poller->set = set;
 }
@@ -90,9 +92,13 @@ gt_macro_poller_set_set(GtMacroPoller *poller, GtMacroSet *set)
 gboolean
 gt_macro_poller_start(GtMacroPoller *poller, guint id)
 {
-	const GtMacro *m = gt_macro_set_find(poller->set, id);
+	const GtMacro *m;
 	Running *r;
 
+	/* Après macros_shutdown, l'ordonnanceur n'existe plus : plus rien à démarrer */
+	if(poller == NULL)
+		return FALSE;
+	m = gt_macro_set_find(poller->set, id);
 	if(m == NULL || !m->polling || !gt_macro_is_sendable(m))
 		return FALSE;
 	if(gt_macro_poller_is_running(poller, id))
@@ -111,13 +117,15 @@ gt_macro_poller_start(GtMacroPoller *poller, guint id)
 void
 gt_macro_poller_stop(GtMacroPoller *poller, guint id)
 {
-	if(g_hash_table_remove(poller->running, GUINT_TO_POINTER(id)))
+	if(poller != NULL && g_hash_table_remove(poller->running, GUINT_TO_POINTER(id)))
 		notify(poller, id, FALSE);
 }
 
 gboolean
 gt_macro_poller_toggle(GtMacroPoller *poller, guint id)
 {
+	if(poller == NULL)
+		return FALSE;
 	if(gt_macro_poller_is_running(poller, id))
 	{
 		gt_macro_poller_stop(poller, id);
@@ -142,7 +150,11 @@ void
 gt_macro_poller_reset(GtMacroPoller *poller)
 {
 	/* Copie des clés : les rappels d'état peuvent toucher à l'ordonnanceur */
-	GList *ids = g_hash_table_get_keys(poller->running);
+	GList *ids;
+
+	if(poller == NULL)
+		return;
+	ids = g_hash_table_get_keys(poller->running);
 
 	for(GList *l = ids; l != NULL; l = l->next)
 		gt_macro_poller_stop(poller, GPOINTER_TO_UINT(l->data));
@@ -152,8 +164,11 @@ gt_macro_poller_reset(GtMacroPoller *poller)
 void
 gt_macro_poller_sync(GtMacroPoller *poller)
 {
-	GList *ids = g_hash_table_get_keys(poller->running);
+	GList *ids;
 
+	if(poller == NULL)
+		return;
+	ids = g_hash_table_get_keys(poller->running);
 	for(GList *l = ids; l != NULL; l = l->next)
 	{
 		guint id = GPOINTER_TO_UINT(l->data);
@@ -170,9 +185,13 @@ gt_macro_poller_sync(GtMacroPoller *poller)
 void
 gt_macro_poller_period_changed(GtMacroPoller *poller, guint id)
 {
-	Running *r = g_hash_table_lookup(poller->running, GUINT_TO_POINTER(id));
-	const GtMacro *m = gt_macro_set_find(poller->set, id);
+	Running *r;
+	const GtMacro *m;
 
+	if(poller == NULL)
+		return;
+	r = g_hash_table_lookup(poller->running, GUINT_TO_POINTER(id));
+	m = gt_macro_set_find(poller->set, id);
 	if(r != NULL && m != NULL && m->polling_period_ms != r->period_ms)
 		restart_timer(r, m->polling_period_ms);
 }

@@ -6,6 +6,8 @@
 
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <netdb.h>
+#include <string.h>
 
 /* Conclut un cas de test. Messages en ASCII : les tests tournent en locale C et GLib
  * remplacerait tout caractère non ASCII par « ? » dans la sortie TAP.
@@ -65,6 +67,37 @@ test_rmdir(const gchar *dir)
 	}
 	g_dir_close(d);
 	g_rmdir(dir);
+}
+
+/* Résolution de « localhost » rendue déterministe (tests des adresses essayées l'une après l'autre) : ::1 d'abord, puis 127.0.0.1,
+ * quelle que soit la configuration de la machine. real : la vraie getaddrinfo (__real_getaddrinfo). Rend FALSE (rien fait) pour
+ * tout autre nom. Les deux résultats sont chaînés : freeaddrinfo libère l'ensemble. */
+static inline gboolean
+test_localhost_deterministe(int (*real)(const char *, const char *, const struct addrinfo *, struct addrinfo **),
+                            const char *noeud, const char *service, const struct addrinfo *indices, struct addrinfo **res, int *ret)
+{
+	struct addrinfo *premier = NULL, *second = NULL, *fin;
+
+	if(noeud == NULL || strcmp(noeud, "localhost") != 0)
+		return FALSE;
+	real("::1", service, indices, &premier);
+	*ret = real("127.0.0.1", service, indices, &second);
+	if(*ret != 0)
+	{
+		if(premier != NULL)
+			freeaddrinfo(premier);
+		return TRUE;
+	}
+	if(premier == NULL)
+		*res = second;
+	else
+	{
+		for(fin = premier; fin->ai_next != NULL; fin = fin->ai_next)
+			;
+		fin->ai_next = second;
+		*res = premier;
+	}
+	return TRUE;
 }
 
 #endif

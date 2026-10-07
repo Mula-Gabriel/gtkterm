@@ -698,7 +698,7 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 	port_combo_bold_links(Combo);
 
 	prev = "";
-	for (i = 0; i < ports->len; i++)
+	for (i = 0; i < (int)ports->len; i++)
 	{
 		char *curr = ports->pdata[i];
 		struct stat st;
@@ -706,7 +706,7 @@ void Config_Port_Fenetre(GtkAction *action, gpointer data)
 			gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(Combo), (lstat(curr, &st) == 0 && S_ISLNK(st.st_mode)) ? PORT_ID_LINK : NULL, curr);
 		prev = curr;
 	}
-	for (i = 0; i < ports->len; i++)
+	for (i = 0; i < (int)ports->len; i++)
 		g_free(ports->pdata[i]);
 	g_ptr_array_free(ports, TRUE);
 

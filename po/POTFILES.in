@@ -16,6 +16,7 @@ src/macros.c
 src/macros_format.c
 src/macros_list.c
 src/profile.c
+src/script_engine.c
 src/script_panel.c
 src/search.c
 src/term_config.c

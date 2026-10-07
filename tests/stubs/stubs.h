@@ -16,5 +16,6 @@ GThread     *stub_send_thread(void);
 GtSendOrigin stub_last_origin(void);
 void         stub_inject_rx(const gchar *data, guint len);
 void         stub_link_set_write_fails(gboolean fails);
+void         stub_link_set_state(gint state);	/* GtLinkState rendu par gt_link_get_state ; GT_LINK_OPEN après stub_reset */
 
 #endif

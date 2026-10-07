@@ -73,6 +73,7 @@
 #include "interface.h"
 #include "macro_panel.h"
 #include "script_panel.h"
+#include "script_engine.h"
 #include "macros.h"
 #include "terminal_display.h"
 #include "link.h"
@@ -145,7 +146,7 @@ void signals_toggle_RTS_callback(GtkAction *action, gpointer data);
 void signals_close_port(GtkAction *action, gpointer data);
 void signals_open_port(GtkAction *action, gpointer data);
 void help_about_callback(GtkAction *action, gpointer data);
-gboolean control_signals_read(void);
+gboolean control_signals_read(gpointer user_data);
 void echo_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
 void Autoreconnect_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
 void CR_LF_auto_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
@@ -167,6 +168,25 @@ void edit_select_all_callback(GtkWidget *widget, gpointer data);
 void set_saved_data(GtkWidget *widget, gboolean direction);
 void update_hex_history(GtkWidget *widget);
 gboolean on_key_press(GtkWidget *widget, GdkEventKey *event, gpointer user_data);
+
+static guint control_signals_source = 0;	/* relevé périodique des lignes modem (voyants de la barre d'état) */
+
+/* Fenêtre détruite (bouton « Fermer » de la barre de titre) : gtk_main_quit ne rend la main qu'après l'itération en cours, dont les
+   sources déjà prêtes sont encore distribuées. Aucune ne doit plus atteindre les widgets détruits : gestionnaires de la liaison
+   (réception, état), voyants, polling et clignotement des macros, envois de macro demandés par un script (refusés dès l'arrêt). */
+static void on_main_window_destroy(GtkWidget *widget, gpointer user_data)
+{
+	interface_disconnect_link(gt_link_get_default());
+	if(control_signals_source != 0)
+	{
+		g_source_remove(control_signals_source);
+		control_signals_source = 0;
+	}
+	macro_panel_shutdown();
+	macros_shutdown();
+	script_engine_stop();
+	gtk_main_quit();
+}
 
 static gboolean on_window_delete_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
@@ -750,7 +770,7 @@ void create_main_window(void)
 	shortcuts = gtk_accel_group_new();
 	gtk_window_add_accel_group(GTK_WINDOW(Fenetre), GTK_ACCEL_GROUP(shortcuts));
 
-	g_signal_connect(GTK_WIDGET(Fenetre), "destroy", (GCallback)gtk_main_quit, NULL);
+	g_signal_connect(GTK_WIDGET(Fenetre), "destroy", G_CALLBACK(on_main_window_destroy), NULL);
 	g_signal_connect(GTK_WIDGET(Fenetre), "delete-event", G_CALLBACK(on_window_delete_event), NULL);
 
 	Set_window_title("GTKTerm");
@@ -869,7 +889,7 @@ void create_main_window(void)
 
 	g_signal_connect_after(GTK_WIDGET(display), "commit", G_CALLBACK(Got_Input), NULL);
 
-	g_timeout_add(POLL_DELAY, (GSourceFunc)control_signals_read, NULL);
+	control_signals_source = g_timeout_add(POLL_DELAY, control_signals_read, NULL);
 
 	gtk_window_set_default_size(GTK_WINDOW(Fenetre), 750, 550);
 	gboolean script_was_visible = FALSE;
@@ -996,7 +1016,7 @@ void signals_open_port(GtkAction *action, gpointer data)
 	interface_open_port();
 }
 
-gboolean control_signals_read(void)
+gboolean control_signals_read(gpointer user_data)
 {
 	int state;
 	gboolean is_serial = (config.transport == TRANSPORT_SERIAL);

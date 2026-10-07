@@ -342,6 +342,25 @@ test_nouveau_jeu(void)
 	gt_macro_set_free(autre);
 }
 
+/* Après macros_shutdown, l'ordonnanceur est NULL : toutes les fonctions qui le modifient (ou le lisent) le tolèrent */
+static void
+test_ordonnanceur_nul(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+
+	g_assert_false(gt_macro_poller_start(NULL, 1));
+	g_assert_false(gt_macro_poller_toggle(NULL, 1));
+	gt_macro_poller_stop(NULL, 1);
+	gt_macro_poller_reset(NULL);
+	gt_macro_poller_sync(NULL);
+	gt_macro_poller_period_changed(NULL, 1);
+	gt_macro_poller_set_set(NULL, set);
+	g_assert_false(gt_macro_poller_is_running(NULL, 1));
+	g_assert_cmpuint(gt_macro_poller_running_count(NULL), ==, 0);
+	gt_macro_poller_free(NULL);
+	gt_macro_set_free(set);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -358,5 +377,6 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_poller/arret-pendant-envoi-immediat", test_arret_pendant_envoi_immediat);
 	g_test_add_func("/macro_poller/free-sans-rappel", test_free_sans_rappel);
 	g_test_add_func("/macro_poller/nouveau-jeu", test_nouveau_jeu);
+	g_test_add_func("/macro_poller/ordonnanceur-nul", test_ordonnanceur_nul);
 	return g_test_run();
 }

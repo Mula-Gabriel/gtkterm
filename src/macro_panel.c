@@ -163,6 +163,19 @@ static void update_blink_timer(void)
 	}
 }
 
+/* Fermeture de GTKTerm : les boutons sont peut-être déjà détruits (fenêtre fermée par la barre de titre) ; plus de clignotement ni de
+   pointeur vers eux */
+void macro_panel_shutdown(void)
+{
+	if (blink_source != 0)
+	{
+		g_source_remove(blink_source);
+		blink_source = 0;
+	}
+	if (macro_button_table != NULL)
+		g_hash_table_remove_all(macro_button_table);
+}
+
 void macro_panel_polling_changed(guint id, gboolean running)
 {
 	if (macro_button_table == NULL)

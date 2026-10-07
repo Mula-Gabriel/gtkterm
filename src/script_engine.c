@@ -3,67 +3,71 @@
 /*           GTKTerm Software                                          */
 /*                                                                     */
 /*   Purpose                                                           */
-/*      Lua 5.4 scripting engine for GTKTerm                          */
-/*      Provides serial/TCP port control, pattern matching,            */
-/*      macro invocation, CSV logging from Lua scripts.               */
+/*      Lua 5.4 scripting engine for GTKTerm                           */
+/*      Ports Lua sur GtScriptPort / GtTransport (sous-projet 5),      */
+/*      motifs, macros, journal CSV.                                   */
 /***********************************************************************/
 
 #include <config.h>
 #include <glib.h>
 #include <glib/gi18n.h>
-#include <gtk/gtk.h>
-#include <gio/gio.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <locale.h>
-#include <termios.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/socket.h>
 
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
 
 #include "script_engine.h"
+#include "script_port.h"
+#include "rx_queue.h"
 #include "link.h"
 #include "macros.h"
 #include "macros_format.h"
 #include "macros_list.h"
 
-#define MAX_LUA_PORTS 16
-#define RX_BUF_MAX    (256 * 1024)
+#define MAX_LUA_PORTS      16
+#define DEFAULT_TIMEOUT_MS 5000
+#define MAX_TIMEOUT_MS     (24LL * 3600 * 1000)            /* délais bornés à 24 h : ms * 1000 ne déborde jamais */
+#define SEND_RETRY_US      (2 * G_TIME_SPAN_MILLISECOND)   /* pause entre deux essais d'envoi sans progrès */
+#define CONNECT_POLL_US    (5 * G_TIME_SPAN_MILLISECOND)   /* relevé de l'état pendant l'attente de connexion */
+#define STOP_POLL_US       (20 * G_TIME_SPAN_MILLISECOND)  /* l'arrêt est vu au moins toutes les 20 ms */
+#define HOOK_COUNT          1000                            /* crochet d'arrêt toutes les 1000 instructions */
+#define LOG_MAX_PENDING     (1024 * 1024)                   /* journal en attente au plus 1 Mio */
+#define LOG_FLUSH_DELAY_MS  20                              /* regroupement du journal : un vidage au plus toutes les 20 ms */
+#define SHUTDOWN_TIMEOUT_US (3 * G_USEC_PER_SEC)            /* fermeture de GTKTerm : 3 s au plus pour le thread Lua */
+#define DRAIN_POLL_US       (5 * G_TIME_SPAN_MILLISECOND)   /* vidange série avant fermeture : relevé toutes les 5 ms */
+#define DRAIN_MARGIN_US     (500 * G_TIME_SPAN_MILLISECOND) /* vidange : temps d'émission des octets en attente + 500 ms */
+#define DRAIN_MAX_US        (2 * G_USEC_PER_SEC)            /* vidange : 2 s au plus */
+#define DRAIN_FIFO_BYTES    64                              /* vidange : FIFO matérielle de l'UART / tampons USB, hors TIOCOUTQ */
 
-typedef enum { PORT_NONE, PORT_SERIAL, PORT_TCP_CLIENT, PORT_TCP_SERVER } PortType;
+/* Règle : le thread Lua ne touche ni GTK, ni un transport, ni la liaison. Il n'accède qu'aux files (GtRxQueue, verrouillées par
+ * rx_queue.c lui-même) et à l'état atomique des ports, et fait exécuter tout le reste sur le thread principal par
+ * run_on_main_sync. Il ne tient jamais le verrou d'une file pendant un run_on_main_sync : le thread principal pousse dans ces
+ * files (interblocage sinon). */
 
-typedef struct {
-    int           fd;
-    int           listen_fd;
-    PortType      type;
-    GIOChannel   *chan_in;
-    GIOChannel   *chan_err;
-    guint         watch_in;
-    guint         watch_err;
-    GMutex        mutex;
-    GString      *rx_buf;
-    gboolean      open;
-    /* serial params */
-    int           baudrate;
-    int           bits;
-    int           stops;
-    int           parity;   /* 0=none 1=odd 2=even */
-    int           flow;     /* 0=none 1=xon/xoff 2=rts/cts */
-} lua_port_t;
-
-static lua_port_t  ports[MAX_LUA_PORTS];
-static lua_State  *L_global = NULL;
-static GThread    *lua_thread = NULL;
-static volatile gboolean stop_requested = FALSE;
-static GMutex      engine_mutex;
+/* Table des ports Lua : lue et écrite par le thread Lua seulement (aucun lecteur ailleurs, donc ni verrou ni atomique) ; indice 0
+ * inutilisé (le port 0 est la liaison). */
+static GtScriptPort *ports[MAX_LUA_PORTS];
+/* Débordement déjà signalé pendant l'exécution en cours, par port (thread Lua ; remis à zéro au lancement). */
+static gboolean      overflow_reported[MAX_LUA_PORTS];
+/* Port 0 : réception de la liaison, alimentée par le signal « received » sur le thread principal. */
+static GtRxQueue    *main_queue = NULL;
+static GThread      *lua_thread = NULL;
+static GMutex        engine_mutex;
+static gint          stop_requested = 0;   /* atomique : « Stop » */
+static gint          exit_requested = 0;   /* atomique : os.exit appelé (stop_requested est alors posé aussi) */
+static lua_Integer   exit_status = 0;      /* code d'os.exit, jamais tronqué (écrit et lu par le thread Lua seulement) */
+/* Pauses interruptibles du thread Lua (sleep, attente de connexion, reprises d'envoi), réveillées par script_engine_stop. */
+static GMutex        pause_mutex;
+static GCond         pause_cond;
+/* Objet d'erreur de l'arrêt : une adresse propre au moteur, poussée comme valeur légère. */
+static const char    stop_sentinel = 0;
 
 static ScriptLogFunc  log_func  = NULL;
 static gpointer       log_data  = NULL;
@@ -71,67 +75,197 @@ static ScriptDoneFunc done_func = NULL;
 static gpointer       done_data = NULL;
 
 /* ------------------------------------------------------------------ */
-/* Logging helpers                                                     */
+/* Journal                                                            */
 /* ------------------------------------------------------------------ */
 
-typedef struct { char *text; } LogIdleData;
+/* Le texte du thread Lua et des avertissements du moteur s'accumule dans un tampon verrouillé ; une seule source à la fois, à
+ * G_PRIORITY_DEFAULT_IDLE (après le rafraîchissement GTK) et 20 ms après le premier ajout, remet tout le tampon en un appel. */
+static GMutex   log_mutex;
+static GString *log_pending = NULL;     /* texte en attente (log_mutex) */
+static gsize    log_dropped = 0;        /* octets jetés au-delà du plafond depuis le dernier vidage (log_mutex) */
+static guint    log_source_id = 0;      /* source de vidage programmée, 0 sinon (log_mutex) */
 
-static gboolean log_idle_cb(gpointer user_data)
+static void log_flush(void);
+
+static gboolean log_flush_cb(gpointer user_data)
 {
-    LogIdleData *d = user_data;
-    if (log_func)
-        log_func(d->text, log_data);
-    g_free(d->text);
-    g_free(d);
+    g_mutex_lock(&log_mutex);
+    log_source_id = 0;
+    g_mutex_unlock(&log_mutex);
+    log_flush();
     return G_SOURCE_REMOVE;
 }
 
-static void engine_log(const char *fmt, ...)
+/* Ajoute text (len octets) à out, chaque octet nul écrit « \0 » : il couperait tout le lot remis à la fonction de journal. */
+static void append_escaped(GString *out, const char *text, gsize len)
+{
+    const char *p = text, *end = text + len;
+
+    while (p < end) {
+        const char *nul = memchr(p, '\0', (size_t)(end - p));
+        const char *stop = nul != NULL ? nul : end;
+        g_string_append_len(out, p, (gssize)(stop - p));
+        if (nul == NULL)
+            break;
+        g_string_append(out, "\\0");
+        p = nul + 1;
+    }
+}
+
+/* N'importe quel thread : ajoute au tampon et programme un vidage s'il n'y en a pas. Plafond de 1 Mio comparé à la taille après
+ * échappement des octets nuls (le tampon ne le dépasse jamais) ; au-delà, les octets du texte sont comptés comme jetés. */
+static void log_append_len(const char *text, gsize len)
+{
+    gsize escaped = len;
+
+    for (const char *p = text; (p = memchr(p, '\0', (size_t)(text + len - p))) != NULL; p++)
+        escaped++;
+    g_mutex_lock(&log_mutex);
+    if (log_pending == NULL)
+        log_pending = g_string_new(NULL);
+    if (log_pending->len + escaped > LOG_MAX_PENDING)
+        log_dropped += len;
+    else
+        append_escaped(log_pending, text, len);
+    if (log_source_id == 0)
+        log_source_id = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, LOG_FLUSH_DELAY_MS, log_flush_cb, NULL, NULL);
+    g_mutex_unlock(&log_mutex);
+}
+
+/* Thread principal : tout le texte en attente en un appel (UTF-8 rendu valide), puis la ligne de pertes éventuelle. */
+static void log_flush(void)
+{
+    GString *text = NULL;
+    gsize dropped;
+
+    g_mutex_lock(&log_mutex);
+    if (log_pending != NULL && log_pending->len > 0) {
+        text = log_pending;
+        log_pending = g_string_new(NULL);
+    }
+    dropped = log_dropped;
+    log_dropped = 0;
+    g_mutex_unlock(&log_mutex);
+
+    if (text != NULL) {
+        if (log_func) {
+            gchar *valid = g_utf8_make_valid(text->str, (gssize)text->len);
+            log_func(valid, log_data);
+            g_free(valid);
+        }
+        g_string_free(text, TRUE);
+    }
+    if (dropped > 0 && log_func) {
+        gchar *msg = g_strdup_printf(_("[%zu bytes of log output dropped]"), dropped);
+        gchar *line = g_strconcat(msg, "\n", NULL);
+        log_func(line, log_data);
+        g_free(line);
+        g_free(msg);
+    }
+}
+
+static void engine_log_line(const char *fmt, ...) G_GNUC_PRINTF(1, 2);
+/* Une ligne du moteur (avertissement, erreur) : texte formaté suivi d'une fin de ligne, n'importe quel thread. */
+static void engine_log_line(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
     char *text = g_strdup_vprintf(fmt, ap);
     va_end(ap);
-
-    LogIdleData *d = g_new(LogIdleData, 1);
-    d->text = text;
-    g_idle_add_full(G_PRIORITY_DEFAULT, log_idle_cb, d, NULL);
+    char *line = g_strconcat(text, "\n", NULL);
+    log_append_len(line, strlen(line));
+    g_free(line);
+    g_free(text);
 }
 
 /* ------------------------------------------------------------------ */
-/* Exécution synchrone sur le thread principal                         */
+/* Arrêt et pauses interruptibles                                     */
 /* ------------------------------------------------------------------ */
 
-/* Le thread Lua ne touche jamais GTK ni l'état du thread principal (macros, listes, port principal) : il y fait exécuter
- * func et attend sa fin (C10, C11). La source est ajoutée au contexte par défaut, que seul le thread principal fait tourner. */
+/* Lève l'erreur d'arrêt (valeur légère propre au moteur). Ne rend jamais la main : aucune allocation C ne doit être en cours. */
+static int raise_stop(lua_State *L)
+{
+    lua_pushlightuserdata(L, (void *)&stop_sentinel);
+    return lua_error(L);
+}
+
+/* Attend au plus us microsecondes ; FALSE si l'arrêt est demandé (avant ou pendant l'attente). script_engine_stop réveille
+ * l'attente ; la relecture toutes les 20 ms n'est qu'une sécurité. */
+static gboolean pause_interruptible(gint64 us)
+{
+    gint64 deadline = g_get_monotonic_time() + MAX(us, 0);
+    gboolean stopped;
+
+    g_mutex_lock(&pause_mutex);
+    while (!(stopped = g_atomic_int_get(&stop_requested)) && g_get_monotonic_time() < deadline)
+        g_cond_wait_until(&pause_cond, &pause_mutex, MIN(deadline, g_get_monotonic_time() + STOP_POLL_US));
+    g_mutex_unlock(&pause_mutex);
+    return !stopped;
+}
+
+/* ------------------------------------------------------------------ */
+/* Exécution synchrone sur le thread principal                        */
+/* ------------------------------------------------------------------ */
+
+/* Le thread Lua ne touche jamais GTK, un transport ni l'état du thread principal (macros, listes, liaison) : il y fait exécuter
+ * func et attend sa fin (C10, C11). La demande est inscrite dans pending_calls et une source est ajoutée au contexte par défaut ;
+ * pendant script_engine_shutdown, le thread principal ne fait plus tourner ce contexte (les rappels de l'interface toucheraient
+ * des widgets détruits) : il exécute lui-même les demandes inscrites et retire leurs sources. */
 typedef struct {
     GSourceFunc func;
     gpointer    data;
+    guint       source_id;   /* source du contexte par défaut (calls_mutex) */
     gboolean    done;
     GMutex      mutex;
     GCond       cond;
 } MainCall;
 
-static gboolean main_call_trampoline(gpointer user_data)
+static GThread *main_thread = NULL;      /* thread principal, noté par script_engine_setup */
+static GMutex   calls_mutex;
+static GCond    calls_cond;              /* nouvelle demande ou fin du thread Lua (calls_mutex) */
+static GQueue   pending_calls = G_QUEUE_INIT;   /* MainCall * pas encore exécutées (calls_mutex) */
+static gboolean thread_finished = FALSE; /* le thread Lua a fini son travail (calls_mutex) */
+
+static void main_call_run(MainCall *mc)
 {
-    MainCall *mc = user_data;
     mc->func(mc->data);
     g_mutex_lock(&mc->mutex);
     mc->done = TRUE;
     g_cond_signal(&mc->cond);
     g_mutex_unlock(&mc->mutex);
+}
+
+static gboolean main_call_trampoline(gpointer user_data)
+{
+    MainCall *mc = user_data;
+
+    /* Toujours encore inscrite : script_engine_shutdown retire la source avant d'exécuter une demande, sur ce même thread */
+    g_mutex_lock(&calls_mutex);
+    g_queue_remove(&pending_calls, mc);
+    g_mutex_unlock(&calls_mutex);
+    main_call_run(mc);
     return G_SOURCE_REMOVE;
 }
 
 static void run_on_main_sync(GSourceFunc func, gpointer data)
 {
+    /* Appelée par le thread principal : exécution directe (spec §2.3), sinon il attendrait une demande qu'il est seul à pouvoir
+     * exécuter. */
+    if (g_thread_self() == main_thread) {
+        func(data);
+        return;
+    }
     MainCall mc;
     mc.func = func;
     mc.data = data;
     mc.done = FALSE;
     g_mutex_init(&mc.mutex);
     g_cond_init(&mc.cond);
-    g_idle_add_full(G_PRIORITY_DEFAULT, main_call_trampoline, &mc, NULL);
+    g_mutex_lock(&calls_mutex);
+    mc.source_id = g_idle_add_full(G_PRIORITY_DEFAULT, main_call_trampoline, &mc, NULL);
+    g_queue_push_tail(&pending_calls, &mc);
+    g_cond_broadcast(&calls_cond);
+    g_mutex_unlock(&calls_mutex);
     g_mutex_lock(&mc.mutex);
     while (!mc.done)
         g_cond_wait(&mc.cond, &mc.mutex);
@@ -140,50 +274,16 @@ static void run_on_main_sync(GSourceFunc func, gpointer data)
     g_cond_clear(&mc.cond);
 }
 
-/* Envoi sur le port principal, exécuté sur le thread principal. */
-typedef struct {
-    const char *data;
-    gint        len;
-    gint        written;
-} MainSendData;
-
-static gboolean main_send_cb(gpointer user_data)
-{
-    MainSendData *d = user_data;
-    d->written = d->len > 0 ? (gint)gt_link_send(gt_link_get_default(), (const guint8 *)d->data, (gsize)d->len, GT_SEND_LUA) : 0;
-    return G_SOURCE_REMOVE;
-}
-
-static gint main_port_send(const char *data, gint len)
-{
-    MainSendData d = { data, len, 0 };
-    run_on_main_sync(main_send_cb, &d);
-    return d.written;
-}
-
-/* Écriture sur un port Lua : MSG_NOSIGNAL en TCP, un pair fermé renvoie EPIPE au lieu de tuer GTKTerm (C2). */
-static ssize_t lua_port_write(lua_port_t *p, const void *data, size_t len)
-{
-    if (p->type == PORT_SERIAL)
-        return write(p->fd, data, len);
-    return send(p->fd, data, len, MSG_NOSIGNAL);
-}
-
 /* ------------------------------------------------------------------ */
-/* Main port tap (handle 0)                                            */
+/* Port 0 : réception et état de la liaison                           */
 /* ------------------------------------------------------------------ */
 
 /* Octets reçus sur le port principal (signal « received » de la liaison, thread principal) */
 static void lua_main_port_received(GtkTermLink *link, GBytes *bytes, gint64 wall_time_us, gpointer user_data)
 {
-    lua_port_t *p = &ports[0];
     gsize size;
-    const gchar *data = g_bytes_get_data(bytes, &size);
-
-    g_mutex_lock(&p->mutex);
-    if (p->open && p->rx_buf->len + size <= RX_BUF_MAX)
-        g_string_append_len(p->rx_buf, data, (gssize)size);
-    g_mutex_unlock(&p->mutex);
+    const guint8 *data = g_bytes_get_data(bytes, &size);
+    gt_rx_queue_push(main_queue, data, size);
 }
 
 static gulong main_port_handler = 0;
@@ -209,445 +309,760 @@ static gboolean main_port_disconnect_cb(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+static gboolean main_link_state_cb(gpointer user_data)
+{
+    *(GtLinkState *)user_data = gt_link_get_state(gt_link_get_default());
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean link_state_lost(GtLinkState s)
+{
+    return s == GT_LINK_LOST || s == GT_LINK_RECONNECTING;
+}
+
+static const char *link_state_name(GtLinkState s)
+{
+    switch (s) {
+    case GT_LINK_OPEN:         return "open";
+    case GT_LINK_CONNECTING:   return "connecting";
+    case GT_LINK_LISTENING:    return "listening";
+    case GT_LINK_LOST:
+    case GT_LINK_RECONNECTING: return "lost";
+    default:                   return "closed";
+    }
+}
+
 /* ------------------------------------------------------------------ */
-/* GIOChannel callbacks for Lua-opened ports                          */
+/* Files de réception et débordements                                 */
 /* ------------------------------------------------------------------ */
 
-static gboolean port_read_cb(GIOChannel *src, GIOCondition cond, gpointer user_data)
+/* File de réception du port h (0 : liaison) ; NULL si h est hors plage ou si le port Lua est fermé. Thread Lua. */
+static GtRxQueue *queue_for(int handle)
 {
-    lua_port_t *p = user_data;
-    char buf[4096];
-    gsize bytes_read = 0;
+    if (handle == 0)
+        return main_queue;
+    if (handle > 0 && handle < MAX_LUA_PORTS && ports[handle] != NULL)
+        return gt_script_port_get_queue(ports[handle]);
+    return NULL;
+}
+
+/* Signale une fois par port et par exécution que sa file a débordé (thread Lua ; le cœur ne journalise pas). */
+static void report_overflow(int handle, GtRxQueue *q)
+{
+    if (q == NULL || gt_rx_queue_take_dropped(q) == 0 || overflow_reported[handle])
+        return;
+    overflow_reported[handle] = TRUE;
+    engine_log_line(_("Port %d: receive buffer full, oldest data dropped"), handle);
+}
+
+static void report_all_overflows(void)
+{
+    for (int h = 0; h < MAX_LUA_PORTS; h++)
+        report_overflow(h, queue_for(h));
+}
+
+/* ------------------------------------------------------------------ */
+/* Arguments                                                          */
+/* ------------------------------------------------------------------ */
+
+/* Numéro de port à la position idx ; -1 hors 0..15 (un grand entier n'est jamais tronqué en int dans la plage). */
+static int handle_arg(lua_State *L, int idx)
+{
+    lua_Integer h = luaL_checkinteger(L, idx);
+    return (h >= 0 && h < MAX_LUA_PORTS) ? (int)h : -1;
+}
+
+/* Délai facultatif en ms à la position idx (défaut 5000), borné à [0, 24 h], rendu en µs. */
+static gint64 opt_timeout_us(lua_State *L, int idx)
+{
+    lua_Integer ms = luaL_optinteger(L, idx, DEFAULT_TIMEOUT_MS);
+    return (gint64)CLAMP(ms, 0, MAX_TIMEOUT_MS) * 1000;
+}
+
+/* Parité facultative : 0/1/2 ou "none"/"odd"/"even" ; FALSE hors domaine. */
+static gboolean opt_parity(lua_State *L, int idx, GtParity *out)
+{
+    if (lua_isnoneornil(L, idx)) {
+        *out = GT_PARITY_NONE;
+        return TRUE;
+    }
+    if (lua_type(L, idx) == LUA_TSTRING)
+        return gt_script_parity_from_name(lua_tostring(L, idx), out);
+    lua_Integer v = luaL_checkinteger(L, idx);
+    if (v < 0 || v > 2)
+        return FALSE;
+    *out = (GtParity)v;
+    return TRUE;
+}
+
+/* Contrôle de flux facultatif : 0/1/2 ou "none"/"xon"/"rts" ; FALSE hors domaine. */
+static gboolean opt_flow(lua_State *L, int idx, GtFlow *out)
+{
+    if (lua_isnoneornil(L, idx)) {
+        *out = GT_FLOW_NONE;
+        return TRUE;
+    }
+    if (lua_type(L, idx) == LUA_TSTRING)
+        return gt_script_flow_from_name(lua_tostring(L, idx), out);
+    lua_Integer v = luaL_checkinteger(L, idx);
+    if (v < 0 || v > 2)
+        return FALSE;
+    *out = (GtFlow)v;
+    return TRUE;
+}
+
+/* ------------------------------------------------------------------ */
+/* Ports Lua : ouverture, fermeture, état                             */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    const TransportParams *params;
+    GtScriptPort          *port;
+    gchar                 *error;   /* message du transport sans fin de ligne, à libérer */
+} MainOpenData;
+
+static gboolean main_open_cb(gpointer user_data)
+{
+    MainOpenData *d = user_data;
     GError *err = NULL;
 
-    GIOStatus status = g_io_channel_read_chars(src, buf, sizeof(buf), &bytes_read, &err);
-    if (err) { g_error_free(err); err = NULL; }
-
-    if (bytes_read > 0) {
-        g_mutex_lock(&p->mutex);
-        if (p->rx_buf->len + bytes_read <= RX_BUF_MAX)
-            g_string_append_len(p->rx_buf, buf, bytes_read);
-        g_mutex_unlock(&p->mutex);
+    d->port = gt_script_port_open(d->params, &err);
+    if (d->port == NULL) {
+        d->error = g_strchomp(g_strdup(err != NULL ? err->message : "open failed"));
+        g_clear_error(&err);
     }
-
-    if (status == G_IO_STATUS_EOF || status == G_IO_STATUS_ERROR) {
-        p->watch_in = 0;
-        return G_SOURCE_REMOVE;
-    }
-    return G_SOURCE_CONTINUE;
-}
-
-static gboolean port_err_cb(GIOChannel *src, GIOCondition cond, gpointer user_data)
-{
-    lua_port_t *p = user_data;
-    p->watch_err = 0;
     return G_SOURCE_REMOVE;
 }
 
-static gboolean tcp_accept_cb(GIOChannel *src, GIOCondition cond, gpointer user_data)
+static gboolean main_close_cb(gpointer user_data)
 {
-    lua_port_t *p = user_data;
-    struct sockaddr_in addr;
-    socklen_t addrlen = sizeof(addr);
-    int client = accept(p->listen_fd, (struct sockaddr *)&addr, &addrlen);
-    if (client < 0) return G_SOURCE_CONTINUE;
-
-    /* Replace listen watch with client fd */
-    if (p->watch_in) { g_source_remove(p->watch_in); p->watch_in = 0; }
-    if (p->chan_in)  { g_io_channel_unref(p->chan_in); p->chan_in = NULL; }
-
-    p->fd = client;
-    p->chan_in = g_io_channel_unix_new(client);
-    g_io_channel_set_encoding(p->chan_in, NULL, NULL);
-    g_io_channel_set_buffered(p->chan_in, FALSE);
-    p->watch_in = g_io_add_watch(p->chan_in, G_IO_IN | G_IO_HUP | G_IO_ERR, port_read_cb, p);
-    p->watch_err = g_io_add_watch(p->chan_in, G_IO_ERR | G_IO_HUP, port_err_cb, p);
-
-    /* close listen fd */
-    close(p->listen_fd);
-    p->listen_fd = -1;
-
+    gt_script_port_close(user_data);
     return G_SOURCE_REMOVE;
 }
 
-/* ------------------------------------------------------------------ */
-/* Serial port helpers                                                 */
-/* ------------------------------------------------------------------ */
+typedef struct {
+    GtScriptPort *port;
+    guint         pending;   /* octets en attente d'émission */
+    guint         baud;      /* débit obtenu (série), 0 sinon */
+} MainOutput;
 
-static int baud_constant(int baud)
+static gboolean main_output_cb(gpointer user_data)
 {
-    switch (baud) {
-    case 1200:   return B1200;
-    case 2400:   return B2400;
-    case 4800:   return B4800;
-    case 9600:   return B9600;
-    case 19200:  return B19200;
-    case 38400:  return B38400;
-    case 57600:  return B57600;
-    case 115200: return B115200;
-    case 230400: return B230400;
-    default:     return B9600;
+    MainOutput *d = user_data;
+
+    d->pending = gt_script_port_get_output_pending(d->port);
+    d->baud = gt_script_port_get_baudrate(d->port);
+    return G_SOURCE_REMOVE;
+}
+
+/* Série (thread Lua) : la fermeture du transport jette la sortie en attente (tcflush TCOFLUSH, jamais de tcdrain bloquant sur le
+ * thread principal) ; on attend donc ici qu'elle soit émise, relevé toutes les 5 ms par run_on_main_sync, au plus le temps
+ * d'émission (10 bits par octet) + 500 ms, plafonné à 2 s. Aucune vidange si l'arrêt est demandé (Stop, os.exit, fermeture de
+ * GTKTerm) ni sur un port perdu ; TCP : rien en attente (le noyau émet après la fermeture). */
+static void drain_output(GtScriptPort *port)
+{
+    MainOutput d = { port, 0, 0 };
+    gint64 start = g_get_monotonic_time();
+    gint64 limit = start + DRAIN_MAX_US;    /* une seule échéance pour toute la vidange, marge de FIFO comprise */
+    gint64 deadline, now;
+
+    if (g_atomic_int_get(&stop_requested) || gt_script_port_get_state(port) == GT_SCRIPT_PORT_LOST)
+        return;
+    run_on_main_sync(main_output_cb, &d);
+    /* pending == 0 n'est pas une sortie anticipée : une courte trame (« RESET\r\n ») passe tout de suite dans la FIFO de l'UART */
+    if (d.baud == 0)
+        return;
+    deadline = MIN(start + (gint64)d.pending * 10 * G_USEC_PER_SEC / d.baud + DRAIN_MARGIN_US, limit);
+    while (d.pending > 0) {
+        now = g_get_monotonic_time();
+        if (now >= deadline || !pause_interruptible(MIN(DRAIN_POLL_US, deadline - now)))
+            return;
+        run_on_main_sync(main_output_cb, &d);
+    }
+    /* TIOCOUTQ ne compte que le tampon du pilote : la FIFO de l'UART (ou les URB d'un adaptateur USB) peut encore contenir
+       quelques octets, que le TCOFLUSH de la fermeture couperait ; temps d'émission de DRAIN_FIFO_BYTES + 10 ms, dans l'échéance */
+    now = g_get_monotonic_time();
+    if (now < limit)
+        pause_interruptible(MIN((gint64)DRAIN_FIFO_BYTES * 10 * G_USEC_PER_SEC / d.baud + 10 * G_TIME_SPAN_MILLISECOND, limit - now));
+}
+
+/* Ferme le port h (thread Lua). gt_script_port_close libère file et port tout de suite : l'entrée est retirée de la table avant,
+ * et le thread Lua ne garde aucun pointeur vers eux ; transport fermé sur le thread principal. */
+static void lua_port_close(int handle)
+{
+    GtScriptPort *port;
+
+    if (handle < 1 || handle >= MAX_LUA_PORTS || ports[handle] == NULL)
+        return;
+    port = ports[handle];
+    drain_output(port);
+    report_overflow(handle, gt_script_port_get_queue(port));
+    ports[handle] = NULL;
+    run_on_main_sync(main_close_cb, port);
+}
+
+static int open_result(lua_State *L, const char *error)
+{
+    if (error == NULL) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, error);
+    return 2;
+}
+
+typedef enum { CONNECT_OK, CONNECT_LOST, CONNECT_TIMEOUT, CONNECT_STOPPED } ConnectOutcome;
+
+/* Client TCP : attend OPEN jusqu'à deadline. Perte (refus) : port refermé, *reason = raison du transport (à libérer). Délai : port
+ * refermé. Arrêt : le port reste dans la table et sera refermé par le nettoyage de fin de script. */
+static ConnectOutcome wait_connected(int handle, gint64 deadline, gchar **reason)
+{
+    GtScriptPort *port = ports[handle];
+
+    for (;;) {
+        GtScriptPortState st = gt_script_port_get_state(port);
+        gint64 now;
+
+        if (st == GT_SCRIPT_PORT_OPEN)
+            return CONNECT_OK;
+        if (st == GT_SCRIPT_PORT_LOST) {
+            gchar *r = gt_script_port_dup_reason(port);
+            *reason = r != NULL ? r : g_strdup("link lost");
+            lua_port_close(handle);
+            return CONNECT_LOST;
+        }
+        now = g_get_monotonic_time();
+        if (now >= deadline) {
+            lua_port_close(handle);
+            return CONNECT_TIMEOUT;
+        }
+        if (!pause_interruptible(MIN(CONNECT_POLL_US, deadline - now)))
+            return CONNECT_STOPPED;
     }
 }
 
-static int configure_serial(int fd, int baud, int bits, int stops, int parity, int flow)
+/* Ouverture d'un port sur le thread principal ; NULL et *error (message sans fin de ligne, à libérer) en cas d'échec. */
+static GtScriptPort *open_on_main(const TransportParams *params, gchar **error)
 {
-    struct termios tio;
-    if (tcgetattr(fd, &tio) != 0) return -1;
+    MainOpenData d = { params, NULL, NULL };
 
-    cfmakeraw(&tio);
-    cfsetispeed(&tio, baud_constant(baud));
-    cfsetospeed(&tio, baud_constant(baud));
-
-    tio.c_cflag &= ~CSIZE;
-    switch (bits) {
-    case 5: tio.c_cflag |= CS5; break;
-    case 6: tio.c_cflag |= CS6; break;
-    case 7: tio.c_cflag |= CS7; break;
-    default:tio.c_cflag |= CS8; break;
-    }
-
-    if (stops == 2) tio.c_cflag |= CSTOPB; else tio.c_cflag &= ~CSTOPB;
-
-    tio.c_cflag &= ~(PARENB | PARODD);
-    if (parity == 1) { tio.c_cflag |= PARENB | PARODD; }
-    else if (parity == 2) { tio.c_cflag |= PARENB; }
-
-    tio.c_cflag &= ~CRTSCTS;
-    tio.c_iflag &= ~(IXON | IXOFF | IXANY);
-    if (flow == 1) { tio.c_iflag |= IXON | IXOFF; }
-    else if (flow == 2) { tio.c_cflag |= CRTSCTS; }
-
-    tio.c_cc[VMIN]  = 0;
-    tio.c_cc[VTIME] = 1;
-
-    return tcsetattr(fd, TCSANOW, &tio);
+    run_on_main_sync(main_open_cb, &d);
+    *error = d.error;
+    return d.port;
 }
 
-/* ------------------------------------------------------------------ */
-/* Lua API: open(handle, ...) / close(handle)                         */
-/* ------------------------------------------------------------------ */
+/* Raison d'échec du transport (« Cannot connect to 127.0.0.1:4000: … ») : quand le script a donné un nom, il est ajouté devant
+ * l'adresse numérique essayée (« Cannot connect to localhost (127.0.0.1:4000): … »). Forme du transport conservée, quelle que soit la
+ * traduction : seule l'occurrence de « adresse:port » est remplacée. Rend une chaîne nouvelle ; error est libérée. */
+static gchar *name_failure(gchar *error, const char *host, const char *numeric, const char *port_str)
+{
+    gchar *needle, *hit, *out;
+
+    if (error == NULL || numeric == NULL || g_strcmp0(host, numeric) == 0)
+        return error;
+    needle = g_strdup_printf("%s:%s", numeric, port_str);
+    hit = strstr(error, needle);
+    if (hit == NULL) {
+        g_free(needle);
+        return error;
+    }
+    *hit = '\0';
+    out = g_strdup_printf("%s%s (%s)%s", error, host, needle, hit + strlen(needle));
+    g_free(needle);
+    g_free(error);
+    return out;
+}
+
+/* Client TCP (thread Lua) : le nom est résolu ici (getaddrinfo est sûr entre threads, la résolution n'est pas interruptible), jamais
+ * sur le thread principal (interface figée, Stop inopérant). Chaque adresse est ensuite ouverte par son écriture numérique
+ * (ouverture instantanée) et essayée l'une après l'autre : refus → suivante (localhost : ::1 puis 127.0.0.1), dans la limite de
+ * timeout_us pour l'ensemble, résolution comprise. Raison d'échec : celle du dernier essai. */
+static int open_tcp_client(lua_State *L, int handle, const char *host, const char *port_str, gint64 timeout_us)
+{
+    gint64 deadline = g_get_monotonic_time() + timeout_us;
+    struct addrinfo hints, *res = NULL;
+    gchar *last_error = NULL;
+    gchar *last_numeric = NULL;
+    int ret;
+
+    /* Délai nul ou négatif : rien n'est tenté, pas même la résolution */
+    if (timeout_us <= 0)
+        return open_result(L, "timeout");
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    ret = getaddrinfo(host, port_str, &hints, &res);
+    if (g_atomic_int_get(&stop_requested)) {
+        if (ret == 0)
+            freeaddrinfo(res);
+        return raise_stop(L);
+    }
+    if (ret != 0) {
+        /* Même message que le transport (même traduction), sans fin de ligne */
+        gchar *msg = g_strchomp(g_strdup_printf(_("Cannot resolve %s: %s\n"), host, gai_strerror(ret)));
+        lua_pushboolean(L, 0);
+        lua_pushstring(L, msg);
+        g_free(msg);
+        return 2;
+    }
+
+    ConnectOutcome outcome = CONNECT_LOST;
+    for (struct addrinfo *rp = res; rp != NULL; rp = rp->ai_next) {
+        char numeric[NI_MAXHOST];
+        TransportParams params;
+        GtScriptPort *port;
+        gchar *error = NULL;
+
+        if (getnameinfo(rp->ai_addr, rp->ai_addrlen, numeric, sizeof(numeric), NULL, 0, NI_NUMERICHOST) != 0)
+            continue;
+        g_free(last_numeric);
+        last_numeric = g_strdup(numeric);
+        memset(&params, 0, sizeof(params));
+        params.type = TRANSPORT_TCP_CLIENT;
+        params.host = numeric;
+        params.tcp_port = (gchar *)port_str;
+        port = open_on_main(&params, &error);
+        if (port == NULL) {
+            g_free(last_error);
+            last_error = error;
+            continue;
+        }
+        /* Dans la table dès maintenant : un arrêt pendant l'attente de connexion laisse le port au nettoyage de fin de script */
+        ports[handle] = port;
+        g_free(last_error);
+        last_error = NULL;
+        outcome = wait_connected(handle, deadline, &last_error);
+        if (outcome != CONNECT_LOST)
+            break;
+        /* Refus asynchrone : adresse suivante, sauf si le délai est déjà écoulé (dernière adresse : raison du refus) */
+        if (rp->ai_next != NULL && g_get_monotonic_time() >= deadline) {
+            outcome = CONNECT_TIMEOUT;
+            break;
+        }
+    }
+    freeaddrinfo(res);
+
+    switch (outcome) {
+    case CONNECT_OK:
+        g_free(last_numeric);
+        return open_result(L, NULL);
+    case CONNECT_STOPPED:
+        g_free(last_numeric);
+        g_free(last_error);
+        return raise_stop(L);
+    case CONNECT_TIMEOUT:
+        g_free(last_numeric);
+        g_free(last_error);
+        return open_result(L, "timeout");
+    default:
+        last_error = name_failure(last_error, host, last_numeric, port_str);
+        g_free(last_numeric);
+        lua_pushboolean(L, 0);
+        lua_pushstring(L, last_error != NULL ? last_error : "link lost");
+        g_free(last_error);
+        return 2;
+    }
+}
 
 static int l_open(lua_State *L)
 {
-    int handle = (int)luaL_checkinteger(L, 1);
-    if (handle < 1 || handle >= MAX_LUA_PORTS) {
-        lua_pushboolean(L, 0);
-        lua_pushstring(L, "invalid handle");
-        return 2;
-    }
+    int handle = handle_arg(L, 1);
+    TransportParams params;
+    char port_str[16];
 
-    lua_port_t *p = &ports[handle];
-    if (p->open) {
-        lua_pushboolean(L, 0);
-        lua_pushstring(L, "already open");
-        return 2;
-    }
+    if (handle < 1)
+        return open_result(L, "invalid handle");
+    if (ports[handle] != NULL)
+        return open_result(L, "already open");
 
-    const char *type_str = luaL_checkstring(L, 2);
-
-    if (strcmp(type_str, "serial") == 0) {
+    const char *type = luaL_checkstring(L, 2);
+    memset(&params, 0, sizeof(params));
+    /* Chaînes empruntées à la pile Lua (valides pendant l'appel) : gt_transport_open en fait sa copie */
+    if (strcmp(type, "serial") == 0) {
         const char *device = luaL_checkstring(L, 3);
-        p->baudrate = (int)luaL_optinteger(L, 4, 9600);
-        p->bits     = (int)luaL_optinteger(L, 5, 8);
-        p->stops    = (int)luaL_optinteger(L, 6, 1);
-        p->parity   = (int)luaL_optinteger(L, 7, 0);
-        p->flow     = (int)luaL_optinteger(L, 8, 0);
+        lua_Integer baud = luaL_optinteger(L, 4, 9600);
+        lua_Integer bits = luaL_optinteger(L, 5, 8);
+        lua_Integer stop = luaL_optinteger(L, 6, 1);
+        GtParity parity;
+        GtFlow flow;
 
-        int fd = open(device, O_RDWR | O_NOCTTY | O_NONBLOCK);
-        if (fd < 0) {
-            lua_pushboolean(L, 0);
-            lua_pushstring(L, strerror(errno));
-            return 2;
-        }
-        if (configure_serial(fd, p->baudrate, p->bits, p->stops, p->parity, p->flow) != 0) {
-            close(fd);
-            lua_pushboolean(L, 0);
-            lua_pushstring(L, "configure_serial failed");
-            return 2;
-        }
-        p->fd = fd;
-        p->type = PORT_SERIAL;
-
-    } else if (strcmp(type_str, "tcp_client") == 0) {
+        if (baud < 1 || baud > G_MAXUINT)
+            return open_result(L, "invalid baud");
+        if (bits < 5 || bits > 8)
+            return open_result(L, "invalid bits");
+        if (stop < 1 || stop > 2)
+            return open_result(L, "invalid stop");
+        if (!opt_parity(L, 7, &parity))
+            return open_result(L, "invalid parity");
+        if (!opt_flow(L, 8, &flow))
+            return open_result(L, "invalid flow");
+        params.type = TRANSPORT_SERIAL;
+        params.port = (gchar *)device;
+        params.baudrate = (guint)baud;
+        params.bits = (gint)bits;
+        params.stopbits = (gint)stop;
+        params.parity = parity;
+        params.flow = flow;
+    } else if (strcmp(type, "tcp_client") == 0) {
         const char *host = luaL_checkstring(L, 3);
-        int port = (int)luaL_checkinteger(L, 4);
+        lua_Integer port = luaL_checkinteger(L, 4);
+        gint64 connect_timeout_us = opt_timeout_us(L, 5);
 
-        struct addrinfo hints = {0}, *res = NULL;
-        hints.ai_family   = AF_INET;
-        hints.ai_socktype = SOCK_STREAM;
-        char port_str[16];
-        snprintf(port_str, sizeof(port_str), "%d", port);
-        if (getaddrinfo(host, port_str, &hints, &res) != 0 || res == NULL) {
-            lua_pushboolean(L, 0);
-            lua_pushstring(L, "getaddrinfo failed");
-            return 2;
-        }
-        int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-        if (fd < 0) { freeaddrinfo(res); lua_pushboolean(L, 0); lua_pushstring(L, strerror(errno)); return 2; }
-        if (connect(fd, res->ai_addr, res->ai_addrlen) != 0) {
-            close(fd); freeaddrinfo(res);
-            lua_pushboolean(L, 0); lua_pushstring(L, strerror(errno)); return 2;
-        }
-        freeaddrinfo(res);
-        fcntl(fd, F_SETFL, O_NONBLOCK);
-        p->fd   = fd;
-        p->type = PORT_TCP_CLIENT;
+        if (port < 1 || port > 65535)
+            return open_result(L, "invalid port");
+        g_snprintf(port_str, sizeof(port_str), "%d", (int)port);
+        return open_tcp_client(L, handle, host, port_str, connect_timeout_us);
+    } else if (strcmp(type, "tcp_server") == 0) {
+        lua_Integer port = luaL_checkinteger(L, 3);
+        const char *host = luaL_optstring(L, 4, NULL);
 
-    } else if (strcmp(type_str, "tcp_server") == 0) {
-        int port = (int)luaL_checkinteger(L, 3);
-        int lfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (lfd < 0) { lua_pushboolean(L, 0); lua_pushstring(L, strerror(errno)); return 2; }
-        int one = 1;
-        setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-        struct sockaddr_in addr = {0};
-        addr.sin_family      = AF_INET;
-        addr.sin_addr.s_addr = INADDR_ANY;
-        addr.sin_port        = htons(port);
-        if (bind(lfd, (struct sockaddr*)&addr, sizeof(addr)) != 0 || listen(lfd, 1) != 0) {
-            close(lfd); lua_pushboolean(L, 0); lua_pushstring(L, strerror(errno)); return 2;
-        }
-        p->listen_fd = lfd;
-        p->fd        = -1;
-        p->type      = PORT_TCP_SERVER;
-
-        GIOChannel *lchan = g_io_channel_unix_new(lfd);
-        g_io_channel_set_encoding(lchan, NULL, NULL);
-        g_io_channel_set_buffered(lchan, FALSE);
-        p->chan_in   = lchan;
-        p->watch_in  = g_io_add_watch(lchan, G_IO_IN, tcp_accept_cb, p);
-        p->open = TRUE;
-        lua_pushboolean(L, 1);
-        return 1;
-
+        if (port < 0 || port > 65535)
+            return open_result(L, "invalid port");
+        g_snprintf(port_str, sizeof(port_str), "%d", (int)port);
+        params.type = TRANSPORT_TCP_SERVER;
+        params.host = (gchar *)host;
+        params.tcp_port = port_str;
     } else {
-        lua_pushboolean(L, 0);
-        lua_pushstring(L, "unknown type (serial/tcp_client/tcp_server)");
-        return 2;
+        return open_result(L, "unknown type (serial/tcp_client/tcp_server)");
     }
 
-    /* For serial and tcp_client: set up GIOChannel */
-    p->chan_in = g_io_channel_unix_new(p->fd);
-    g_io_channel_set_encoding(p->chan_in, NULL, NULL);
-    g_io_channel_set_buffered(p->chan_in, FALSE);
-    p->watch_in  = g_io_add_watch(p->chan_in, G_IO_IN | G_IO_HUP | G_IO_ERR, port_read_cb, p);
-    p->watch_err = g_io_add_watch(p->chan_in, G_IO_ERR | G_IO_HUP, port_err_cb, p);
-    p->open = TRUE;
-
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-/* Ferme un port Lua ; appelée par gtkterm.close et par le nettoyage de fin de script, sans passer par la pile Lua (C1). */
-static void lua_port_close(int handle)
-{
-    if (handle < 1 || handle >= MAX_LUA_PORTS) return;
-
-    lua_port_t *p = &ports[handle];
-    if (!p->open) return;
-
-    if (p->watch_in)  { g_source_remove(p->watch_in);  p->watch_in  = 0; }
-    if (p->watch_err) { g_source_remove(p->watch_err); p->watch_err = 0; }
-    if (p->chan_in)   { g_io_channel_unref(p->chan_in); p->chan_in   = NULL; }
-    if (p->fd >= 0)   { close(p->fd); p->fd = -1; }
-    if (p->listen_fd >= 0) { close(p->listen_fd); p->listen_fd = -1; }
-
-    g_mutex_lock(&p->mutex);
-    g_string_truncate(p->rx_buf, 0);
-    g_mutex_unlock(&p->mutex);
-
-    p->open = FALSE;
+    gchar *error = NULL;
+    GtScriptPort *port = open_on_main(&params, &error);
+    if (port == NULL) {
+        lua_pushboolean(L, 0);
+        lua_pushstring(L, error);
+        g_free(error);
+        return 2;
+    }
+    ports[handle] = port;
+    return open_result(L, NULL);
 }
 
 static int l_close(lua_State *L)
 {
-    lua_port_close((int)luaL_checkinteger(L, 1));
+    lua_port_close(handle_arg(L, 1));
     return 0;
 }
 
+static const char *port_state_name(GtScriptPortState s)
+{
+    switch (s) {
+    case GT_SCRIPT_PORT_CONNECTING: return "connecting";
+    case GT_SCRIPT_PORT_OPEN:       return "open";
+    case GT_SCRIPT_PORT_LISTENING:  return "listening";
+    case GT_SCRIPT_PORT_CONNECTED:  return "connected";
+    default:                        return "lost";
+    }
+}
+
+/* Perdu : état LOST, ou file déjà fermée alors que l'état ne l'est pas encore (la perte ferme la file juste avant de poser LOST ;
+ * la fermeture par le script retire le port de la table, une file fermée d'un port encore présent est donc une perte). */
+static gboolean lua_port_lost(GtScriptPort *port)
+{
+    return gt_script_port_get_state(port) == GT_SCRIPT_PORT_LOST || gt_rx_queue_is_closed(gt_script_port_get_queue(port));
+}
+
+static int l_status(lua_State *L)
+{
+    int handle = handle_arg(L, 1);
+
+    if (handle == 0) {
+        GtLinkState st = GT_LINK_CLOSED;
+        run_on_main_sync(main_link_state_cb, &st);
+        lua_pushstring(L, link_state_name(st));
+    } else if (handle > 0 && ports[handle] != NULL) {
+        GtScriptPort *port = ports[handle];
+        lua_pushstring(L, lua_port_lost(port) ? "lost" : port_state_name(gt_script_port_get_state(port)));
+    } else {
+        lua_pushstring(L, "closed");
+    }
+    return 1;
+}
+
 /* ------------------------------------------------------------------ */
-/* Lua API: send(handle, data)                                        */
+/* Envoi complet : send, send_hex                                     */
 /* ------------------------------------------------------------------ */
+
+typedef struct {
+    GtScriptPort *port;          /* NULL : port 0 (liaison) */
+    const guint8 *data;
+    gsize         len;
+    gssize        written;
+    gint          err;           /* errno relevé sur le thread principal juste après l'écriture */
+    GtLinkState   link_state;    /* port 0 : état de la liaison après l'essai */
+} MainTrySend;
+
+/* Une seule tentative d'écriture, jamais bloquante : le thread principal n'attend jamais un lecteur. */
+static gboolean main_try_send_cb(gpointer user_data)
+{
+    MainTrySend *d = user_data;
+
+    /* Arrêt demandé (« Stop » ou fermeture, fenêtre peut-être détruite) : plus rien n'est écrit, comme main_send_macro_cb */
+    if (g_atomic_int_get(&stop_requested)) {
+        d->written = -1;
+        d->err = EAGAIN;
+        return G_SOURCE_REMOVE;
+    }
+    if (d->port != NULL) {
+        d->written = gt_script_port_try_send(d->port, d->data, d->len, &d->err);
+        return G_SOURCE_REMOVE;
+    }
+    GtkTermLink *link = gt_link_get_default();
+    errno = 0;
+    d->written = gt_link_send(link, d->data, d->len, GT_SEND_LUA);
+    /* errno est propre au thread : relevé ici, avant tout autre appel (le thread Lua ne le verrait jamais) */
+    d->err = d->written < 0 ? errno : 0;
+    d->link_state = gt_link_get_state(link);
+    return G_SOURCE_REMOVE;
+}
+
+typedef enum { SEND_DONE, SEND_FAILED, SEND_STOPPED } SendOutcome;
+
+/* Écrit tout ou échoue (thread Lua) : écritures partielles et EAGAIN repris ici, pause de 2 ms entre deux essais sans progrès,
+ * jusqu'au délai. *reason : chaîne statique (ou de g_strerror) en cas d'échec. Le port h est ouvert (vérifié par l'appelant). */
+static SendOutcome send_all(int handle, const guint8 *data, gsize len, gint64 timeout_us, const char **reason)
+{
+    gint64 deadline = g_get_monotonic_time() + timeout_us;
+    gsize done = 0;
+
+    while (done < len) {
+        MainTrySend d;
+        gboolean lost;
+
+        if (g_atomic_int_get(&stop_requested))
+            return SEND_STOPPED;
+        memset(&d, 0, sizeof(d));
+        d.port = handle > 0 ? ports[handle] : NULL;
+        d.data = data + done;
+        d.len = len - done;
+        run_on_main_sync(main_try_send_cb, &d);
+        if (g_atomic_int_get(&stop_requested))
+            return SEND_STOPPED;
+        if (d.written > 0) {
+            done += (gsize)d.written;
+            continue;
+        }
+        lost = handle > 0 ? lua_port_lost(ports[handle]) : link_state_lost(d.link_state);
+        if (d.written == 0) {
+            /* Rien d'écrivable : connexion en cours, serveur sans client, liaison fermée ou perdue */
+            *reason = lost ? "link lost" : "not connected";
+            return SEND_FAILED;
+        }
+        if (d.err == EAGAIN || d.err == EWOULDBLOCK || d.err == EINTR) {
+            if (g_get_monotonic_time() >= deadline) {
+                *reason = "timeout";
+                return SEND_FAILED;
+            }
+            if (!pause_interruptible(SEND_RETRY_US))
+                return SEND_STOPPED;
+            continue;
+        }
+        /* Pair parti pendant l'envoi (serveur TCP : le client a fermé ou réinitialisé) : plus de connexion, pas une erreur système (M5) */
+        if (!lost && (d.err == EPIPE || d.err == ECONNRESET || d.err == ENOTCONN)) {
+            *reason = "not connected";
+            return SEND_FAILED;
+        }
+        /* EIO : perte, même si l'état n'est pas encore LOST (raison pas encore posée) */
+        *reason = (lost || d.err == EIO) ? "link lost" : g_strerror(d.err);
+        return SEND_FAILED;
+    }
+    return SEND_DONE;
+}
+
+static int send_checked(lua_State *L, int handle, const guint8 *data, gsize len, gint64 timeout_us)
+{
+    const char *reason = NULL;
+    SendOutcome o;
+
+    if (handle < 0)
+        return open_result(L, "invalid handle");
+    if (handle > 0 && ports[handle] == NULL)
+        return open_result(L, "not open");
+    o = send_all(handle, data, len, timeout_us, &reason);
+    if (o == SEND_STOPPED)
+        return raise_stop(L);
+    return open_result(L, o == SEND_DONE ? NULL : reason);
+}
 
 static int l_send(lua_State *L)
 {
-    int handle = (int)luaL_checkinteger(L, 1);
+    int handle = handle_arg(L, 1);
     size_t len;
     const char *data = luaL_checklstring(L, 2, &len);
+    gint64 timeout_us = opt_timeout_us(L, 3);
 
-    if (handle == 0) {
-        lua_pushboolean(L, main_port_send(data, (gint)len) == (gint)len);
-        return 1;
-    }
-
-    if (handle < 1 || handle >= MAX_LUA_PORTS) {
-        lua_pushboolean(L, 0);
-        return 1;
-    }
-
-    lua_port_t *p = &ports[handle];
-    if (!p->open || p->fd < 0) { lua_pushboolean(L, 0); return 1; }
-
-    ssize_t written = lua_port_write(p, data, len);
-    lua_pushboolean(L, written == (ssize_t)len);
-    return 1;
+    /* data appartient à la pile Lua : valable pendant tout l'appel, le thread principal le lit pendant run_on_main_sync */
+    return send_checked(L, handle, (const guint8 *)data, len, timeout_us);
 }
-
-/* ------------------------------------------------------------------ */
-/* Lua API: send_hex(handle, hex_string)                              */
-/* ------------------------------------------------------------------ */
 
 static int l_send_hex(lua_State *L)
 {
-    int handle = (int)luaL_checkinteger(L, 1);
-    const char *hex = luaL_checkstring(L, 2);
+    int handle = handle_arg(L, 1);
+    size_t hex_len;
+    const char *hex = luaL_checklstring(L, 2, &hex_len);
+    gint64 timeout_us = opt_timeout_us(L, 3);
+    GError *err = NULL;
+    GBytes *bytes;
+    gsize len;
+    const char *data;
 
-    size_t hlen = strlen(hex);
-    char *bin = g_malloc(hlen / 2 + 1);
-    size_t bin_len = 0;
-
-    for (size_t i = 0; i + 1 < hlen; ) {
-        while (i < hlen && (hex[i] == ' ' || hex[i] == '\t')) i++;
-        if (i + 1 >= hlen) break;
-        char byte_str[3] = { hex[i], hex[i+1], 0 };
-        bin[bin_len++] = (char)strtol(byte_str, NULL, 16);
-        i += 2;
+    /* gt_script_hex_decode lit une chaîne C : un \0 la tronquerait sans erreur. Le préfixe est décodé d'abord : un caractère invalide
+     * qui le précède garde sa position ; sinon (préfixe valide, ou coupé en plein octet par le \0), le \0 est le premier caractère
+     * invalide. Position 0-based en octets, comme le décodeur. */
+    bytes = gt_script_hex_decode(hex, &err);
+    if (bytes == NULL && strncmp(err->message, "invalid character", 17) == 0) {
+        lua_pushboolean(L, 0);
+        lua_pushfstring(L, "invalid hex: %s", err->message);
+        g_error_free(err);
+        return 2;
     }
-
-    gboolean ok = FALSE;
-    if (handle == 0) {
-        ok = main_port_send(bin, (gint)bin_len) == (gint)bin_len;
-    } else if (handle >= 1 && handle < MAX_LUA_PORTS) {
-        lua_port_t *p = &ports[handle];
-        if (p->open && p->fd >= 0)
-            ok = lua_port_write(p, bin, bin_len) == (ssize_t)bin_len;
+    if (strlen(hex) != hex_len) {
+        if (bytes != NULL)
+            g_bytes_unref(bytes);
+        else
+            g_error_free(err);
+        lua_pushboolean(L, 0);
+        lua_pushfstring(L, "invalid hex: invalid character at position %d", (int)strlen(hex));
+        return 2;
     }
-
-    g_free(bin);
-    lua_pushboolean(L, ok);
-    return 1;
+    if (bytes == NULL) {
+        lua_pushboolean(L, 0);
+        lua_pushfstring(L, "invalid hex: %s", err->message);
+        g_error_free(err);
+        return 2;
+    }
+    /* Copie dans une chaîne Lua : rien à libérer si l'arrêt lève une erreur pendant l'envoi */
+    data = g_bytes_get_data(bytes, &len);
+    lua_pushlstring(L, data, len);
+    g_bytes_unref(bytes);
+    data = lua_tolstring(L, -1, &len);
+    return send_checked(L, handle, (const guint8 *)data, len, timeout_us);
 }
 
 /* ------------------------------------------------------------------ */
-/* Lua API: wait_for(handle, pattern, timeout_ms) -> data (jusqu'au motif inclus) ou nil */
+/* Réception : wait_for, read, clear                                  */
 /* ------------------------------------------------------------------ */
 
+static int nil_reason(lua_State *L, const char *reason)
+{
+    lua_pushnil(L);
+    lua_pushstring(L, reason);
+    return 2;
+}
+
+/* wait_for(handle, pattern [, timeout_ms]) -> données jusqu'au motif inclus | nil, "timeout" | nil, "closed" */
 static int l_wait_for(lua_State *L)
 {
-    int handle     = (int)luaL_checkinteger(L, 1);
+    int handle = handle_arg(L, 1);
     size_t pat_len;
     const char *pat = luaL_checklstring(L, 2, &pat_len);
-    int timeout_ms  = (int)luaL_optinteger(L, 3, 5000);
+    gint64 timeout_us = opt_timeout_us(L, 3);
+    GtRxQueue *q;
+    GBytes *found = NULL;
+    GtRxWaitResult res;
 
-    if (handle < 0 || handle >= MAX_LUA_PORTS) {
-        lua_pushnil(L);
+    if (handle < 0)
+        return nil_reason(L, "invalid handle");
+    q = queue_for(handle);
+    if (q == NULL)
+        return nil_reason(L, "closed");
+    /* L'attente prend et rend le verrou de la file elle-même ; l'arrêt est relu au moins toutes les 20 ms */
+    res = gt_rx_queue_wait_for(q, (const guint8 *)pat, pat_len, g_get_monotonic_time() + timeout_us, &stop_requested, &found);
+    report_overflow(handle, q);
+    switch (res) {
+    case GT_RX_WAIT_FOUND: {
+        gsize n;
+        const char *p = g_bytes_get_data(found, &n);
+        lua_pushlstring(L, p, n);
+        g_bytes_unref(found);
         return 1;
     }
-
-    lua_port_t *p = &ports[handle];
-    gint64 deadline = g_get_monotonic_time() + (gint64)timeout_ms * 1000;
-
-    while (!stop_requested) {
-        g_mutex_lock(&p->mutex);
-        char *found = memmem(p->rx_buf->str, p->rx_buf->len, pat, pat_len);
-        if (found) {
-            /* Données binaires : recherche et résultat avec longueurs explicites, un octet nul n'arrête rien (M26). */
-            size_t end = (size_t)(found - p->rx_buf->str) + pat_len;
-            lua_pushlstring(L, p->rx_buf->str, end);
-            g_string_erase(p->rx_buf, 0, (gssize)end);
-            g_mutex_unlock(&p->mutex);
-            return 1;
-        }
-        g_mutex_unlock(&p->mutex);
-
-        if (g_get_monotonic_time() >= deadline) {
-            lua_pushnil(L);
-            return 1;
-        }
-        g_usleep(10000); /* 10 ms */
+    case GT_RX_WAIT_CANCELLED:
+        return raise_stop(L);
+    case GT_RX_WAIT_CLOSED:
+        return nil_reason(L, "closed");
+    default:
+        return nil_reason(L, "timeout");
     }
-
-    lua_pushnil(L);
-    return 1;
 }
-
-/* ------------------------------------------------------------------ */
-/* Lua API: read(handle) -> data                                      */
-/* ------------------------------------------------------------------ */
 
 static int l_read(lua_State *L)
 {
-    int handle = (int)luaL_checkinteger(L, 1);
-    if (handle < 0 || handle >= MAX_LUA_PORTS) { lua_pushstring(L, ""); return 1; }
+    int handle = handle_arg(L, 1);
+    GtRxQueue *q = queue_for(handle);
+    GBytes *b;
+    gsize n;
+    const char *p;
 
-    lua_port_t *p = &ports[handle];
-    g_mutex_lock(&p->mutex);
-    lua_pushlstring(L, p->rx_buf->str, p->rx_buf->len);
-    g_string_truncate(p->rx_buf, 0);
-    g_mutex_unlock(&p->mutex);
+    if (q == NULL) {
+        lua_pushstring(L, "");
+        return 1;
+    }
+    report_overflow(handle, q);
+    b = gt_rx_queue_take_all(q);
+    p = g_bytes_get_data(b, &n);
+    lua_pushlstring(L, p, n);
+    g_bytes_unref(b);
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
-/* Lua API: clear(handle)                                             */
-/* ------------------------------------------------------------------ */
-
 static int l_clear(lua_State *L)
 {
-    int handle = (int)luaL_checkinteger(L, 1);
-    if (handle < 0 || handle >= MAX_LUA_PORTS) return 0;
+    int handle = handle_arg(L, 1);
+    GtRxQueue *q = queue_for(handle);
 
-    lua_port_t *p = &ports[handle];
-    g_mutex_lock(&p->mutex);
-    g_string_truncate(p->rx_buf, 0);
-    g_mutex_unlock(&p->mutex);
+    if (q != NULL) {
+        report_overflow(handle, q);
+        gt_rx_queue_clear(q);
+    }
     return 0;
 }
 
 /* ------------------------------------------------------------------ */
-/* Lua API: sleep(ms)                                                 */
+/* sleep, time, log, save_csv                                         */
 /* ------------------------------------------------------------------ */
 
 static int l_sleep(lua_State *L)
 {
-    int ms = (int)luaL_checkinteger(L, 1);
-    gint64 deadline = g_get_monotonic_time() + (gint64)ms * 1000;
-    while (!stop_requested && g_get_monotonic_time() < deadline)
-        g_usleep(10000);
+    lua_Integer ms = luaL_checkinteger(L, 1);
+    gboolean completed = pause_interruptible((gint64)CLAMP(ms, 0, MAX_TIMEOUT_MS) * 1000);
+
+    report_all_overflows();
+    if (!completed)
+        return raise_stop(L);
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
-/* Lua API: time() -> seconds (float, monotonic wall-clock)          */
-/* ------------------------------------------------------------------ */
-
+/* time() -> secondes (nombre réel, horloge monotone) */
 static int l_time(lua_State *L)
 {
     lua_pushnumber(L, (lua_Number)g_get_monotonic_time() / 1e6);
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
-/* Lua API: log(text)                                                 */
-/* ------------------------------------------------------------------ */
-
 static int l_log(lua_State *L)
 {
     size_t len;
-    const char *text = luaL_tolstring(L, 1, &len);
-    engine_log("%s\n", text);
+    luaL_tolstring(L, 1, NULL);
+    lua_pushliteral(L, "\n");
+    lua_concat(L, 2);
+    const char *line = lua_tolstring(L, -1, &len);
+    log_append_len(line, len);
     lua_pop(L, 1);
     return 0;
 }
-
-/* ------------------------------------------------------------------ */
-/* Lua API: save_csv(filename, ...)                                   */
-/* ------------------------------------------------------------------ */
 
 static int l_save_csv(lua_State *L)
 {
     const char *filename = luaL_checkstring(L, 1);
     int n = lua_gettop(L);
+
+    /* Conversions avant fopen : un __tostring qui lève une erreur ne laisse aucun FILE* ouvert (M6). Les chaînes restent sur la pile,
+       qu'il faut donc agrandir (une fonction C n'a que LUA_MINSTACK places garanties) */
+    luaL_checkstack(L, n + LUA_MINSTACK, "too many values");
+    for (int i = 2; i <= n; i++)
+        luaL_tolstring(L, i, NULL);
 
     FILE *f = fopen(filename, "a");
     if (!f) {
@@ -656,10 +1071,9 @@ static int l_save_csv(lua_State *L)
         return 2;
     }
 
-    for (int i = 2; i <= n; i++) {
-        if (i > 2) fprintf(f, ",");
-        fprintf(f, "%s", luaL_tolstring(L, i, NULL));
-        lua_pop(L, 1);
+    for (int i = 1; i <= n - 1; i++) {
+        if (i > 1) fprintf(f, ",");
+        fprintf(f, "%s", lua_tostring(L, n + i));
     }
     fprintf(f, "\n");
     fclose(f);
@@ -669,7 +1083,73 @@ static int l_save_csv(lua_State *L)
 }
 
 /* ------------------------------------------------------------------ */
-/* Lua API: get_lists() -> {{name, entries={{display,value},...}}, ...} */
+/* Crochet d'arrêt, os.exit, print, panique                           */
+/* ------------------------------------------------------------------ */
+
+/* Crochet de comptage (toutes les 1000 instructions). Dès que l'arrêt est demandé, il se réarme à chaque instruction puis lève
+ * l'erreur d'arrêt : un pcall du script l'attrape une fois, l'instruction suivante hors de ce pcall la relève, donc toute
+ * boucle finit par sortir (même un pcall qui avale tout, un xpcall dont le gestionnaire est interrompu, une coroutine). */
+static void stop_hook(lua_State *L, lua_Debug *ar)
+{
+    (void)ar;
+    if (g_atomic_int_get(&stop_requested)) {
+        lua_sethook(L, stop_hook, LUA_MASKCOUNT, 1);
+        raise_stop(L);
+    }
+}
+
+/* os.exit([code]) : termine le script, jamais GTKTerm. Sans argument, true ou 0 : fin normale ; false (1) ou autre entier :
+ * fin en erreur avec « Script exited with status N ». */
+static int l_os_exit(lua_State *L)
+{
+    lua_Integer status;
+
+    if (lua_isnoneornil(L, 1))
+        status = 0;
+    else if (lua_isboolean(L, 1))
+        status = lua_toboolean(L, 1) ? 0 : 1;
+    else
+        status = luaL_checkinteger(L, 1);
+    exit_status = status;
+    g_atomic_int_set(&exit_requested, 1);
+    g_atomic_int_set(&stop_requested, 1);
+    lua_sethook(L, stop_hook, LUA_MASKCOUNT, 1);
+    return raise_stop(L);
+}
+
+/* print(...) : vers la console, valeurs passées par tostring, séparées par une tabulation, fin de ligne. Concaténation au fil
+ * de l'eau : au plus deux valeurs de plus sur la pile, quel que soit le nombre d'arguments. */
+static int l_print(lua_State *L)
+{
+    int n = lua_gettop(L);
+    size_t len;
+
+    lua_pushliteral(L, "");
+    for (int i = 1; i <= n; i++) {
+        if (i > 1) {
+            lua_pushliteral(L, "\t");
+            lua_concat(L, 2);
+        }
+        luaL_tolstring(L, i, NULL);
+        lua_concat(L, 2);
+    }
+    lua_pushliteral(L, "\n");
+    lua_concat(L, 2);
+    const char *text = lua_tolstring(L, -1, &len);
+    log_append_len(text, len);
+    return 0;
+}
+
+/* Ne devrait jamais servir (tout s'exécute sous lua_pcall) ; Lua appelle abort() au retour. */
+static int panic_cb(lua_State *L)
+{
+    const char *msg = lua_tostring(L, -1);
+    g_printerr("GTKTerm: Lua panic: %s\n", msg != NULL ? msg : "(error object is not a string)");
+    return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Macros et listes (instantanés pris sur le thread principal)        */
 /* ------------------------------------------------------------------ */
 
 /* Instantanés des listes et des macros, pris sur le thread principal puis poussés vers Lua (C10). */
@@ -738,10 +1218,7 @@ static gboolean main_snapshot_macros_cb(gpointer user_data)
     return G_SOURCE_REMOVE;
 }
 
-/* ------------------------------------------------------------------ */
-/* Lua API: get_lists() -> {{name, entries={{display,value},...}}, ...} */
-/* ------------------------------------------------------------------ */
-
+/* get_lists() -> {{name, entries={{display,value},...}}, ...} */
 static int l_get_lists(lua_State *L)
 {
     GPtrArray *lists = g_ptr_array_new_with_free_func(list_snapshot_free);
@@ -768,10 +1245,7 @@ static int l_get_lists(lua_State *L)
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
-/* Lua API: get_macros() -> table of {index, label}                   */
-/* ------------------------------------------------------------------ */
-
+/* get_macros() -> table of {index, label, n_args, args} */
 static int l_get_macros(lua_State *L)
 {
     GPtrArray *snap = g_ptr_array_new_with_free_func(macro_snapshot_free);
@@ -804,10 +1278,6 @@ static int l_get_macros(lua_State *L)
     return 1;
 }
 
-/* ------------------------------------------------------------------ */
-/* Macro send idle callback                                           */
-/* ------------------------------------------------------------------ */
-
 typedef struct {
     int          index;     /* -1 : chercher par libellé */
     const char  *label;
@@ -826,24 +1296,31 @@ static gboolean main_send_macro_cb(gpointer user_data)
     const GtMacro *m = d->index >= 0 ? gt_macro_set_get(set, (guint)d->index) : gt_macro_set_find_label(set, d->label);
 
     d->found = gt_macro_is_sendable(m);
-    if (d->found)
+    d->ok = FALSE;
+    /* Arrêt demandé (« Stop » ou fermeture de GTKTerm, fenêtre peut-être détruite) : plus aucun envoi, même déjà demandé */
+    if (d->found && !g_atomic_int_get(&stop_requested))
         d->ok = macros_send(m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
     return G_SOURCE_REMOVE;
 }
 
-
-/* ------------------------------------------------------------------ */
-/* Lua API: send_macro(index_or_label [, arg1, arg2, ...])           */
-/* ------------------------------------------------------------------ */
-
+/* send_macro(index_or_label [, arg1, arg2, ...]) */
 static int l_send_macro(lua_State *L)
 {
     MainMacroData d = { -1, NULL, 0, NULL, FALSE, FALSE };
 
-    if (lua_type(L, 1) == LUA_TNUMBER)
-        d.index = (int)lua_tointeger(L, 1);
-    else
+    if (lua_type(L, 1) == LUA_TNUMBER) {
+        /* luaL_checkinteger refuse 1.5 ; hors 0..G_MAXINT : jamais tronqué en int, simplement introuvable (M4) */
+        lua_Integer index = luaL_checkinteger(L, 1);
+
+        if (index < 0 || index > G_MAXINT) {
+            lua_pushboolean(L, 0);
+            lua_pushstring(L, "macro not found");
+            return 2;
+        }
+        d.index = (int)index;
+    } else {
         d.label = luaL_checkstring(L, 1);
+    }
 
     d.n_args = lua_gettop(L) - 1;
     d.args = g_new0(gchar *, d.n_args + 1);
@@ -854,6 +1331,8 @@ static int l_send_macro(lua_State *L)
 
     run_on_main_sync(main_send_macro_cb, &d);
     g_strfreev(d.args);
+    if (g_atomic_int_get(&stop_requested))
+        return raise_stop(L);
 
     if (!d.found) {
         lua_pushboolean(L, 0);
@@ -865,12 +1344,13 @@ static int l_send_macro(lua_State *L)
 }
 
 /* ------------------------------------------------------------------ */
-/* Register API                                                       */
+/* Enregistrement de l'API                                            */
 /* ------------------------------------------------------------------ */
 
 static const luaL_Reg gtkterm_funcs[] = {
     { "open",       l_open       },
     { "close",      l_close      },
+    { "status",     l_status     },
     { "send",       l_send       },
     { "send_hex",   l_send_hex   },
     { "wait_for",   l_wait_for   },
@@ -886,123 +1366,323 @@ static const luaL_Reg gtkterm_funcs[] = {
     { NULL, NULL }
 };
 
+/* Entrée de chaque fonction gtkterm.* et de print (fonction réelle en valeur liée) : arrêt demandé, erreur d'arrêt immédiate, sans
+ * attendre le crochet (jusqu'à 1000 instructions plus tard) ; une boucle d'appels à l'API s'arrête au premier appel suivant. */
+static int api_guard(lua_State *L)
+{
+    if (g_atomic_int_get(&stop_requested))
+        return raise_stop(L);
+    return lua_tocfunction(L, lua_upvalueindex(1))(L);
+}
+
+static void push_guarded(lua_State *L, lua_CFunction f)
+{
+    lua_pushcfunction(L, f);
+    lua_pushcclosure(L, api_guard, 1);
+}
+
+/* Fonction de la bibliothèque standard enveloppée (valeur liée 1 : la fonction d'origine, C ou non) : arrêt vu à l'entrée, comme
+ * api_guard. Pas de LUA_MASKCALL (coût à chaque appel) : une boucle d'appels lents (os.execute('sleep 1')) ne verrait sinon l'arrêt
+ * qu'au bout de 1000 instructions, soit des centaines d'appels (I5). L'appel en cours n'est jamais interrompu. */
+static int std_guard(lua_State *L)
+{
+    int n = lua_gettop(L);
+
+    if (g_atomic_int_get(&stop_requested))
+        return raise_stop(L);
+    lua_pushvalue(L, lua_upvalueindex(1));
+    lua_insert(L, 1);
+    if (lua_pcall(L, n, LUA_MULTRET, 0) != LUA_OK) {
+        /* Appelée depuis cette enveloppe C, la fonction d'origine perd deux choses de son message d'erreur : sa position
+         * (luaL_where voit l'enveloppe, pas le script) et son nom (« bad argument #1 to '?' »). Ajoutés ici pour les messages
+         * textuels : position de l'appelant Lua, nom vu à l'appel (« open » pour io.open(...)) sinon le nom complet enregistré dans
+         * la valeur liée 2 (« io.open » ; absente pour l'itérateur de lines : nom inchangé). L'objet d'erreur d'arrêt et les erreurs
+         * non textuelles repartent tels quels. */
+        lua_Debug ar;
+        const char *name = lua_type(L, lua_upvalueindex(2)) == LUA_TSTRING ? lua_tostring(L, lua_upvalueindex(2)) : NULL;
+        const char *msg = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : NULL;
+
+        if (name != NULL && lua_getstack(L, 0, &ar) && lua_getinfo(L, "n", &ar) && ar.name != NULL)
+            name = ar.name;
+        if (msg != NULL) {
+            const char *hit = name != NULL ? strstr(msg, "to '?'") : NULL;
+
+            luaL_where(L, 1);
+            if (hit != NULL) {
+                /* lua_pushfstring n'a pas de « %.*s » : morceaux assemblés par lua_concat */
+                lua_pushlstring(L, msg, (size_t)(hit - msg));
+                lua_pushfstring(L, "to '%s'%s", name, hit + 6);
+                lua_concat(L, 2);
+            } else {
+                lua_pushvalue(L, -2);
+            }
+            lua_concat(L, 2);
+        }
+        return lua_error(L);
+    }
+    return lua_gettop(L);
+}
+
+/* io.lines, f:lines : comme std_guard, et l'itérateur rendu est enveloppé à son tour (chaque ligne lue voit l'arrêt). */
+static int std_guard_lines(lua_State *L)
+{
+    int n = std_guard(L);
+
+    if (n >= 1 && lua_isfunction(L, 1)) {
+        lua_pushvalue(L, 1);
+        lua_pushcclosure(L, std_guard, 1);
+        lua_replace(L, 1);
+    }
+    return n;
+}
+
+/* Remplace t[name] (table en haut de la pile) par sa version enveloppée ; sans effet si ce n'est pas une fonction. */
+static void guard_field(lua_State *L, const char *prefix, const char *name, lua_CFunction guard)
+{
+    if (lua_getfield(L, -1, name) != LUA_TFUNCTION) {
+        lua_pop(L, 1);
+        return;
+    }
+    lua_pushfstring(L, "%s%s", prefix, name);
+    lua_pushcclosure(L, guard, 2);
+    lua_setfield(L, -2, name);
+}
+
+/* Fonctions bloquantes de la bibliothèque standard : os.execute, io.read/lines/popen/open/write et les méthodes read, lines, write
+ * des fichiers (__index du métatable LUA_FILEHANDLE). */
+static void guard_stdlib(lua_State *L)
+{
+    if (lua_getglobal(L, "os") == LUA_TTABLE)
+        guard_field(L, "os.", "execute", std_guard);
+    lua_pop(L, 1);
+    if (lua_getglobal(L, "io") == LUA_TTABLE) {
+        guard_field(L, "io.", "read", std_guard);
+        guard_field(L, "io.", "lines", std_guard_lines);
+        guard_field(L, "io.", "popen", std_guard);
+        guard_field(L, "io.", "open", std_guard);
+        guard_field(L, "io.", "write", std_guard);
+    }
+    lua_pop(L, 1);
+    if (luaL_getmetatable(L, LUA_FILEHANDLE) == LUA_TTABLE) {
+        if (lua_getfield(L, -1, "__index") == LUA_TTABLE) {
+            guard_field(L, "", "read", std_guard);
+            guard_field(L, "", "lines", std_guard_lines);
+            guard_field(L, "", "write", std_guard);
+        }
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+}
+
 static void register_api(lua_State *L)
 {
-    luaL_newlib(L, gtkterm_funcs);
+    guard_stdlib(L);
+
+    lua_createtable(L, 0, G_N_ELEMENTS(gtkterm_funcs) - 1);
+    for (const luaL_Reg *r = gtkterm_funcs; r->name != NULL; r++) {
+        push_guarded(L, r->func);
+        lua_setfield(L, -2, r->name);
+    }
     lua_setglobal(L, "gtkterm");
 
     /* Convenience: main port handle constant */
     lua_pushinteger(L, 0);
     lua_setglobal(L, "MAIN_PORT");
+
+    /* print vers la console, os.exit qui termine le script et non GTKTerm */
+    push_guarded(L, l_print);
+    lua_setglobal(L, "print");
+    lua_getglobal(L, "os");
+    lua_pushcfunction(L, l_os_exit);
+    lua_setfield(L, -2, "exit");
+    lua_pop(L, 1);
 }
 
 /* ------------------------------------------------------------------ */
-/* Done idle callback                                                 */
+/* Fin de script et thread Lua                                        */
 /* ------------------------------------------------------------------ */
+
+static guint done_source_id = 0;   /* source de done_idle_cb programmée, 0 sinon (engine_mutex) */
 
 static gboolean done_idle_cb(gpointer user_data)
 {
+    GtScriptEnd end = (GtScriptEnd)GPOINTER_TO_INT(user_data);
     GThread *finished;
 
     /* Le thread Lua a fini : on le joint ici, sur le thread principal, jamais pendant qu'il peut attendre ce thread (M30). */
     g_mutex_lock(&engine_mutex);
+    done_source_id = 0;
     finished = lua_thread;
     lua_thread = NULL;
     g_mutex_unlock(&engine_mutex);
     if (finished)
         g_thread_join(finished);
 
+    /* Tout le texte du script avant le message de fin */
+    log_flush();
     if (done_func)
-        done_func(done_data);
+        done_func(end, done_data);
     return G_SOURCE_REMOVE;
 }
 
-/* ------------------------------------------------------------------ */
-/* Lua thread                                                         */
-/* ------------------------------------------------------------------ */
+/* Fin de script (thread Lua) : pertes signalées, ports Lua refermés sur le thread principal, écoute du port 0 retirée, file du
+ * port 0 vidée. */
+static void end_of_script_cleanup(void)
+{
+    report_all_overflows();
+    for (int h = 1; h < MAX_LUA_PORTS; h++)
+        lua_port_close(h);
+    run_on_main_sync(main_port_disconnect_cb, NULL);
+    gt_rx_queue_clear(main_queue);
+}
+
+/* Message de l'objet d'erreur en haut de la pile, sans exécuter de Lua (aucun __tostring : on est hors de tout pcall). */
+static gchar *error_message(lua_State *L)
+{
+    if (L == NULL)
+        return g_strdup("not enough memory");
+    switch (lua_type(L, -1)) {
+    case LUA_TSTRING: {
+        /* Avec sa longueur : un octet nul est montré « \0 » au lieu de couper le message */
+        size_t len;
+        const char *text = lua_tolstring(L, -1, &len);
+        GString *out = g_string_sized_new(len);
+        append_escaped(out, text, len);
+        return g_string_free(out, FALSE);
+    }
+    case LUA_TNUMBER:
+        if (lua_isinteger(L, -1))
+            return g_strdup_printf("%lld", (long long)lua_tointeger(L, -1));
+        return g_strdup_printf("%.14g", (double)lua_tonumber(L, -1));
+    default:
+        return g_strdup_printf("(error object is a %s value)", luaL_typename(L, -1));
+    }
+}
+
+/* Raison de fin, décidée par les drapeaux et non par l'objet d'erreur (un gestionnaire xpcall interrompu donne « error in error
+ * handling ») ; journalise le message d'erreur ou de code de sortie avant. Thread Lua. */
+static GtScriptEnd script_end_reason(lua_State *L, int ret)
+{
+    if (g_atomic_int_get(&exit_requested)) {
+        if (exit_status == 0)
+            return GT_SCRIPT_END_FINISHED;
+        engine_log_line(_("Script exited with status %lld"), (long long)exit_status);
+        return GT_SCRIPT_END_ERROR;
+    }
+    if (ret == LUA_OK)
+        return GT_SCRIPT_END_FINISHED;
+    if (g_atomic_int_get(&stop_requested))
+        return GT_SCRIPT_END_STOPPED;
+    gchar *msg = error_message(L);
+    engine_log_line(_("Lua error: %s"), msg);
+    g_free(msg);
+    return GT_SCRIPT_END_ERROR;
+}
+
+/* Exécutée par lua_pcall : bibliothèques, API et script. Plus aucune erreur n'est levée hors de cet appel protégé. */
+static int protected_main(lua_State *L)
+{
+    const char *script = lua_touserdata(L, 1);
+
+    luaL_openlibs(L);
+    register_api(L);
+    /* debug.sethook retiré : le script ne doit pas pouvoir enlever le crochet d'arrêt */
+    if (lua_getglobal(L, "debug") == LUA_TTABLE) {
+        lua_pushnil(L);
+        lua_setfield(L, -2, "sethook");
+    }
+    lua_pop(L, 1);
+    if (luaL_loadbuffer(L, script, strlen(script), "=script") != LUA_OK)
+        return lua_error(L);
+    lua_call(L, 0, 0);
+    return 0;
+}
 
 static gpointer lua_thread_func(gpointer user_data)
 {
     char *script = user_data;
+    int ret = LUA_ERRMEM;
 
-    /* Nombres Lua avec un point quelle que soit la langue (M9) : locale « C » propre à ce thread. */
-    locale_t c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0);
+    /* Nombres Lua avec un point quelle que soit la langue (M9) : LC_NUMERIC seul passe en « C », pour ce thread. Le reste (LC_MESSAGES
+     * en particulier) reste celui du processus, pour que les messages du thread Lua soient traduits (M1). newlocale consomme la base
+     * en cas de succès ; en cas d'échec elle est à libérer ici. */
+    locale_t base = duplocale(LC_GLOBAL_LOCALE);
+    locale_t c_locale = base ? newlocale(LC_NUMERIC_MASK, "C", base) : (locale_t)0;
     if (c_locale)
         uselocale(c_locale);
-
-    lua_State *L = luaL_newstate();
-    luaL_openlibs(L);
-    register_api(L);
+    else if (base)
+        freelocale(base);
 
     /* Écoute du port principal */
-    g_mutex_lock(&ports[0].mutex);
-    ports[0].open = TRUE;
-    g_mutex_unlock(&ports[0].mutex);
     run_on_main_sync(main_port_connect_cb, NULL);
 
-    int ret = luaL_dostring(L, script);
-    if (ret != LUA_OK) {
-        const char *err = lua_tostring(L, -1);
-        engine_log("Lua error: %s\n", err ? err : "(unknown)");
+    lua_State *L = luaL_newstate();
+    if (L != NULL) {
+        lua_atpanic(L, panic_cb);
+        lua_sethook(L, stop_hook, LUA_MASKCOUNT, HOOK_COUNT);
+        /* Ni lua_pushcfunction (fonction C sans valeur liée) ni lua_pushlightuserdata n'allouent : rien ne lève hors du pcall */
+        lua_pushcfunction(L, protected_main);
+        lua_pushlightuserdata(L, script);
+        ret = lua_pcall(L, 1, 0, 0);
     }
+    GtScriptEnd end = script_end_reason(L, ret);
 
-    /* Fin de l'écoute du port principal */
-    run_on_main_sync(main_port_disconnect_cb, NULL);
-    g_mutex_lock(&ports[0].mutex);
-    ports[0].open = FALSE;
-    g_string_truncate(ports[0].rx_buf, 0);
-    g_mutex_unlock(&ports[0].mutex);
-
-    /* Close any Lua-opened ports */
-    for (int i = 1; i < MAX_LUA_PORTS; i++)
-        lua_port_close(i);
-
-    lua_close(L);
+    end_of_script_cleanup();
+    if (L != NULL) {
+        /* Arrêt posé avant lua_close (raison de fin déjà décidée, ports déjà refermés) : un finaliseur (__gc) ne peut plus rien
+         * ouvrir ni attendre, api_guard et std_guard refusent tout appel (M2) ; le crochet reste armé. Lua coupe les crochets pendant
+         * un finaliseur : une boucle Lua pure dans un __gc n'est pas interruptible (fermeture de GTKTerm : abandon au bout de 3 s). */
+        g_atomic_int_set(&stop_requested, 1);
+        lua_close(L);
+    }
     g_free(script);
-
-    g_mutex_lock(&engine_mutex);
-    L_global    = NULL;
-    g_mutex_unlock(&engine_mutex);
 
     if (c_locale) {
         uselocale(LC_GLOBAL_LOCALE);
         freelocale(c_locale);
     }
 
-    g_idle_add_full(G_PRIORITY_DEFAULT, done_idle_cb, NULL, NULL);
+    g_mutex_lock(&engine_mutex);
+    done_source_id = g_idle_add_full(G_PRIORITY_DEFAULT, done_idle_cb, GINT_TO_POINTER(end), NULL);
+    g_mutex_unlock(&engine_mutex);
+    /* Après done_source_id : script_engine_shutdown, réveillé ici, retire cette source avant de joindre le thread */
+    g_mutex_lock(&calls_mutex);
+    thread_finished = TRUE;
+    g_cond_broadcast(&calls_cond);
+    g_mutex_unlock(&calls_mutex);
     return NULL;
 }
 
 /* ------------------------------------------------------------------ */
-/* Public API                                                         */
+/* API publique                                                       */
 /* ------------------------------------------------------------------ */
 
 void script_engine_setup(void)
 {
-    g_mutex_init(&engine_mutex);
-    for (int i = 0; i < MAX_LUA_PORTS; i++) {
-        ports[i].fd        = -1;
-        ports[i].listen_fd = -1;
-        ports[i].type      = PORT_NONE;
-        ports[i].chan_in   = NULL;
-        ports[i].chan_err  = NULL;
-        ports[i].watch_in  = 0;
-        ports[i].watch_err = 0;
-        ports[i].open      = FALSE;
-        g_mutex_init(&ports[i].mutex);
-        ports[i].rx_buf    = g_string_new(NULL);
-    }
+    if (main_thread == NULL)
+        main_thread = g_thread_self();
+    if (main_queue == NULL)
+        main_queue = gt_rx_queue_new(GT_SCRIPT_RX_MAX);
 }
 
 void script_engine_run(const char *script_text)
 {
+    script_engine_setup();
     g_mutex_lock(&engine_mutex);
     if (lua_thread != NULL) {
         g_mutex_unlock(&engine_mutex);
-        engine_log("Script already running.\n");
+        engine_log_line(_("Script already running."));
         return;
     }
-    stop_requested = FALSE;
+    /* Exécution suivante : drapeaux d'arrêt et de sortie, pertes signalées et file du port 0 remis à zéro avant le thread */
+    g_atomic_int_set(&stop_requested, 0);
+    g_atomic_int_set(&exit_requested, 0);
+    exit_status = 0;
+    memset(overflow_reported, 0, sizeof(overflow_reported));
+    gt_rx_queue_reset(main_queue);
+    g_mutex_lock(&calls_mutex);
+    thread_finished = FALSE;
+    g_mutex_unlock(&calls_mutex);
     char *copy = g_strdup(script_text);
     lua_thread = g_thread_new("lua-script", lua_thread_func, copy);
     g_mutex_unlock(&engine_mutex);
@@ -1010,7 +1690,10 @@ void script_engine_run(const char *script_text)
 
 void script_engine_stop(void)
 {
-    stop_requested = TRUE;
+    g_atomic_int_set(&stop_requested, 1);
+    g_mutex_lock(&pause_mutex);
+    g_cond_broadcast(&pause_cond);
+    g_mutex_unlock(&pause_mutex);
 }
 
 gboolean script_engine_is_running(void)
@@ -1019,6 +1702,55 @@ gboolean script_engine_is_running(void)
     gboolean running = (lua_thread != NULL);
     g_mutex_unlock(&engine_mutex);
     return running;
+}
+
+void script_engine_shutdown(void)
+{
+    if (!script_engine_is_running())
+        return;
+    /* Les widgets du panneau sont détruits ou vont l'être : plus de journal ni de fin vers l'interface */
+    script_engine_set_log_func(NULL, NULL);
+    script_engine_set_done_func(NULL, NULL);
+    script_engine_stop();
+
+    /* Le contexte par défaut ne tourne plus : ses sources (réception de la liaison, voyants, messages, minuteries de l'interface)
+     * toucheraient des widgets peut-être détruits. Ce thread exécute lui-même les demandes run_on_main_sync du thread Lua (fermeture
+     * de ses ports, fin de l'écoute du port 0) en retirant leurs sources, jusqu'à la fin du thread, au plus 3 s. */
+    gint64 deadline = g_get_monotonic_time() + SHUTDOWN_TIMEOUT_US;
+    gboolean finished;
+
+    g_mutex_lock(&calls_mutex);
+    for (;;) {
+        MainCall *mc = g_queue_pop_head(&pending_calls);
+        if (mc != NULL) {
+            g_source_remove(mc->source_id);
+            g_mutex_unlock(&calls_mutex);
+            main_call_run(mc);
+            g_mutex_lock(&calls_mutex);
+            continue;
+        }
+        if (thread_finished || !g_cond_wait_until(&calls_cond, &calls_mutex, deadline)) {
+            if (thread_finished || g_queue_is_empty(&pending_calls))
+                break;
+        }
+    }
+    finished = thread_finished;
+    g_mutex_unlock(&calls_mutex);
+
+    if (!finished) {
+        g_warning("Lua script still running after 3 s (blocked in a standard library call?): quitting without waiting for it");
+        return;
+    }
+    /* Thread fini : joint ici, sa source de fin retirée (elle joindrait un thread déjà joint et appellerait la fonction de fin) */
+    g_mutex_lock(&engine_mutex);
+    GThread *thread = lua_thread;
+    guint source = done_source_id;
+    lua_thread = NULL;
+    done_source_id = 0;
+    g_mutex_unlock(&engine_mutex);
+    if (source != 0)
+        g_source_remove(source);
+    g_thread_join(thread);
 }
 
 void script_engine_set_log_func(ScriptLogFunc func, gpointer user_data)

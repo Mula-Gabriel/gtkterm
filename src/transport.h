@@ -106,6 +106,9 @@ gssize       gt_transport_send(GtTransport *t, const guint8 *data, gsize len);
 gint         gt_transport_get_modem_lines(GtTransport *t);
 void         gt_transport_toggle_line(GtTransport *t, GtModemLine line);
 void         gt_transport_send_break(GtTransport *t);
+/* Série : octets écrits encore en attente d'émission (ioctl TIOCOUTQ), jamais bloquant ; 0 hors série, après une perte ou en
+ * cas d'erreur (une pty rend toujours 0). */
+guint        gt_transport_get_output_pending(GtTransport *t);
 /* Débit réellement obtenu (série), 0 sinon. */
 guint        gt_transport_get_actual_baudrate(GtTransport *t);
 /* Descripteur d'envoi : série ou client TCP ; serveur : client accepté ; -1 sinon. */

@@ -23,6 +23,7 @@
 void           macros_init             (void);	/* jeu vide, ordonnanceur sur la liaison par défaut ; avant create_main_window() */
 GtMacroSet    *macros_get_set          (void);
 GtMacroPoller *macros_get_poller       (void);
+void           macros_shutdown         (void);	/* fermeture de GTKTerm (après gtk_main) : polling arrêté sans rappel d'état, ordonnanceur libéré */
 void           macros_replace_set      (GtMacroSet *set);	/* prend le jeu en charge, arrête tout polling, raccourcis + panneau */
 /* Seul envoi de macro de l'interface (clic, raccourci, polling, Lua) ; n_args < 0 : arguments enregistrés.
  * Macro inconnue ou non envoyable : FALSE, rien n'est envoyé. TRUE si tous les octets ont été écrits. */
