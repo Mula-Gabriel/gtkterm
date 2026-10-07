@@ -19,6 +19,7 @@ static GByteArray *envoyes = NULL;
 static GThread *thread_envoi = NULL;
 static GtSendOrigin derniere_origine = GT_SEND_KEYBOARD;
 static gboolean ecriture_en_echec = FALSE;	/* port fermé ou perdu simulé : rien n'est écrit */
+static GtLinkState etat_lien = GT_LINK_OPEN;	/* état rendu par gt_link_get_state (GT_LINK_OPEN après stub_reset) */
 
 static void
 gt_link_class_init(GtkTermLinkClass *klass)
@@ -68,6 +69,7 @@ stub_link_reset(void)
 	thread_envoi = NULL;
 	derniere_origine = GT_SEND_KEYBOARD;
 	ecriture_en_echec = FALSE;
+	etat_lien = GT_LINK_OPEN;
 	g_mutex_unlock(&octets_mutex);
 }
 
@@ -76,6 +78,19 @@ void
 stub_link_set_write_fails(gboolean fails)
 {
 	ecriture_en_echec = fails;
+}
+
+GtLinkState
+gt_link_get_state(GtkTermLink *link)
+{
+	return etat_lien;
+}
+
+/* Simule l'état de la liaison (GtLinkState) vu par gtkterm.status(0) et par l'envoi sur le port 0 */
+void
+stub_link_set_state(gint state)
+{
+	etat_lien = (GtLinkState)state;
 }
 
 GByteArray *

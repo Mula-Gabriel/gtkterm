@@ -421,6 +421,9 @@ static void on_colors_clicked(GtkWidget *widget, gpointer user_data)
 /* Console append                                                     */
 /* ------------------------------------------------------------------ */
 
+/* Console bornée : au-delà, les plus anciennes lignes sont retirées (une boucle de journal ne fait plus grossir le tampon sans fin) */
+#define CONSOLE_MAX_LINES 10000
+
 static void console_append(const char *text, gpointer user_data)
 {
     (void)user_data;
@@ -431,6 +434,14 @@ static void console_append(const char *text, gpointer user_data)
     gtk_text_buffer_get_end_iter(buf, &end);
     gtk_text_buffer_insert(buf, &end, text, -1);
 
+    gint lines = gtk_text_buffer_get_line_count(buf);
+    if (lines > CONSOLE_MAX_LINES) {
+        GtkTextIter start, cut;
+        gtk_text_buffer_get_start_iter(buf, &start);
+        gtk_text_buffer_get_iter_at_line(buf, &cut, lines - CONSOLE_MAX_LINES);
+        gtk_text_buffer_delete(buf, &start, &cut);
+    }
+
     GtkTextMark *mark = gtk_text_buffer_get_insert(buf);
     gtk_text_view_scroll_mark_onscreen(GTK_TEXT_VIEW(console_view), mark);
 }
@@ -439,12 +450,22 @@ static void console_append(const char *text, gpointer user_data)
 /* Script done callback                                               */
 /* ------------------------------------------------------------------ */
 
-static void on_script_done(gpointer user_data)
+static void on_script_done(GtScriptEnd end, gpointer user_data)
 {
     (void)user_data;
     if (run_button)  gtk_widget_set_sensitive(run_button,  TRUE);
     if (stop_button) gtk_widget_set_sensitive(stop_button, FALSE);
-    console_append(_("[Script finished]\n"), NULL);
+    switch (end) {
+    case GT_SCRIPT_END_STOPPED:
+        console_append(_("[Script stopped]\n"), NULL);
+        break;
+    case GT_SCRIPT_END_ERROR:
+        console_append(_("[Script finished with an error]\n"), NULL);
+        break;
+    default:
+        console_append(_("[Script finished]\n"), NULL);
+        break;
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -461,8 +482,10 @@ static void on_run_clicked(GtkWidget *widget, gpointer user_data)
     gtk_text_buffer_get_bounds(buf, &start, &end);
     char *script = gtk_text_buffer_get_text(buf, &start, &end, FALSE);
 
-    GtkTextBuffer *con_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(console_view));
-    gtk_text_buffer_set_text(con_buf, "", -1);
+    if (console_view) {
+        GtkTextBuffer *con_buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(console_view));
+        gtk_text_buffer_set_text(con_buf, "", -1);
+    }
 
     gtk_widget_set_sensitive(run_button,  FALSE);
     gtk_widget_set_sensitive(stop_button, TRUE);
@@ -607,6 +630,7 @@ void create_script_panel(void)
         gtk_image_new_from_icon_name("media-playback-start", GTK_ICON_SIZE_SMALL_TOOLBAR),
         _("Run"));
     run_button = GTK_WIDGET(run_item);
+    g_signal_connect(run_button, "destroy", G_CALLBACK(gtk_widget_destroyed), &run_button);
     g_signal_connect(run_item, "clicked", G_CALLBACK(on_run_clicked), NULL);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), run_item, -1);
 
@@ -614,6 +638,7 @@ void create_script_panel(void)
         gtk_image_new_from_icon_name("media-playback-stop", GTK_ICON_SIZE_SMALL_TOOLBAR),
         _("Stop"));
     stop_button = GTK_WIDGET(stop_item);
+    g_signal_connect(stop_button, "destroy", G_CALLBACK(gtk_widget_destroyed), &stop_button);
     gtk_widget_set_sensitive(stop_button, FALSE);
     g_signal_connect(stop_item, "clicked", G_CALLBACK(on_stop_clicked), NULL);
     gtk_toolbar_insert(GTK_TOOLBAR(toolbar), stop_item, -1);
@@ -648,6 +673,7 @@ void create_script_panel(void)
     gtk_source_buffer_set_highlight_matching_brackets(src_buf, TRUE);
 
     editor_view = gtk_source_view_new_with_buffer(src_buf);
+    g_signal_connect(editor_view, "destroy", G_CALLBACK(gtk_widget_destroyed), &editor_view);
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(editor_view), TRUE);
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(editor_view), GTK_WRAP_NONE);
     gtk_source_view_set_show_line_numbers(GTK_SOURCE_VIEW(editor_view), TRUE);
@@ -702,6 +728,7 @@ default_text:
     gtk_source_buffer_set_highlight_syntax(con_buf, FALSE);
 
     console_view = gtk_source_view_new_with_buffer(con_buf);
+    g_signal_connect(console_view, "destroy", G_CALLBACK(gtk_widget_destroyed), &console_view);
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(console_view), TRUE);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(console_view), FALSE);
     gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(console_view), FALSE);

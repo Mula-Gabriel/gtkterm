@@ -8,6 +8,7 @@
 #include <pty.h>
 #include <stdarg.h>
 #include <string.h>
+#include <netdb.h>
 #include <termios.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -18,10 +19,23 @@
 
 #include "transport.h"
 #include "config_file.h"
+#include "test_util.h"
 
 /* ---- Lignes modem simulées ------------------------------------------- */
 
 int __real_ioctl(int fd, unsigned long requete, ...);
+int __real_getaddrinfo(const char *noeud, const char *service, const struct addrinfo *indices, struct addrinfo **res);
+
+/* localhost : ::1 puis 127.0.0.1, toujours (repli d'adresse déterministe) */
+int
+__wrap_getaddrinfo(const char *noeud, const char *service, const struct addrinfo *indices, struct addrinfo **res)
+{
+	int ret;
+
+	if(test_localhost_deterministe(__real_getaddrinfo, noeud, service, indices, res, &ret))
+		return ret;
+	return __real_getaddrinfo(noeud, service, indices, res);
+}
 
 static int modem_fd = -1;
 static int modem_etat = 0;
@@ -108,18 +122,6 @@ compter(Recepteur *r, TransportEvent ev)
 		if(g_array_index(r->evenements, TransportEvent, i) == ev)
 			n++;
 	return n;
-}
-
-static void
-iterer(guint ms)
-{
-	gint64 fin = g_get_monotonic_time() + (gint64)ms * 1000;
-
-	while(g_get_monotonic_time() < fin)
-	{
-		g_main_context_iteration(NULL, FALSE);
-		g_usleep(1000);
-	}
 }
 
 static gboolean
@@ -275,8 +277,10 @@ test_termios_sans_heritage(void)
 		return;
 	}
 	g_assert_cmpint(tcgetattr(p.esclave, &tio), ==, 0);
-	/* Une pty impose CS8 et sans parité : seuls CRTSCTS et CSTOPB y sont observables. */
+	/* Une pty impose CS8 et sans parité : seuls CRTSCTS, CSTOPB et le débit y sont observables. */
 	tio.c_cflag = (tio.c_cflag & ~CSIZE) | CS8 | CSTOPB | CRTSCTS;
+	cfsetospeed(&tio, B9600);
+	cfsetispeed(&tio, B9600);
 	g_assert_cmpint(tcsetattr(p.esclave, TCSANOW, &tio), ==, 0);
 
 	params_serie(&tp, ttyname(p.esclave));
@@ -286,11 +290,13 @@ test_termios_sans_heritage(void)
 	g_assert_cmpint(tcgetattr(gt_transport_get_fd(t), &tio), ==, 0);
 	g_assert_cmpuint(tio.c_cflag & CSIZE, ==, CS8);
 	g_assert_cmpuint(tio.c_cflag & (CSTOPB | CRTSCTS), ==, 0);
+	g_assert_cmpuint(cfgetospeed(&tio), ==, B115200);
 	gt_transport_close(t);
 
-	/* Fermeture d'une instance série : réglages d'origine restaurés */
+	/* Fermeture d'une instance série : réglages d'origine restaurés, débit compris (relevé avant de le changer, M3) */
 	g_assert_cmpint(tcgetattr(p.esclave, &tio), ==, 0);
 	g_assert_cmpuint(tio.c_cflag & CSTOPB, ==, CSTOPB);
+	g_assert_cmpuint(cfgetospeed(&tio), ==, B9600);
 	transport_params_clear(&tp);
 	fermer_pty(&p);
 }
@@ -538,6 +544,34 @@ test_tcp_connexion_refusee(void)
 	recepteur_liberer(&r);
 }
 
+/* ---- I4 : adresses résolues essayées l'une après l'autre ----------------- */
+
+static void
+test_tcp_adresse_suivante(void)
+{
+	TransportParams tp;
+	GtTransport *t;
+	Recepteur r;
+	guint16 port;
+	int ecoute = ecoute_locale(&port);
+	GError *err = NULL;
+
+	/* localhost rend souvent ::1 d'abord (refus asynchrone : rien n'écoute en IPv6), puis 127.0.0.1 qui écoute */
+	recepteur_init(&r);
+	params_tcp(&tp, TRANSPORT_TCP_CLIENT, port);
+	g_free(tp.host);
+	tp.host = g_strdup("localhost");
+	t = gt_transport_open(&tp, &rappels, &r, &err);
+	g_assert_no_error(err);
+	g_assert_nonnull(t);
+	g_assert_true(attendre_evenement(&r, TRANSPORT_EVENT_CONNECTED, 2000));
+	g_assert_cmpuint(compter(&r, TRANSPORT_EVENT_LOST), ==, 0);
+	gt_transport_close(t);
+	transport_params_clear(&tp);
+	recepteur_liberer(&r);
+	close(ecoute);
+}
+
 /* ---- Serveur TCP : client accepté, données, départ du client ----------- */
 
 static void
@@ -665,6 +699,7 @@ main(int argc, char **argv)
 	g_test_add_func("/transport/tcp-pair-ferme", test_tcp_pair_ferme);
 	g_test_add_func("/transport/tcp-fin-de-flux", test_tcp_fin_de_flux);
 	g_test_add_func("/transport/tcp-connexion-refusee", test_tcp_connexion_refusee);
+	g_test_add_func("/transport/tcp-adresse-suivante", test_tcp_adresse_suivante);
 	g_test_add_func("/transport/tcp-serveur-evenements", test_tcp_serveur_evenements);
 	g_test_add_func("/transport/tcp-serveur-fermeture-libere-le-port", test_tcp_serveur_fermeture_libere_le_port);
 	g_test_add_func("/transport/deux-instances", test_deux_instances);

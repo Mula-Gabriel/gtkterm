@@ -36,7 +36,10 @@ test_toutes_les_combinaisons(void)
 					struct termios tio;
 
 					memset(&tio, 0, sizeof(tio));
-					tio.c_cflag = CSIZE | PARENB | PARODD | CSTOPB | CRTSCTS | B9600;
+					tio.c_cflag = CSIZE | PARENB | PARODD | CSTOPB | CRTSCTS;
+					/* cfsetospeed et non « | B9600 » : depuis la glibc 2.42, le débit n'est plus rangé dans CBAUD. */
+					cfsetospeed(&tio, B9600);
+					cfsetispeed(&tio, B9600);
 					tio.c_iflag = IXON | IXOFF;
 					serial_termios_apply(&tio, bits, parite, stop, flux);
 					g_assert_cmpuint(tio.c_cflag & CSIZE, ==, tailles[bits - 5]);
@@ -45,7 +48,8 @@ test_toutes_les_combinaisons(void)
 					g_assert_cmpuint(!!(tio.c_cflag & CSTOPB), ==, stop == 2);
 					g_assert_cmpuint(!!(tio.c_cflag & CRTSCTS), ==, flux == 2);
 					g_assert_cmpuint(!!(tio.c_iflag & IXON), ==, flux == 1);
-					g_assert_cmpuint(tio.c_cflag & CBAUD, ==, B9600);
+					g_assert_cmpuint(cfgetospeed(&tio), ==, B9600);
+					g_assert_cmpuint(cfgetispeed(&tio), ==, B9600);
 				}
 }
 

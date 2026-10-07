@@ -14,4 +14,26 @@ exec env -u DISPLAY -u WAYLAND_DISPLAY -u XAUTHORITY -u DBUS_SESSION_BUS_ADDRESS
   XDG_RUNTIME_DIR="$WORK/run" HOME="$WORK/home" XDG_CONFIG_HOME="$WORK/home/.config" XDG_CACHE_HOME="$WORK/home/.cache" \
   XDG_DATA_HOME="$WORK/home/.local/share" XDG_DATA_DIRS=/usr/local/share:/usr/share GIO_USE_VFS=local GIO_USE_VOLUME_MONITOR=unix GTK_USE_PORTAL=0 \
   PYTHONPATH="$(dirname "$SCENARIO")" PYTHONDONTWRITEBYTECODE=1 \
-  timeout "${GTKTERM_GUI_TIMEOUT:-240}" dbus-run-session -- python3 "$SCENARIO"
+  timeout "${GTKTERM_GUI_TIMEOUT:-240}" dbus-run-session -- sh -c '
+# Bus AT-SPI privé et registre lancés ici : at-spi-bus-launcher peut passer par dbus-broker, qui n active
+# at-spi2-registryd que par systemd, absent de la session isolée (gtkterm reste alors introuvable dans AT-SPI).
+CONF=/usr/share/defaults/at-spi2/accessibility.conf
+REGISTRYD=/usr/lib/at-spi2-registryd
+PIDS=
+if command -v dbus-daemon >/dev/null 2>&1 && [ -r "$CONF" ] && [ -x "$REGISTRYD" ]; then
+  ADDR="$XDG_RUNTIME_DIR/a11y-bus-address"
+  dbus-daemon --config-file="$CONF" --nofork --print-address 3 3>"$ADDR" </dev/null >/dev/null 2>&1 &
+  PIDS=$!
+  for i in $(seq 50); do [ -s "$ADDR" ] && break; sleep 0.1; done
+  AT_SPI_BUS_ADDRESS=$(head -n1 "$ADDR")
+  if [ -n "$AT_SPI_BUS_ADDRESS" ]; then
+    export AT_SPI_BUS_ADDRESS
+    "$REGISTRYD" </dev/null >/dev/null 2>&1 &
+    PIDS="$PIDS $!"
+    sleep 0.3
+  fi
+fi
+python3 "$1"
+STATUS=$?
+[ -n "$PIDS" ] && kill $PIDS 2>/dev/null
+exit $STATUS' sh "$SCENARIO"

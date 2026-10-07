@@ -27,8 +27,10 @@
 #include "cmdline.h"
 #include "link.h"
 #include "macros.h"
+#include "macro_panel.h"
 #include "user_signals.h"
 #include "script_panel.h"
+#include "script_engine.h"
 
 #include <config.h>
 #include <glib/gi18n.h>
@@ -83,8 +85,15 @@ int main(int argc, char *argv[])
 
 	gtk_main();
 
-	/* La fenêtre peut être détruite (bouton « Fermer » de la barre de titre) : plus aucun gestionnaire de l'interface sur la liaison */
+	/* La fenêtre peut être détruite (bouton « Fermer » de la barre de titre) : plus aucun gestionnaire de l'interface sur la liaison,
+	   plus de polling ni de clignotement des boutons de macros */
 	interface_disconnect_link(link);
+	macro_panel_shutdown();
+	macros_shutdown();
+
+	/* Script Lua en cours : arrêté, ses ports refermés (par ce thread) et son thread joint avant de fermer la liaison qu'il écoute */
+	script_engine_shutdown();
+
 	gt_link_close(link);
 	g_object_unref(link);
 

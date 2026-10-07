@@ -20,6 +20,8 @@ unit_tests = {
 	'test_view_render' : [],
 	'test_profile' : [],
 	'test_config_store' : [],
+	'test_rx_queue' : [],
+	'test_script_port' : [util_dep],
 }
 
 test_env = environment()
@@ -27,6 +29,8 @@ test_env = environment()
 test_env.set('UBSAN_OPTIONS', 'halt_on_error=1:print_stacktrace=1')
 test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
 test_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
+# Catalogues .mo compilés par la construction (po/<langue>/gtkterm.mo) : test des messages traduits du thread Lua.
+test_env.set('GTKTERM_PO_DIR', meson.project_build_root() / 'po')
 # Jamais l'écran réel : sans cela, gtk_init_check (cas de raccourcis de test_macros_send) se connecterait au compositeur de la session,
 # même sans DISPLAY ni WAYLAND_DISPLAY (GDK se rabat sur $XDG_RUNTIME_DIR/wayland-0). Un backend inconnu fait échouer
 # gtk_init_check : ces cas sont alors sautés ; seule la suite graphique isolée (broadway privé) ouvre un affichage.
@@ -56,7 +60,7 @@ integration_tests = {
 	'test_transport' : {
 		'sources' : [],
 		'deps' : [util_dep],
-		'link_args' : ['-Wl,--wrap=ioctl'],
+		'link_args' : ['-Wl,--wrap=ioctl', '-Wl,--wrap=getaddrinfo'],
 	},
 	'test_macros_send' : {
 		'sources' : files('../src/macros.c') + stub_journal + stub_ui + stub_link,
@@ -66,7 +70,7 @@ integration_tests = {
 	'test_script_engine' : {
 		'sources' : files('../src/script_engine.c', 'stubs/stub_macros.c') + stub_journal + stub_link,
 		'deps' : [gtk_deps, lua_dep, util_dep],
-		'link_args' : [],
+		'link_args' : ['-Wl,--wrap=ioctl', '-Wl,--wrap=getaddrinfo'],
 	},
 }
 

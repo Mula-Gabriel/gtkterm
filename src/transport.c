@@ -49,6 +49,8 @@ struct _GtTransport
 	guint client_watch_id;		/* serveur : lecture du client */
 	guint connect_watch_id;		/* client TCP : connexion en cours */
 	guint lost_idle_id;		/* signalement différé de LOST */
+	struct addrinfo *addrs;		/* client TCP : adresses résolues, gardées pendant la connexion (I4), NULL ensuite */
+	struct addrinfo *next_addr;	/* client TCP : prochaine adresse à essayer si la connexion en cours échoue */
 	gchar *lost_detail;
 	gboolean lost;
 	gboolean termios_saved;
@@ -207,10 +209,17 @@ static gboolean transport_open_serial(GtTransport *t, GError **error)
 		t->locked = TRUE;
 	}
 
+	/* Réglages d'origine relevés avant tout changement, débit compris (M3) : la fermeture les restaure tels quels */
+	if(tcgetattr(fd, &t->termios_save) == 0)
+		t->termios_saved = TRUE;
+
 	speed_margin = p->baudrate / (3 * (2U + p->bits + !!p->parity));
 	t->actual_baudrate = set_port_baudrate(p->baudrate, fd);
 	if(t->actual_baudrate < p->baudrate - speed_margin || t->actual_baudrate - speed_margin > p->baudrate)
 	{
+		if(t->termios_saved)
+			tcsetattr(fd, TCSANOW, &t->termios_save);
+		t->termios_saved = FALSE;
 		close(fd);
 		t->locked = FALSE;
 		g_set_error(error, GT_TRANSPORT_ERROR, GT_TRANSPORT_ERROR_BAUDRATE, _("Unable to set baud rate %u"), p->baudrate);
@@ -221,8 +230,6 @@ static gboolean transport_open_serial(GtTransport *t, GError **error)
 		t->devnum = st.st_rdev;
 
 	tcgetattr(fd, &termios_p);
-	t->termios_save = termios_p;
-	t->termios_saved = TRUE;
 	serial_termios_apply(&termios_p, p->bits, p->parity, p->stopbits, p->flow);
 	tcsetattr(fd, TCSANOW, &termios_p);
 	tcflush(fd, TCOFLUSH);
@@ -231,6 +238,45 @@ static gboolean transport_open_serial(GtTransport *t, GError **error)
 	t->fd = fd;
 	t->watch_id = g_unix_fd_add_full(WATCH_PRIORITY, fd, G_IO_IN | G_IO_HUP | G_IO_ERR, transport_read_cb, t, NULL);
 	return TRUE;
+}
+
+static gboolean transport_connect_cb(gint fd, GIOCondition cond, gpointer data);
+
+/* Client TCP : essaie les adresses à partir de rp jusqu'à une connexion établie ou en cours (EINPROGRESS) ; *last_errno reçoit
+ * l'erreur du dernier échec synchrone. Connexion en cours : surveillance posée, adresses suivantes retenues pour un refus. */
+static gboolean transport_connect_from(GtTransport *t, struct addrinfo *rp, int *last_errno)
+{
+	for(; rp != NULL; rp = rp->ai_next)
+	{
+		int fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+
+		if(fd == -1)
+		{
+			*last_errno = errno;
+			continue;
+		}
+		fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+		if(connect(fd, rp->ai_addr, rp->ai_addrlen) == 0 || errno == EINPROGRESS)
+		{
+			/* Connexion asynchrone : CONNECTED ou adresse suivante (LOST après la dernière) quand le descripteur devient
+			   inscriptible (M5) */
+			t->fd = fd;
+			t->next_addr = rp->ai_next;
+			t->connect_watch_id = g_unix_fd_add_full(WATCH_PRIORITY, fd, G_IO_OUT, transport_connect_cb, t, NULL);
+			return TRUE;
+		}
+		*last_errno = errno;
+		close(fd);
+	}
+	return FALSE;
+}
+
+static void transport_free_addrs(GtTransport *t)
+{
+	if(t->addrs != NULL)
+		freeaddrinfo(t->addrs);
+	t->addrs = NULL;
+	t->next_addr = NULL;
 }
 
 static gboolean transport_connect_cb(gint fd, GIOCondition cond, gpointer data)
@@ -244,13 +290,21 @@ static gboolean transport_connect_cb(gint fd, GIOCondition cond, gpointer data)
 		err = errno;
 	if(err != 0)
 	{
-		gchar *msg = g_strdup_printf(_("Cannot connect to %s:%s: %s\n"), t->params.host, t->params.tcp_port, g_strerror(err));
+		gchar *msg;
 
+		/* Refus (ou autre échec) de cette adresse : la suivante, s'il en reste (localhost : ::1 puis 127.0.0.1, I4) */
+		close(fd);
+		t->fd = -1;
+		if(transport_connect_from(t, t->next_addr, &err))
+			return G_SOURCE_REMOVE;
+		transport_free_addrs(t);
+		msg = g_strdup_printf(_("Cannot connect to %s:%s: %s\n"), t->params.host, t->params.tcp_port, g_strerror(err));
 		transport_mark_lost(t, msg);
 		g_free(msg);
 		return G_SOURCE_REMOVE;
 	}
 
+	transport_free_addrs(t);
 	t->watch_id = g_unix_fd_add_full(WATCH_PRIORITY, fd, G_IO_IN | G_IO_HUP | G_IO_ERR, transport_read_cb, t, NULL);
 	if(t->cb.on_event != NULL)
 		t->cb.on_event(TRANSPORT_EVENT_CONNECTED, NULL, t->user_data);
@@ -259,8 +313,8 @@ static gboolean transport_connect_cb(gint fd, GIOCondition cond, gpointer data)
 
 static gboolean transport_open_tcp_client(GtTransport *t, GError **error)
 {
-	struct addrinfo hints, *res, *rp;
-	int fd = -1, ret, last_errno = 0;
+	struct addrinfo hints, *res;
+	int ret, last_errno = 0;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
@@ -273,33 +327,14 @@ static gboolean transport_open_tcp_client(GtTransport *t, GError **error)
 		return FALSE;
 	}
 
-	for(rp = res; rp != NULL; rp = rp->ai_next)
+	t->addrs = res;
+	if(!transport_connect_from(t, res, &last_errno))
 	{
-		fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-		if(fd == -1)
-		{
-			last_errno = errno;
-			continue;
-		}
-		fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
-		if(connect(fd, rp->ai_addr, rp->ai_addrlen) == 0 || errno == EINPROGRESS)
-			break;
-		last_errno = errno;
-		close(fd);
-		fd = -1;
-	}
-	freeaddrinfo(res);
-
-	if(fd == -1)
-	{
+		transport_free_addrs(t);
 		g_set_error(error, GT_TRANSPORT_ERROR, GT_TRANSPORT_ERROR_CONNECT, _("Cannot connect to %s:%s: %s\n"), t->params.host, t->params.tcp_port,
 		            g_strerror(last_errno));
 		return FALSE;
 	}
-
-	/* Connexion asynchrone : CONNECTED ou LOST quand le descripteur devient inscriptible (M5) */
-	t->fd = fd;
-	t->connect_watch_id = g_unix_fd_add_full(WATCH_PRIORITY, fd, G_IO_OUT, transport_connect_cb, t, NULL);
 	return TRUE;
 }
 
@@ -466,6 +501,7 @@ void gt_transport_close(GtTransport *t)
 		close(t->fd);
 	}
 
+	transport_free_addrs(t);
 	g_free(t->lost_detail);
 	transport_params_clear(&t->params);
 	g_free(t);
@@ -558,6 +594,17 @@ void gt_transport_send_break(GtTransport *t)
 	if(t == NULL || t->params.type != TRANSPORT_SERIAL || t->fd == -1 || t->lost)
 		return;
 	tcsendbreak(t->fd, 0);
+}
+
+guint gt_transport_get_output_pending(GtTransport *t)
+{
+	int pending = 0;
+
+	if(t == NULL || t->params.type != TRANSPORT_SERIAL || t->fd == -1 || t->lost)
+		return 0;
+	if(ioctl(t->fd, TIOCOUTQ, &pending) == -1 || pending < 0)
+		return 0;
+	return (guint)pending;
 }
 
 guint gt_transport_get_actual_baudrate(GtTransport *t)

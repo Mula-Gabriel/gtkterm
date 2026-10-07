@@ -40,6 +40,10 @@ core_sources = [
 	'profile.h',
 	'config_store.c',
 	'config_store.h',
+	'rx_queue.c',
+	'rx_queue.h',
+	'script_port.c',
+	'script_port.h',
 ]
 
 gtkterm_core = static_library(

@@ -65,7 +65,7 @@ unsigned int speed_t_to_baud(speed_t speed)
 	{
 		size_t i;
 
-		for (i = 0; i < baudrate_count; i++)
+		for (i = 0; i < (size_t)baudrate_count; i++)
 		{
 			if (baudrate_list[i].speed == speed)
 				break;
