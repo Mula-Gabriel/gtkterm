@@ -254,10 +254,12 @@ class Env:
 
 # ---------- AT-SPI ----------
 def role(a):
+    # at-spi2 >= 2.60 nomme « button » le rôle PUSH_BUTTON : on garde le nom historique utilisé par les scénarios.
     try:
-        return a.get_role_name()
+        r = a.get_role_name()
     except Exception:
         return '?'
+    return 'push button' if r == 'button' else r
 
 
 def name(a):

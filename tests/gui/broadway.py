@@ -189,8 +189,24 @@ class Broadway:
         if sf is None:
             raise RuntimeError('surface introuvable pour %s' % obj.get_name())
         top = self._last_top
-        x = sf['x'] + (ex.x - top.x) + (dx if dx is not None else ex.width // 2)
-        y = sf['y'] + (ex.y - top.y) + (dy if dy is not None else ex.height // 2)
+        # Partie visible : un widget plus large que sa zone défilante (panneau de macros étroit) est rogné par elle ;
+        # cliquer au milieu du widget entier tomberait alors hors de la zone visible.
+        x0, y0, x1, y1 = ex.x, ex.y, ex.x + ex.width, ex.y + ex.height
+        p = obj.get_parent()
+        while p is not None:
+            try:
+                r = p.get_role_name()
+            except Exception:
+                break
+            if r in ('viewport', 'scroll pane'):
+                pe = p.get_component_iface().get_extents(Atspi.CoordType.SCREEN)
+                x0, y0 = max(x0, pe.x), max(y0, pe.y)
+                x1, y1 = min(x1, pe.x + pe.width), min(y1, pe.y + pe.height)
+            p = p.get_parent()
+        if x1 <= x0 or y1 <= y0:
+            x0, y0, x1, y1 = ex.x, ex.y, ex.x + ex.width, ex.y + ex.height
+        x = sf['x'] + (ex.x - top.x) + dx if dx is not None else sf['x'] + ((x0 + x1) // 2 - top.x)
+        y = sf['y'] + (ex.y - top.y) + dy if dy is not None else sf['y'] + ((y0 + y1) // 2 - top.y)
         self.click(x, y, button, sid=i)
         return x, y
 

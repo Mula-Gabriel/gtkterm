@@ -38,7 +38,8 @@ test_hors_table(void)
 	g_assert_cmpuint(find_standard_baudrate(250000), ==, B0);
 	g_assert_cmpuint(find_standard_baudrate(UINT_MAX), ==, B0);
 	g_assert_cmpuint(speed_t_to_baud(B0), ==, 0);
-	g_assert_cmpuint(speed_t_to_baud(0xdead), ==, 0);
+	/* speed_t « sain » (glibc >= 2.42 : B9600 == 9600) : toute valeur est un débit ; sinon, hors table = 0. */
+	g_assert_cmpuint(speed_t_to_baud(0xdead), ==, speed_t_is_sane ? 0xdead : 0);
 }
 
 static gboolean

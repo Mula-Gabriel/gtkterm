@@ -33,20 +33,18 @@ parse_hex_escape (const gchar *string, gint *index)
     return '\\';
 
   gint hex_start = i + 2;
-  if (string[hex_start] == '\0' || !g_unichar_isxdigit ((gunichar) string[hex_start]))
+  if (string[hex_start] == '\0' || !g_ascii_isxdigit (string[hex_start]))
     return '\\';
 
-  gint isTwodigits = (string[hex_start + 1] != '\0'
-                      && g_unichar_isxdigit ((gunichar) string[hex_start + 1])) ? 1 : 0;
-
-  guint val_read;
-  if (sscanf (&string[hex_start], "%02X", &val_read) == 1)
+  /* Pas de sscanf ("%02X") : selon la glibc, « 0x » y est lu comme un préfixe et \x0x n'est plus reconnu. */
+  gint value = g_ascii_xdigit_value (string[hex_start]);
+  if (g_ascii_isxdigit (string[hex_start + 1]))
     {
-      *index = hex_start + isTwodigits;
-      return (guchar) val_read;
+      value = value * 16 + g_ascii_xdigit_value (string[hex_start + 1]);
+      hex_start++;
     }
-
-  return '\\';
+  *index = hex_start;
+  return (guchar) value;
 }
 
 static guchar
