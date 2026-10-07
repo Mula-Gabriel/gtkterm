@@ -9,18 +9,17 @@ unit_tests = {
 	'test_macros_list' : [],
 	'test_macros_format' : [],
 	'test_baudrates' : [util_dep],
-	'test_parsecfg' : [],
 	'test_serial_termios' : [],
 	'test_config_file' : [],
 	'test_history' : [],
 	'test_rx_transform' : [],
 	'test_device_match' : [],
 	'test_view_render' : [],
+	'test_profile' : [],
+	'test_config_store' : [],
 }
 
-# Sans effet hors construction avec -Db_sanitize=address ; voir tests/README.md.
 test_env = environment()
-test_env.set('LSAN_OPTIONS', 'suppressions=' + meson.current_source_dir() / 'lsan.supp')
 # UBSan ne fait qu'afficher par défaut : on veut qu'un comportement indéfini fasse échouer le test.
 test_env.set('UBSAN_OPTIONS', 'halt_on_error=1:print_stacktrace=1')
 test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
