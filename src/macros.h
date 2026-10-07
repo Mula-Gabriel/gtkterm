@@ -7,7 +7,7 @@
 /* ------------------------------------------------------------------- */
 /*                                                                     */
 /*   Purpose                                                           */
-/*      Umbrella header - includes all macro sub-modules              */
+/*      Macro state of the application (set, file, poller, shortcuts)  */
 /*                                                                     */
 /***********************************************************************/
 
@@ -15,36 +15,28 @@
 #define MACROS_H_
 
 #include <gtk/gtk.h>
-#include "macros_list.h"
-#include "macros_format.h"
 
-typedef struct
-{
-  gchar *label;
-  gchar *shortcut;
-  gchar *action;
-  gchar *tab;
-  gchar **args;
-  GClosure *closure;
-  gboolean polling_enabled;
-  guint    polling_period_ms;
-} macro_t;
+#include "macro_set.h"
+#include "macro_poller.h"
 
-void Config_macros (GtkAction *action, gpointer data);
-void remove_shortcuts  (void);
-void add_shortcuts     (void);
-void create_shortcuts  (macro_t *, gint);
-gboolean shortcut_callback (gpointer number);
-macro_t *get_shortcuts (gint *);
-void     send_macro_with_arg  (gint macro_index, const gchar *arg_str);
-void     send_macro_with_args (gint macro_index, const gchar **args, gint n_args);
-void     macro_set_arg        (gint macro_index, gint arg_index, const gchar *value);
-void     macro_set_polling    (gint macro_index, gboolean enabled, guint period_ms);
-
-void         macros_file_load              (const gchar *path);
-void         macros_file_save              (const gchar *path);
-const gchar *macros_file_get_default_path  (void);
-void         macros_file_set_path          (const gchar *path);
-const gchar *macros_file_get_path          (void);
+/* État des macros de l'application (un seul jeu aujourd'hui, un par projet demain) ; fil principal seulement. */
+void           macros_init             (void);	/* jeu vide, ordonnanceur sur la liaison par défaut ; avant create_main_window() */
+GtMacroSet    *macros_get_set          (void);
+GtMacroPoller *macros_get_poller       (void);
+void           macros_replace_set      (GtMacroSet *set);	/* prend le jeu en charge, arrête tout polling, raccourcis + panneau */
+/* Seul envoi de macro de l'interface (clic, raccourci, polling, Lua) ; n_args < 0 : arguments enregistrés.
+ * Macro inconnue ou non envoyable : FALSE, rien n'est envoyé. TRUE si tous les octets ont été écrits. */
+gboolean       macros_send             (guint id, const gchar *const *args, gint n_args);
+/* NULL : chemin courant (ou défaut). Fichier absent : jeu vide, TRUE. Fichier illisible : FALSE ; interactif (menu), boîte, jeu et
+ * chemin inchangés ; non interactif (profil), jeu vide, chemin courant = path, avertissement + boîte différée (g_idle_add). */
+gboolean       macros_load_file        (const gchar *path, gboolean interactive);
+gboolean       macros_save_file        (const gchar *path, gboolean interactive);	/* NULL : chemin courant (ou défaut) */
+/* Oublie le dernier échec d'enregistrement signalé : le prochain échec, même identique, ouvre de nouveau sa boîte. Appelé avant un
+ * enregistrement explicite (menu « Save macros file ») ; les enregistrements implicites (frappe, fenêtre d'édition) ne l'appellent pas. */
+void           macros_forget_save_error(void);
+const gchar   *macros_file_get_path    (void);
+gchar         *macros_file_default_path(void);
+void           macros_changed          (void);	/* raccourcis reconnectés + panneau reconstruit */
+void           Config_macros           (GtkAction *action, gpointer data);
 
 #endif

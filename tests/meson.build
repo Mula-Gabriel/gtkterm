@@ -8,6 +8,9 @@ util_dep = cc.find_library('util', required : false)
 unit_tests = {
 	'test_macros_list' : [],
 	'test_macros_format' : [],
+	'test_macro_set' : [],
+	'test_macro_file' : [],
+	'test_macro_poller' : [],
 	'test_baudrates' : [util_dep],
 	'test_serial_termios' : [],
 	'test_config_file' : [],
@@ -24,6 +27,13 @@ test_env = environment()
 test_env.set('UBSAN_OPTIONS', 'halt_on_error=1:print_stacktrace=1')
 test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
 test_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
+# Jamais l'écran réel : sans cela, gtk_init_check (cas de raccourcis de test_macros_send) se connecterait au compositeur de la session,
+# même sans DISPLAY ni WAYLAND_DISPLAY (GDK se rabat sur $XDG_RUNTIME_DIR/wayland-0). Un backend inconnu fait échouer
+# gtk_init_check : ces cas sont alors sautés ; seule la suite graphique isolée (broadway privé) ouvre un affichage.
+# Variables vidées plutôt que retirées : environment().unset() n'existe qu'à partir de meson 1.4.
+test_env.set('DISPLAY', '')
+test_env.set('WAYLAND_DISPLAY', '')
+test_env.set('GDK_BACKEND', 'aucun-affichage')
 
 foreach name, extra_deps : unit_tests
 	exe = executable(name, name + '.c',
@@ -60,11 +70,13 @@ integration_tests = {
 	},
 }
 
+integration_exes = {}
 foreach name, t : integration_tests
 	exe = executable(name, [name + '.c'] + t['sources'],
 		include_directories : stubs_inc,
 		dependencies : [gtkterm_core_dep] + t['deps'],
 		link_args : t['link_args'])
+	integration_exes += {name : exe}
 	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env, timeout : 60)
 endforeach
 

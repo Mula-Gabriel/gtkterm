@@ -163,7 +163,7 @@ try_parse_label (const gchar *action, gint start, gchar **label_out)
 }
 
 static gboolean
-try_parse_list_spec (const gchar *action, gint start,
+try_parse_list_spec (const GtMacroLists *lists, const gchar *action, gint start,
                      gchar **name_out, gint *end_out)
 {
   if (action[start] != '%' || action[start + 1] != '#')
@@ -180,7 +180,7 @@ try_parse_list_spec (const gchar *action, gint start,
 
   gchar *name = g_strndup (&action[name_start], j - name_start);
   /* « %#x » n'est une liste que si une liste de ce nom existe ; sinon « # » est le drapeau printf (M18). */
-  if (macro_list_find (name) < 0)
+  if (gt_macro_lists_find (lists, name) < 0)
     {
       g_free (name);
       return FALSE;
@@ -328,35 +328,8 @@ apply_spec (const gchar *spec, const gchar *fmt_type, const gchar *arg_str)
 
 /* ─── Public format-type queries ───────────────────────────────────── */
 
-gchar *
-macro_get_format_type (const gchar *action)
-{
-  if (action == NULL)
-    return NULL;
-  for (gint i = 0; action[i] != '\0'; i++)
-    {
-      if (action[i] != '%')
-        continue;
-      if (action[i + 1] == '%')
-        { i++; continue; }
-      gchar *t = parse_one_spec (action, i, NULL);
-      if (t != NULL)
-        return t;
-    }
-  return NULL;
-}
-
-gboolean
-macro_has_format_arg (const gchar *action)
-{
-  gchar *t = macro_get_format_type (action);
-  gboolean has = (t != NULL);
-  g_free (t);
-  return has;
-}
-
 gint
-macro_count_format_args (const gchar *action)
+macro_count_format_args (const GtMacroLists *lists, const gchar *action)
 {
   if (action == NULL)
     return 0;
@@ -370,7 +343,7 @@ macro_count_format_args (const gchar *action)
       {
         gchar *list_name = NULL;
         gint end;
-        if (try_parse_list_spec (action, i, &list_name, &end))
+        if (try_parse_list_spec (lists, action, i, &list_name, &end))
           {
             count++;
             i = end;
@@ -390,48 +363,12 @@ macro_count_format_args (const gchar *action)
   return count;
 }
 
-gchar **
-macro_get_format_types (const gchar *action, gint *count_out)
-{
-  gint n = macro_count_format_args (action);
-  if (count_out)
-    *count_out = n;
-  if (n == 0)
-    return NULL;
-  gchar **types = g_new0 (gchar *, n + 1);
-  gint idx = 0;
-  for (gint i = 0; action[i] != '\0' && idx < n; i++)
-    {
-      if (action[i] != '%')
-        continue;
-      if (action[i + 1] == '%')
-        { i++; continue; }
-      {
-        gchar *list_name = NULL;
-        gint end;
-        if (try_parse_list_spec (action, i, &list_name, &end))
-          {
-            types[idx++] = g_strdup ("l");
-            i = end;
-            g_free (list_name);
-            continue;
-          }
-      }
-      gint end;
-      gchar *t = parse_one_spec (action, i, &end);
-      if (t != NULL)
-        { types[idx++] = t; i = end; }
-    }
-  types[n] = NULL;
-  return types;
-}
-
 /* ─── Argument info extraction ─────────────────────────────────────── */
 
 macro_arg_info_t *
-macro_get_arg_infos (const gchar *action, gint *count_out)
+macro_get_arg_infos (const GtMacroLists *lists, const gchar *action, gint *count_out)
 {
-  gint n = macro_count_format_args (action);
+  gint n = macro_count_format_args (lists, action);
   if (count_out)
     *count_out = n;
   if (n == 0)
@@ -452,7 +389,7 @@ macro_get_arg_infos (const gchar *action, gint *count_out)
       {
         gchar *list_name = NULL;
         gint end;
-        if (try_parse_list_spec (action, i, &list_name, &end))
+        if (try_parse_list_spec (lists, action, i, &list_name, &end))
           {
             infos[idx].type = g_strdup ("l");
             infos[idx].list_name = list_name;
@@ -617,7 +554,7 @@ escape_arg_backslashes (const gchar *s)
 }
 
 gchar *
-format_action_with_args (const gchar *action, const gchar **args,
+format_action_with_args (const GtMacroLists *lists, const gchar *action, const gchar **args,
                          gint n_args)
 {
   GString *result = g_string_new ("");
@@ -639,7 +576,7 @@ format_action_with_args (const gchar *action, const gchar **args,
       {
         gchar *list_name = NULL;
         gint list_end;
-        if (try_parse_list_spec (action, i, &list_name, &list_end))
+        if (try_parse_list_spec (lists, action, i, &list_name, &list_end))
           {
             if (arg_idx < n_args)
               {

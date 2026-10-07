@@ -47,3 +47,15 @@ rebuild_macro_buttons(void)
 {
 	stub_record("rebuild_macro_buttons", NULL);
 }
+
+void
+macro_panel_polling_changed(guint id, gboolean running)
+{
+	stub_record("macro_panel_polling_changed", running ? "1" : "0");
+}
+
+void
+config_remember_macros_file(void)
+{
+	stub_record("config_remember_macros_file", NULL);
+}

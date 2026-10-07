@@ -1080,7 +1080,12 @@ void load_macros_file_callback(GtkAction *action, gpointer data)
 	{
 		const gchar *cur = macros_file_get_path();
 		if (cur && g_file_test (cur, G_FILE_TEST_EXISTS))
-			gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), g_path_get_dirname (cur));
+		{
+			gchar *dir = g_path_get_dirname (cur);
+
+			gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), dir);
+			g_free (dir);
+		}
 		else
 			gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), g_get_user_config_dir ());
 	}
@@ -1088,10 +1093,8 @@ void load_macros_file_callback(GtkAction *action, gpointer data)
 	if (gtk_dialog_run (GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
 	{
 		gchar *path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(dialog));
-		macros_file_load (path);
-		add_shortcuts ();
-		rebuild_macro_buttons ();
-		config_remember_macros_file ();
+		if (macros_load_file (path, TRUE))
+			config_remember_macros_file ();
 		g_free (path);
 	}
 
@@ -1110,7 +1113,12 @@ void save_macros_file_callback(GtkAction *action, gpointer data)
 	{
 		const gchar *cur = macros_file_get_path();
 		if (cur && g_file_test (cur, G_FILE_TEST_EXISTS))
-			gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), g_path_get_dirname (cur));
+		{
+			gchar *dir = g_path_get_dirname (cur);
+
+			gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), dir);
+			g_free (dir);
+		}
 		else
 			gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), g_get_user_config_dir ());
 	}
@@ -1119,8 +1127,10 @@ void save_macros_file_callback(GtkAction *action, gpointer data)
 	if (gtk_dialog_run (GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
 	{
 		gchar *path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(dialog));
-		macros_file_save (path);
-		config_remember_macros_file ();
+		/* Enregistrement explicite : un échec déjà signalé par un enregistrement implicite est de nouveau affiché */
+		macros_forget_save_error ();
+		if (macros_save_file (path, TRUE))
+			config_remember_macros_file ();
 		g_free (path);
 	}
 
@@ -1330,7 +1340,6 @@ void load_config(GtkDialog *Fenetre, gint id, GtkTreeSelection *Selection_Liste)
 			Verify_configuration();
 			interface_open_port();
 			ConfigFlags();
-			add_shortcuts();
 			g_free(txt);
 		}
 	}
@@ -1380,12 +1389,8 @@ gint Load_configuration_from_file(const gchar *config_name)
 	g_free(active_config_name);
 	active_config_name = g_strdup(config_name);
 
-	/* Fichier de macros du profil ; sans fichier, celui en cours est gardé */
-	if(config.macros_file != NULL)
-		macros_file_set_path(config.macros_file);
-	macros_file_load(NULL);
-	add_shortcuts();
-	rebuild_macro_buttons();
+	/* Fichier de macros du profil ; sans fichier, celui en cours est relu (non interactif : avertissement seulement) */
+	macros_load_file(config.macros_file, FALSE);
 
 	/* Pas d'application au terminal ici : les valeurs ne sont pas encore validées ; Verify_configuration valide puis applique */
 	return 0;

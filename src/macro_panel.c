@@ -4,16 +4,18 @@
 /*           GTKTerm Software                                          */
 /*                                                                     */
 /*   Purpose                                                           */
-/*      Sidebar macro button panel, polling system, entry validation */
+/*      Sidebar macro button panel (view of the macro set)            */
 /*                                                                     */
 /***********************************************************************/
 
+#include <stdlib.h>
 #include <string.h>
 #include <vte/vte.h>
 
 #include "interface.h"
 #include "macro_panel.h"
 #include "macros.h"
+#include "macros_format.h"
 #include "term_config.h"
 
 #include <config.h>
@@ -22,44 +24,17 @@
 GtkWidget *macro_panel;
 GtkWidget *macro_notebook;
 static GtkWidget *macro_tab_flowbox;
-static GtkWidget *macro_stack;
 static GHashTable *hidden_macro_tabs;
-static GtkCssProvider *polling_css_provider;
-
-
-
-typedef struct {
-	gint       macro_index;
-	guint      period_ms;
-	guint64    last_fire_us;
-	gboolean   enabled;
-	gboolean   running;
-	GtkWidget *button;
-	gint       n_args;
-	gchar    **args;} macro_polling_t;
-
-static GHashTable *macro_polling_table;
-static GHashTable *macro_button_table;
+static GtkCssProvider *polling_css_provider = NULL;
+static GHashTable *macro_button_table;		/* identifiant de macro → bouton principal (non possédé), vidée à chaque reconstruction */
 static gboolean blink_state = FALSE;
 
-static void free_polling_args(macro_polling_t *ps)
-{
-	if (ps->args)
-	{
-		for (gint k = 0; k < ps->n_args; k++)
-			g_free(ps->args[k]);
-		g_free(ps->args);
-	}
-	g_free(ps);
-}
-
 /* Forward declarations */
-static macro_polling_t *get_polling_state(gint macro_index);
-static void toggle_polling_run(gint macro_index);
 static void on_polling_mode_toggled(GtkCheckMenuItem *check_item, gpointer user_data);
-static void on_polling_period_changed(GtkWidget *entry, gpointer user_data);
+static void on_polling_period_activate(GtkEntry *entry, gpointer menu);
+static void on_polling_menu_hide(GtkWidget *menu, gpointer entry);
+static gboolean on_polling_menu_key_press(GtkWidget *menu, GdkEventKey *event, gpointer entry);
 static void on_macro_tab_clicked(GtkToggleButton *btn, gpointer user_data);
-static void send_macro_by_index(gint macro_index);
 static void update_entry_width(GtkEntry *entry);
 static void apply_polling_css(GtkWidget *button);
 static void on_list_action_button_clicked(GtkWidget *widget, gpointer data);
@@ -70,9 +45,9 @@ static gboolean on_macro_notebook_button_press(GtkWidget *widget, GdkEventButton
 
 
 typedef struct {
-	gint       macro_index;
+	guint       macro_id;
 	GtkWidget **entries;
-	gint       n_entries;
+	gint        n_entries;
 } MacroArgData;
 
 static void macro_arg_data_free(gpointer data)
@@ -101,103 +76,43 @@ get_arg_value_from_widget(GtkWidget *widget)
 	return g_strdup("");
 }
 
-static void
-save_arg_from_widget(GtkWidget *widget)
+static guint widget_macro_id(GtkWidget *widget)
 {
-	gint macro_index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "macro-index"));
-	gint arg_index   = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "arg-index"));
-	gchar *val = get_arg_value_from_widget(widget);
-	macro_set_arg(macro_index, arg_index, val);
-	g_free(val);
-	macros_file_save(NULL);
+	return GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget), "macro-id"));
+}
+
+static void save_macros(void)
+{
+	macros_save_file(NULL, TRUE);
 	config_remember_macros_file();
 }
 
-	static void on_list_action_button_clicked(GtkWidget *widget, gpointer data)
-	{
-		gint macro_index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "macro-index"));
-		gchar *list_value = (gchar *)g_object_get_data(G_OBJECT(widget), "list-value");
-		if (list_value == NULL) return;
-
-		const gchar **args = g_new(const gchar *, 1);
-		args[0] = list_value;
-		send_macro_with_args(macro_index, args, 1);
-		g_free(args);
-	}
-
-static void on_macro_arg_button_clicked(GtkWidget *widget, gpointer data)
+/* Valeur d'un champ d'argument écrite dans le modèle (le fichier n'est pas enregistré ici) */
+static void commit_arg_widget(GtkWidget *widget)
 {
-	MacroArgData *d = (MacroArgData *)g_object_get_data(G_OBJECT(widget), "macro-data");
-	if (d == NULL) return;
-	gint macro_index = d->macro_index;
+	gint arg_index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "arg-index"));
+	gchar *val = get_arg_value_from_widget(widget);
 
-	const gchar **args = g_new(const gchar *, d->n_entries);
-	for (gint k = 0; k < d->n_entries; k++)
-	{
-		gchar *val = get_arg_value_from_widget(d->entries[k]);
-		args[k] = val;
-	}
-
-	macro_polling_t *ps = get_polling_state(macro_index);
-	if (ps && ps->enabled)
-	{
-		/* Store args copy for polling */
-		if (ps->args)
-		{
-			for (gint k = 0; k < ps->n_args; k++)
-				g_free(ps->args[k]);
-			g_free(ps->args);
-		}
-		ps->n_args = d->n_entries;
-		ps->args = g_new(gchar *, d->n_entries);
-		for (gint k = 0; k < d->n_entries; k++)
-			ps->args[k] = g_strdup(args[k]);
-
-		toggle_polling_run(macro_index);
-
-		if (ps->running)
-		{
-			ps->last_fire_us = g_get_monotonic_time();
-			send_macro_with_args(macro_index, args, d->n_entries);
-		}
-	}
-	else
-	{
-		send_macro_with_args(macro_index, args, d->n_entries);
-	}
-
-	for (gint k = 0; k < d->n_entries; k++)
-		g_free((gchar *)args[k]);
-	g_free(args);
+	gt_macro_set_set_arg(macros_get_set(), widget_macro_id(widget), arg_index, val);
+	g_free(val);
 }
 
-/* --- Polling system --- */
-
-static void send_macro_by_index(gint macro_index)
+static void save_arg_from_widget(GtkWidget *widget)
 {
-	gint nb_macros = 0;
-	macro_t *macros = get_shortcuts(&nb_macros);
-	if (macros != NULL && macro_index < nb_macros && macros[macro_index].action != NULL)
-		shortcut_callback((gpointer)(long)macro_index);
+	commit_arg_widget(widget);
+	save_macros();
 }
 
-static macro_polling_t *get_polling_state(gint macro_index)
+/* Bouton d'une liste à deux valeurs : un envoi avec la valeur du bouton */
+static void on_list_action_button_clicked(GtkWidget *widget, gpointer data)
 {
-	return (macro_polling_t *)g_hash_table_lookup(macro_polling_table, GINT_TO_POINTER(macro_index));
-}
+	const gchar *list_value = g_object_get_data(G_OBJECT(widget), "list-value");
 
-static void set_polling_state(gint macro_index, guint period_ms, gboolean enabled, gboolean running, GtkWidget *button)
-{
-	macro_polling_t *ps = g_new0(macro_polling_t, 1);
-	ps->macro_index = macro_index;
-	ps->period_ms = period_ms;
-	ps->enabled = enabled;
-	ps->running = running;
-	ps->button = button;
-	g_hash_table_insert(macro_polling_table, GINT_TO_POINTER(macro_index), ps);
+	if (list_value == NULL)
+		return;
+	const gchar *args[] = { list_value };
+	macros_send(widget_macro_id(widget), args, 1);
 }
-
-static GtkCssProvider *polling_css_provider = NULL;
 
 static void apply_polling_css(GtkWidget *button)
 {
@@ -207,120 +122,109 @@ static void apply_polling_css(GtkWidget *button)
 	                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 }
 
-static void update_button_label(macro_polling_t *ps)
+/* Libellé « ⏱ Libellé » en mode polling ; plus de clignotement quand la macro ne tourne pas */
+static void update_button_appearance(guint id)
 {
-	if (ps == NULL || ps->button == NULL)
+	GtkWidget *button = g_hash_table_lookup(macro_button_table, GUINT_TO_POINTER(id));
+	const GtMacro *m = gt_macro_set_find(macros_get_set(), id);
+
+	if (button == NULL || m == NULL)
 		return;
-
-	gint nb_macros = 0;
-	macro_t *macros = get_shortcuts(&nb_macros);
-	if (ps->macro_index < 0 || ps->macro_index >= nb_macros || macros[ps->macro_index].label == NULL)
-		return;
-
-	const gchar *base = macros[ps->macro_index].label;
-	if (ps->enabled)
-		gtk_button_set_label(GTK_BUTTON(ps->button), g_strdup_printf("⏱ %s", base));
-	else
-		gtk_button_set_label(GTK_BUTTON(ps->button), base);
-}
-
-static void update_button_appearance(macro_polling_t *ps)
-{
-	if (ps == NULL || ps->button == NULL)
-		return;
-
-	GtkStyleContext *ctx = gtk_widget_get_style_context(ps->button);
-	gtk_style_context_remove_class(ctx, "polling-blink");
-	gtk_widget_queue_draw(ps->button);
-
-	update_button_label(ps);
-}
-static void toggle_polling_run(gint macro_index)
-{
-	macro_polling_t *ps = get_polling_state(macro_index);
-	if (ps == NULL || !ps->enabled)
-		return;
-
-	ps->running = !ps->running;
-	update_button_appearance(ps);
-}
-
-static void restore_macro_polling(gint macro_index, gboolean enabled, guint period_ms)
-{
-	GtkWidget *btn = g_hash_table_lookup(macro_button_table, GINT_TO_POINTER(macro_index));
-	if (btn == NULL)
-		return;
-
-	macro_polling_t *ps = get_polling_state(macro_index);
-	if (ps == NULL)
+	if (!gt_macro_poller_is_running(macros_get_poller(), id))
 	{
-		set_polling_state(macro_index, period_ms, enabled, FALSE, btn);
-		ps = get_polling_state(macro_index);
+		gtk_style_context_remove_class(gtk_widget_get_style_context(button), "polling-blink");
+		gtk_widget_queue_draw(button);
+	}
+	if (m->polling)
+	{
+		gchar *label = g_strdup_printf("⏱ %s", m->label);
+
+		gtk_button_set_label(GTK_BUTTON(button), label);
+		g_free(label);
 	}
 	else
-	{
-		ps->period_ms = period_ms;
-		ps->enabled = enabled;
-		ps->running = FALSE;
-		ps->button = btn;
-	}
-
-	if (enabled)
-	{
-		update_button_label(ps);
-		apply_polling_css(btn);
-	}
-	else
-	{
-		update_button_appearance(ps);
-	}
-
-	macro_set_polling(macro_index, enabled, period_ms);
+		gtk_button_set_label(GTK_BUTTON(button), m->label);
 }
 
+static guint blink_source = 0;
+static gboolean polling_blink_callback(gpointer user_data);
+
+/* Minuterie de clignotement : n'existe que tant qu'au moins une macro tourne */
+static void update_blink_timer(void)
+{
+	guint running = gt_macro_poller_running_count(macros_get_poller());
+
+	if (running > 0 && blink_source == 0)
+		blink_source = g_timeout_add(500, polling_blink_callback, NULL);
+	else if (running == 0 && blink_source != 0)
+	{
+		g_source_remove(blink_source);
+		blink_source = 0;
+	}
+}
+
+void macro_panel_polling_changed(guint id, gboolean running)
+{
+	if (macro_button_table == NULL)
+		return;
+	update_button_appearance(id);
+	update_blink_timer();
+}
+
+/* Clic sur une macro : bascule son polling si le mode est activé, sinon un envoi (arguments enregistrés) */
+static void activate_macro(guint id)
+{
+	const GtMacro *m = gt_macro_set_find(macros_get_set(), id);
+
+	if (m == NULL)
+		return;
+	if (m->polling)
+		gt_macro_poller_toggle(macros_get_poller(), id);
+	else
+		macros_send(id, NULL, -1);
+}
+
+static void on_macro_arg_button_clicked(GtkWidget *widget, gpointer data)
+{
+	MacroArgData *d = (MacroArgData *)g_object_get_data(G_OBJECT(widget), "macro-data");
+	guint id;
+
+	if (d == NULL)
+		return;
+	/* Identifiant pris avant l'enregistrement : une boîte d'erreur fait tourner une boucle imbriquée pendant laquelle le panneau
+	   peut être reconstruit (d détruit avec son bouton) */
+	id = d->macro_id;
+	for (gint k = 0; k < d->n_entries; k++)
+		commit_arg_widget(d->entries[k]);
+	save_macros();
+	activate_macro(id);
+}
+
+/* --- Polling : l'ordonnanceur (macros_get_poller) envoie ; le panneau ne fait qu'afficher l'état --- */
+
+/* Clignotement des boutons dont la macro tourne */
 static gboolean polling_blink_callback(gpointer user_data)
 {
+	GHashTableIter it;
+	gpointer key, value;
+
 	blink_state = !blink_state;
-	GList *values = g_hash_table_get_values(macro_polling_table);
-	for (GList *l = values; l != NULL; l = l->next)
+	if (macro_button_table == NULL)
+		return G_SOURCE_CONTINUE;
+	g_hash_table_iter_init(&it, macro_button_table);
+	while (g_hash_table_iter_next(&it, &key, &value))
 	{
-		macro_polling_t *ps = (macro_polling_t *)l->data;
-		if (ps->enabled && ps->running && ps->button != NULL)
-		{
-			GtkStyleContext *ctx = gtk_widget_get_style_context(ps->button);
-			gtk_style_context_remove_class(ctx, "polling-blink");
-			if (blink_state)
-				gtk_style_context_add_class(ctx, "polling-blink");
-			gtk_widget_queue_draw(ps->button);
-			//g_print("[BLINK] macro=%d state=%d\n", ps->macro_index, blink_state);
-		}
-	}
-	g_list_free(values);
-	return G_SOURCE_CONTINUE;
-}
+		GtkWidget *button = value;
+		GtkStyleContext *ctx;
 
-static gboolean polling_timer_callback(gpointer user_data)
-{
-	guint64 now = g_get_monotonic_time();
-	GList *values = g_hash_table_get_values(macro_polling_table);
-
-	for (GList *l = values; l != NULL; l = l->next)
-	{
-		macro_polling_t *ps = (macro_polling_t *)l->data;
-		if (ps->enabled && ps->running)
-		{
-			guint64 elapsed_us = now - ps->last_fire_us;
-			if (elapsed_us >= ps->period_ms * 1000)
-			{
-				if (ps->n_args > 0 && ps->args)
-					send_macro_with_args(ps->macro_index, (const gchar **)ps->args, ps->n_args);
-				else
-					send_macro_by_index(ps->macro_index);
-				ps->last_fire_us = now;
-			}
-		}
+		if (!gt_macro_poller_is_running(macros_get_poller(), GPOINTER_TO_UINT(key)))
+			continue;
+		ctx = gtk_widget_get_style_context(button);
+		gtk_style_context_remove_class(ctx, "polling-blink");
+		if (blink_state)
+			gtk_style_context_add_class(ctx, "polling-blink");
+		gtk_widget_queue_draw(button);
 	}
-	g_list_free(values);
 	return G_SOURCE_CONTINUE;
 }
 
@@ -332,16 +236,18 @@ static gboolean on_macro_button_right_click(GtkWidget *button, GdkEventButton *e
 	if (g_object_get_data(G_OBJECT(button), "list-value") != NULL)
 		return FALSE;
 
-	gint macro_index = GPOINTER_TO_INT(user_data);
-	macro_polling_t *ps = get_polling_state(macro_index);
+	guint id = GPOINTER_TO_UINT(user_data);
+	const GtMacro *m = gt_macro_set_find(macros_get_set(), id);
+
+	if (m == NULL)
+		return FALSE;
 
 	GtkWidget *menu = gtk_menu_new();
 
 	/* Polling mode toggle */
 	GtkWidget *polling_toggle = gtk_check_menu_item_new_with_label(_("Polling Mode"));
-	if (ps)
-		gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(polling_toggle), ps->enabled);
-	g_object_set_data(G_OBJECT(polling_toggle), "macro-index", GINT_TO_POINTER(macro_index));
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(polling_toggle), m->polling);
+	g_object_set_data(G_OBJECT(polling_toggle), "macro-id", GUINT_TO_POINTER(id));
 	g_signal_connect(polling_toggle, "toggled",
 	                 G_CALLBACK(on_polling_mode_toggled), NULL);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), polling_toggle);
@@ -356,18 +262,16 @@ static gboolean on_macro_button_right_click(GtkWidget *button, GdkEventButton *e
 	GtkWidget *period_entry = gtk_entry_new();
 	gtk_entry_set_width_chars(GTK_ENTRY(period_entry), 8);
 	gtk_entry_set_input_purpose(GTK_ENTRY(period_entry), GTK_INPUT_PURPOSE_DIGITS);
-	if (ps)
 	{
 		gchar buf[16];
-		g_snprintf(buf, sizeof(buf), "%u", ps->period_ms);
+		g_snprintf(buf, sizeof(buf), "%u", m->polling_period_ms);
 		gtk_entry_set_text(GTK_ENTRY(period_entry), buf);
 	}
-	else
-		gtk_entry_set_text(GTK_ENTRY(period_entry), "1000");
 
-	g_object_set_data(G_OBJECT(period_entry), "macro-index", GINT_TO_POINTER(macro_index));
-	g_signal_connect(period_entry, "changed",
-	                 G_CALLBACK(on_polling_period_changed), NULL);
+	g_object_set_data(G_OBJECT(period_entry), "macro-id", GUINT_TO_POINTER(id));
+	g_signal_connect(period_entry, "activate", G_CALLBACK(on_polling_period_activate), menu);
+	g_signal_connect(menu, "deactivate", G_CALLBACK(on_polling_menu_hide), period_entry);
+	g_signal_connect(menu, "key-press-event", G_CALLBACK(on_polling_menu_key_press), period_entry);
 	gtk_box_pack_start(GTK_BOX(period_vbox), period_entry, FALSE, FALSE, 0);
 
 	GtkWidget *period_menu_item = gtk_menu_item_new();
@@ -382,83 +286,79 @@ static gboolean on_macro_button_right_click(GtkWidget *button, GdkEventButton *e
 
 static void on_polling_mode_toggled(GtkCheckMenuItem *check_item, gpointer user_data)
 {
-	gint macro_index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(check_item), "macro-index"));
+	guint id = widget_macro_id(GTK_WIDGET(check_item));
+	const GtMacro *m = gt_macro_set_find(macros_get_set(), id);
 	gboolean active = gtk_check_menu_item_get_active(check_item);
-	macro_polling_t *ps = get_polling_state(macro_index);
 
-	if (active)
-	{
-		GtkWidget *btn = g_hash_table_lookup(macro_button_table, GINT_TO_POINTER(macro_index));
-		if (ps == NULL)
-		{
-			set_polling_state(macro_index, 1000, TRUE, FALSE, btn);
-			ps = get_polling_state(macro_index);
-		}
-		else
-		{
-			ps->button = btn;
-			ps->enabled = TRUE;
-			ps->running = FALSE;
-		}
-		update_button_appearance(ps);
-		macro_set_polling(macro_index, TRUE, ps->period_ms);
-		macros_file_save(NULL);
-	}
-	else if (ps)
-	{
-		ps->enabled = FALSE;
-		ps->running = FALSE;
-		update_button_appearance(ps);
-		macro_set_polling(macro_index, FALSE, ps->period_ms);
-		macros_file_save(NULL);
-	}
+	if (m == NULL)
+		return;
+	gt_macro_set_set_polling(macros_get_set(), id, active, m->polling_period_ms);
+	if (!active)
+		gt_macro_poller_stop(macros_get_poller(), id);
+	update_button_appearance(id);
+	save_macros();
 }
 
-static void on_polling_period_changed(GtkWidget *entry, gpointer user_data)
+/* Période saisie appliquée si elle est valide (entier de 1 à 86 400 000 ms) ; sinon champ en erreur, ancienne période gardée (M22) */
+static gboolean apply_period_entry(GtkWidget *entry)
 {
-	gint macro_index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(entry), "macro-index"));
-	guint period_ms = (guint)strtoul(gtk_entry_get_text(GTK_ENTRY(entry)), NULL, 10);
-	if (period_ms == 0)
-		period_ms = 1000;
+	guint id = widget_macro_id(entry);
+	const GtMacro *m = gt_macro_set_find(macros_get_set(), id);
+	GtkStyleContext *ctx = gtk_widget_get_style_context(entry);
+	guint period;
 
-	GtkWidget *btn = g_hash_table_lookup(macro_button_table, GINT_TO_POINTER(macro_index));
-	macro_polling_t *ps = get_polling_state(macro_index);
-	if (ps)
+	if (m == NULL)
+		return FALSE;
+	if (!gt_macro_period_parse(gtk_entry_get_text(GTK_ENTRY(entry)), &period))
 	{
-		ps->period_ms = period_ms;
-		ps->button = btn;
-		macro_set_polling(macro_index, ps->enabled, period_ms);
-		macros_file_save(NULL);
+		gtk_style_context_add_class(ctx, "error");
+		return FALSE;
 	}
-	else
+	gtk_style_context_remove_class(ctx, "error");
+	if (period != m->polling_period_ms)
 	{
-		set_polling_state(macro_index, period_ms, FALSE, FALSE, btn);
+		gt_macro_set_set_polling(macros_get_set(), id, m->polling, period);
+		gt_macro_poller_period_changed(macros_get_poller(), id);
+		save_macros();
 	}
+	return TRUE;
 }
 
-/* Override click handler for polling */
+static void on_polling_period_activate(GtkEntry *entry, gpointer menu)
+{
+	if (apply_period_entry(GTK_WIDGET(entry)))
+		gtk_menu_shell_deactivate(GTK_MENU_SHELL(menu));
+}
+
+static gboolean destroy_widget_idle(gpointer widget)
+{
+	gtk_widget_destroy(GTK_WIDGET(widget));
+	return G_SOURCE_REMOVE;
+}
+
+/* Entrée dans le menu : le menu consomme la touche (activation de l'élément sélectionné, aucun ici) avant le champ, qui ne reçoit donc jamais
+   « activate » ; la validation est faite ici. Période invalide : le menu reste ouvert, champ en erreur */
+static gboolean on_polling_menu_key_press(GtkWidget *menu, GdkEventKey *event, gpointer entry)
+{
+	if (event->keyval != GDK_KEY_Return && event->keyval != GDK_KEY_KP_Enter && event->keyval != GDK_KEY_ISO_Enter)
+		return GDK_EVENT_PROPAGATE;
+	if (apply_period_entry(GTK_WIDGET(entry)))
+		gtk_menu_shell_deactivate(GTK_MENU_SHELL(menu));
+	return GDK_EVENT_STOP;
+}
+
+/* Fermeture du menu (Entrée, clic ailleurs, Échap ; signal « deactivate » : « hide » n'est pas émis sur le menu, c'est sa fenêtre qui est masquée) :
+   la période valide est appliquée, puis le menu est détruit (il fuyait) */
+static void on_polling_menu_hide(GtkWidget *menu, gpointer entry)
+{
+	apply_period_entry(GTK_WIDGET(entry));
+	g_idle_add(destroy_widget_idle, menu);
+}
+
+/* Clic sur une macro sans argument */
 static void on_macro_button_clicked_with_polling(GtkWidget *widget, gpointer data)
 {
-	gint macro_index = GPOINTER_TO_INT(data);
-	macro_polling_t *ps = get_polling_state(macro_index);
-
-
-
-	if (ps && ps->enabled)
-	{
-		toggle_polling_run(macro_index);
-
-		if (ps->running)
-		{
-			ps->last_fire_us = g_get_monotonic_time();
-			send_macro_by_index(macro_index);
-		}
-	}
-	else
-	{
-
-		send_macro_by_index(macro_index);
-	}
+	activate_macro(GPOINTER_TO_UINT(data));
 }
 
 static void save_entry_arg(GtkWidget *entry)
@@ -510,33 +410,6 @@ static void on_combo_arg_changed(GtkComboBox *combo, gpointer data)
 	save_arg_from_widget(GTK_WIDGET(combo));
 }
 
-/* Détecte si l'action est un séparateur visuel de la forme [Label]%& ou %&.
-   Si oui, *label_out reçoit le label alloué (à libérer) ou NULL. */
-static gboolean macro_is_separator(const gchar *action, gchar **label_out)
-{
-	if (label_out) *label_out = NULL;
-	if (!action) return FALSE;
-
-	const gchar *p = action;
-	if (*p == '[')
-	{
-		const gchar *end = strchr(p + 1, ']');
-		if (!end) return FALSE;
-		gchar *lbl = g_strndup(p + 1, end - p - 1);
-		p = end + 1;
-		while (*p == ' ') p++;
-		if (strcmp(p, "%&") == 0)
-		{
-			if (label_out) *label_out = lbl;
-			else g_free(lbl);
-			return TRUE;
-		}
-		g_free(lbl);
-		return FALSE;
-	}
-	return strcmp(p, "%&") == 0;
-}
-
 /* Crée un widget séparateur horizontal avec label centré, non-interactif. */
 static GtkWidget *make_separator_widget(const gchar *label)
 {
@@ -564,17 +437,16 @@ static GtkWidget *make_separator_widget(const gchar *label)
 
 void rebuild_macro_buttons(void)
 {
-	gint nb_macros = 0;
-	macro_t *macros = get_shortcuts(&nb_macros);
+	GtMacroSet *set = macros_get_set();
+	const GtMacroLists *lists = gt_macro_set_get_lists(set);
+	guint nb_macros = gt_macro_set_count(set);
 
 	if (macro_tab_flowbox == NULL || macro_notebook == NULL)
 		return;
 
-	/* Les boutons vont être détruits : oublier leurs références et arrêter tout polling (C9). Sinon le clignotement toucherait des boutons
-	   libérés, et après le chargement d'un autre .ini l'ancien polling enverrait la macro de même indice du nouveau fichier.
-	   Le polling est restauré en fin de fonction, depuis macro_t, pour les seules macros qui ont encore un bouton. */
+	/* Les boutons vont être détruits : oublier leurs références (le clignotement ne doit pas toucher un bouton libéré). Le polling
+	   n'est pas arrêté ici : il appartient à l'ordonnanceur, par identifiant, et survit à la reconstruction. */
 	g_hash_table_remove_all(macro_button_table);
-	g_hash_table_remove_all(macro_polling_table);
 
 	/* Supprimer tous les boutons-onglets et pages existants */
 	GList *old_tabs = gtk_container_get_children(GTK_CONTAINER(macro_tab_flowbox));
@@ -587,15 +459,14 @@ void rebuild_macro_buttons(void)
 
 	/* Collecter les noms d'onglets uniques (non masqués) dans l'ordre d'apparition */
 	GList *tab_names = NULL;
-	for (gint i = 0; i < nb_macros; i++)
+	for (guint i = 0; i < nb_macros; i++)
 	{
-		if (macros[i].label == NULL || strlen(macros[i].label) == 0)
-			continue;
-		if (macros[i].action == NULL || strlen(macros[i].action) == 0)
+		const GtMacro *m = gt_macro_set_get(set, i);
+
+		if (m->label[0] == '\0' || m->action[0] == '\0')
 			continue;
 
-		const gchar *tab = (macros[i].tab != NULL && strlen(macros[i].tab) > 0)
-		                   ? macros[i].tab : _("General");
+		const gchar *tab = m->tab[0] != '\0' ? m->tab : _("General");
 
 		if (g_hash_table_lookup(hidden_macro_tabs, tab) != NULL)
 			continue;
@@ -652,22 +523,21 @@ void rebuild_macro_buttons(void)
 		gtk_container_set_border_width(GTK_CONTAINER(vbox), 5);
 		gtk_container_add(GTK_CONTAINER(scrolled), vbox);
 
-		for (gint i = 0; i < nb_macros; i++)
+		for (guint i = 0; i < nb_macros; i++)
 		{
-			if (macros[i].label == NULL || strlen(macros[i].label) == 0)
-				continue;
-			if (macros[i].action == NULL || strlen(macros[i].action) == 0)
+			const GtMacro *m = gt_macro_set_get(set, i);
+
+			if (m->label[0] == '\0' || m->action[0] == '\0')
 				continue;
 
-			const gchar *macro_tab = (macros[i].tab != NULL && strlen(macros[i].tab) > 0)
-			                         ? macros[i].tab : _("General");
+			const gchar *macro_tab = m->tab[0] != '\0' ? m->tab : _("General");
 
 			if (g_strcmp0(macro_tab, tab_name) != 0)
 				continue;
 
 			{
 				gchar *sep_label = NULL;
-				if (macro_is_separator(macros[i].action, &sep_label))
+				if (gt_macro_action_is_separator(m->action, &sep_label))
 				{
 					GtkWidget *sep = make_separator_widget(sep_label);
 					g_free(sep_label);
@@ -676,66 +546,63 @@ void rebuild_macro_buttons(void)
 				}
 			}
 
-			gchar tooltip[256];
-			g_snprintf(tooltip, sizeof(tooltip), _("Shortcut: %s\nAction: %s"),
-			           macros[i].shortcut ? macros[i].shortcut : "",
-			           macros[i].action);
+			gchar *tooltip = g_strdup_printf(_("Shortcut: %s\nAction: %s"), m->shortcut[0] != '\0' ? m->shortcut : _("None"), m->action);
 
-			gint n_args = macro_count_format_args(macros[i].action);
+			gint n_args = macro_count_format_args(lists, m->action);
 			if (n_args > 0)
 			{
-				macro_arg_info_t *arg_infos = macro_get_arg_infos(macros[i].action, NULL);
+				macro_arg_info_t *arg_infos = macro_get_arg_infos(lists, m->action, NULL);
 
 				gboolean is_two_button_list = FALSE;
 				if (n_args == 1 && g_strcmp0 (arg_infos[0].type, "l") == 0 && arg_infos[0].list_name != NULL)
 				{
-					gint list_idx = macro_list_find(arg_infos[0].list_name);
-					if (list_idx >= 0 && macro_list_entry_count(list_idx) == 2)
+					gint list_idx = gt_macro_lists_find(lists, arg_infos[0].list_name);
+					if (list_idx >= 0 && gt_macro_lists_entry_count(lists, list_idx) == 2)
 						is_two_button_list = TRUE;
 				}
 
 				if (is_two_button_list)
 				{
-					gint list_idx = macro_list_find(arg_infos[0].list_name);
+					gint list_idx = gt_macro_lists_find(lists, arg_infos[0].list_name);
 					GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
 					for (gint ei = 0; ei < 2; ei++)
 					{
 						gchar *label = g_strdup_printf("%s %s",
-						                             macros[i].label,
-						                             macro_list_entry_display(list_idx, ei));
+						                             m->label,
+						                             gt_macro_lists_entry_display(lists, list_idx, ei));
 					GtkWidget *button = gtk_button_new_with_label(label);
 					g_free(label);
 					gtk_style_context_add_class(gtk_widget_get_style_context(button), "macro-button");
-					g_object_set_data(G_OBJECT(button), "macro-index", GINT_TO_POINTER(i));
-
-					/* Store button reference for polling */
-					g_hash_table_insert(macro_button_table, GINT_TO_POINTER(i), button);
-					apply_polling_css(button);
+					/* Bouton de liste : pas de polling, non inscrit dans macro_button_table */
+					g_object_set_data(G_OBJECT(button), "macro-id", GUINT_TO_POINTER(m->id));
 						g_object_set_data(G_OBJECT(button), "list-value",
-						                 (gpointer)macro_list_entry_value(list_idx, ei));
+						                 (gpointer)gt_macro_lists_entry_value(lists, list_idx, ei));
 						gtk_widget_set_tooltip_text(button, tooltip);
 						g_signal_connect(button, "clicked",
 						                 G_CALLBACK(on_list_action_button_clicked), NULL);
 						g_signal_connect(button, "button-press-event",
 						                 G_CALLBACK(on_macro_button_right_click),
-						                 GINT_TO_POINTER(i));
+						                 GUINT_TO_POINTER(m->id));
 						gtk_box_pack_start(GTK_BOX(hbox), button, TRUE, TRUE, 0);
 					}
 					gtk_box_pack_start(GTK_BOX(vbox), hbox, FALSE, FALSE, 2);
 					macro_arg_infos_free(arg_infos, n_args);
+					g_free(tooltip);
 					continue;
 				}
 
 			GtkWidget *hbox   = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
-			GtkWidget *button = gtk_button_new_with_label(macros[i].label);
+			GtkWidget *button = gtk_button_new_with_label(m->label);
 			gtk_style_context_add_class(gtk_widget_get_style_context(button), "macro-button");
+			g_object_set_data(G_OBJECT(button), "macro-id", GUINT_TO_POINTER(m->id));
 
-			/* Store button reference for polling */
-			g_hash_table_insert(macro_button_table, GINT_TO_POINTER(i), button);
+			/* Bouton principal inscrit par identifiant (polling : libellé et clignotement) */
+			g_hash_table_insert(macro_button_table, GUINT_TO_POINTER(m->id), button);
 			apply_polling_css(button);
+			update_button_appearance(m->id);
 
 			MacroArgData *d = g_new(MacroArgData, 1);
-			d->macro_index = i;
+			d->macro_id    = m->id;
 			d->n_entries   = n_args;
 			d->entries     = g_new(GtkWidget *, n_args);
 
@@ -744,7 +611,7 @@ void rebuild_macro_buttons(void)
 			                 G_CALLBACK(on_macro_arg_button_clicked), NULL);
 			g_signal_connect(button, "button-press-event",
 			                 G_CALLBACK(on_macro_button_right_click),
-			                 GINT_TO_POINTER(i));
+			                 GUINT_TO_POINTER(m->id));
 			gtk_widget_set_tooltip_text(button, tooltip);
 			gtk_box_pack_start(GTK_BOX(hbox), button, TRUE, TRUE, 0);
 
@@ -756,17 +623,17 @@ void rebuild_macro_buttons(void)
 					{
 						/* Argument de liste : GtkComboBox avec GtkListStore */
 						GtkListStore *store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_STRING);
-						gint list_idx = macro_list_find(arg_infos[k].list_name);
+						gint list_idx = gt_macro_lists_find(lists, arg_infos[k].list_name);
 						if (list_idx >= 0)
 						{
-							gint n_entries = macro_list_entry_count(list_idx);
+							gint n_entries = gt_macro_lists_entry_count(lists, list_idx);
 							for (gint ei = 0; ei < n_entries; ei++)
 							{
 								GtkTreeIter iter;
 								gtk_list_store_append(store, &iter);
 								gtk_list_store_set(store, &iter,
-								                   0, macro_list_entry_display(list_idx, ei),
-								                   1, macro_list_entry_value(list_idx, ei),
+								                   0, gt_macro_lists_entry_display(lists, list_idx, ei),
+								                   1, gt_macro_lists_entry_value(lists, list_idx, ei),
 								                   -1);
 							}
 						}
@@ -779,18 +646,17 @@ void rebuild_macro_buttons(void)
 
 						/* Pré-sélectionner la valeur sauvegardée si disponible */
 						gint active_idx = 0;
-						if (macros[i].args != NULL && k < (gint)g_strv_length(macros[i].args)
-						    && macros[i].args[k] != NULL)
+						if (m->args != NULL && k < (gint)g_strv_length(m->args))
 						{
-							GtkTreeModel *m = gtk_combo_box_get_model(GTK_COMBO_BOX(widget));
+							GtkTreeModel *cm = gtk_combo_box_get_model(GTK_COMBO_BOX(widget));
 							GtkTreeIter it;
-							if (gtk_tree_model_get_iter_first(m, &it))
+							if (gtk_tree_model_get_iter_first(cm, &it))
 							{
 								gint idx = 0;
 								do {
 									gchar *val;
-									gtk_tree_model_get(m, &it, 1, &val, -1);
-									if (g_strcmp0(val, macros[i].args[k]) == 0)
+									gtk_tree_model_get(cm, &it, 1, &val, -1);
+									if (g_strcmp0(val, m->args[k]) == 0)
 									{
 										active_idx = idx;
 										g_free(val);
@@ -798,7 +664,7 @@ void rebuild_macro_buttons(void)
 									}
 									g_free(val);
 									idx++;
-								} while (gtk_tree_model_iter_next(m, &it));
+								} while (gtk_tree_model_iter_next(cm, &it));
 							}
 						}
 						gtk_combo_box_set_active(GTK_COMBO_BOX(widget), active_idx);
@@ -815,16 +681,16 @@ void rebuild_macro_buttons(void)
 						gtk_entry_set_placeholder_text(GTK_ENTRY(widget), placeholder);
 						gtk_entry_set_width_chars(GTK_ENTRY(widget), 4);
 
-						if (macros[i].args != NULL && k < (gint)g_strv_length(macros[i].args))
+						if (m->args != NULL && k < (gint)g_strv_length(m->args))
 						{
-							gtk_entry_set_text(GTK_ENTRY(widget), macros[i].args[k]);
+							gtk_entry_set_text(GTK_ENTRY(widget), m->args[k]);
 							update_entry_width(GTK_ENTRY(widget));
 						}
 					}
 
 					d->entries[k] = widget;
 
-			g_object_set_data(G_OBJECT(widget), "macro-index", GINT_TO_POINTER(i));
+			g_object_set_data(G_OBJECT(widget), "macro-id",    GUINT_TO_POINTER(m->id));
 			g_object_set_data(G_OBJECT(widget), "arg-index",   GINT_TO_POINTER(k));
 			g_object_set_data_full(G_OBJECT(widget), "arg-type", g_strdup(arg_infos[k].type), g_free);
 
@@ -865,24 +731,27 @@ void rebuild_macro_buttons(void)
 			}
 			else
 			{
-				GtkWidget *button = gtk_button_new_with_label(macros[i].label);
+				GtkWidget *button = gtk_button_new_with_label(m->label);
 				gtk_style_context_add_class(gtk_widget_get_style_context(button), "macro-button");
+				g_object_set_data(G_OBJECT(button), "macro-id", GUINT_TO_POINTER(m->id));
 
-				/* Store button reference for polling */
-				g_hash_table_insert(macro_button_table, GINT_TO_POINTER(i), button);
+				/* Bouton principal inscrit par identifiant (polling : libellé et clignotement) */
+				g_hash_table_insert(macro_button_table, GUINT_TO_POINTER(m->id), button);
 				apply_polling_css(button);
+				update_button_appearance(m->id);
 
 				g_signal_connect(button, "clicked",
 				                 G_CALLBACK(on_macro_button_clicked_with_polling),
-				                 GINT_TO_POINTER(i));
+				                 GUINT_TO_POINTER(m->id));
 				g_signal_connect(button, "button-press-event",
 				                 G_CALLBACK(on_macro_button_right_click),
-				                 GINT_TO_POINTER(i));
+				                 GUINT_TO_POINTER(m->id));
 				gtk_widget_set_tooltip_text(button, tooltip);
 				GtkWidget *hbox_simple = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
 				gtk_box_pack_start(GTK_BOX(hbox_simple), button, TRUE, TRUE, 0);
 				gtk_box_pack_start(GTK_BOX(vbox), hbox_simple, FALSE, FALSE, 2);
 			}
+			g_free(tooltip);
 		}
 
 		gtk_widget_show_all(scrolled);
@@ -909,13 +778,6 @@ void rebuild_macro_buttons(void)
 	gtk_widget_show_all(macro_tab_flowbox);
 
 	g_list_free(tab_names);
-
-	/* Restore polling state from macro_t */
-	for (gint i = 0; i < nb_macros; i++)
-	{
-		if (macros[i].polling_enabled)
-			restore_macro_polling(i, TRUE, macros[i].polling_period_ms);
-	}
 }
 
 static void on_macro_tab_clicked(GtkToggleButton *btn, gpointer user_data)
@@ -953,6 +815,29 @@ static void on_macro_tab_clicked(GtkToggleButton *btn, gpointer user_data)
 	}
 }
 
+/* Les pollings des macros d'un onglet masqué s'arrêtent (rien ne tournerait sans bouton visible) ; les autres continuent */
+static void stop_tab_pollings(const gchar *tab_name)
+{
+	GtMacroSet *set = macros_get_set();
+
+	for (guint i = 0; i < gt_macro_set_count(set); i++)
+	{
+		const GtMacro *m = gt_macro_set_get(set, i);
+		const gchar *tab = m->tab[0] != '\0' ? m->tab : _("General");
+
+		if (g_strcmp0(tab, tab_name) == 0)
+			gt_macro_poller_stop(macros_get_poller(), m->id);
+	}
+}
+
+static gboolean destroy_widget_idle(gpointer widget);
+
+/* Fermeture du menu des onglets : destruction différée (le menu fuyait) */
+static void on_tab_menu_hide(GtkWidget *menu, gpointer user_data)
+{
+	g_idle_add(destroy_widget_idle, menu);
+}
+
 static void on_macro_tab_visibility_toggled(GtkCheckMenuItem *check_item, gpointer user_data)
 {
 	const gchar *tab_name = (const gchar *)user_data;
@@ -961,7 +846,10 @@ static void on_macro_tab_visibility_toggled(GtkCheckMenuItem *check_item, gpoint
 	if (active)
 		g_hash_table_remove(hidden_macro_tabs, tab_name);
 	else
+	{
+		stop_tab_pollings(tab_name);
 		g_hash_table_insert(hidden_macro_tabs, g_strdup(tab_name), GINT_TO_POINTER(1));
+	}
 
 	rebuild_macro_buttons();
 }
@@ -977,19 +865,17 @@ static gboolean on_macro_notebook_button_press(GtkWidget *widget, GdkEventButton
 	if (btn != NULL && !gtk_style_context_has_class(gtk_widget_get_style_context(btn), "macro-tab"))
 		return FALSE;
 
-	gint nb_macros = 0;
-	macro_t *macros = get_shortcuts(&nb_macros);
+	GtMacroSet *set = macros_get_set();
 
 	GList *tab_names = NULL;
-	for (gint i = 0; i < nb_macros; i++)
+	for (guint i = 0; i < gt_macro_set_count(set); i++)
 	{
-		if (macros[i].label == NULL || strlen(macros[i].label) == 0)
-			continue;
-		if (macros[i].action == NULL || strlen(macros[i].action) == 0)
+		const GtMacro *m = gt_macro_set_get(set, i);
+
+		if (m->label[0] == '\0' || m->action[0] == '\0')
 			continue;
 
-		const gchar *tab = (macros[i].tab != NULL && strlen(macros[i].tab) > 0)
-		                   ? macros[i].tab : _("General");
+		const gchar *tab = m->tab[0] != '\0' ? m->tab : _("General");
 
 		gboolean found = FALSE;
 		for (GList *l = tab_names; l != NULL; l = l->next)
@@ -1018,6 +904,7 @@ static gboolean on_macro_notebook_button_press(GtkWidget *widget, GdkEventButton
 		gtk_menu_shell_append(GTK_MENU_SHELL(menu), check);
 	}
 
+	g_signal_connect(menu, "deactivate", G_CALLBACK(on_tab_menu_hide), NULL);
 	gtk_widget_show_all(menu);
 	gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
 	g_list_free(tab_names);
@@ -1027,7 +914,6 @@ static gboolean on_macro_notebook_button_press(GtkWidget *widget, GdkEventButton
 void create_macro_panel(void)
 {
 	hidden_macro_tabs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-	macro_polling_table = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)free_polling_args);
 	macro_button_table = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
 
 	/* Conteneur principal du panneau latéral */
@@ -1049,7 +935,6 @@ void create_macro_panel(void)
 	macro_notebook = gtk_notebook_new();
 	gtk_notebook_set_show_tabs(GTK_NOTEBOOK(macro_notebook), FALSE);
 	gtk_notebook_set_show_border(GTK_NOTEBOOK(macro_notebook), TRUE);
-	macro_stack = NULL;
 
 	gtk_box_pack_start(GTK_BOX(panel_vbox), macro_tab_flowbox, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(panel_vbox), macro_notebook, TRUE, TRUE, 0);
@@ -1088,9 +973,6 @@ void create_macro_panel(void)
 	gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
 	                                          GTK_STYLE_PROVIDER(polling_css_provider),
 	                                          GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-	g_timeout_add(1, polling_timer_callback, NULL);
-	g_timeout_add(500, polling_blink_callback, NULL);
 
 	rebuild_macro_buttons();
 }

@@ -87,6 +87,30 @@ class Env:
         with open(path, 'w') as f:
             f.write('\n'.join(out) + '\n')
 
+    def write_macros_v2(self, path, macros, lists=None):
+        """Fichier de macros au format v2 (macro_file.c). macros : dicts (label, shortcut, action, tab, args [liste], polling, period) ;
+        lists : [(nom, [(affichage, valeur), ...])]. Échappements de GKeyFile : \\ \\n \\t \\r, espace de tête \\s, « ; » dans les listes."""
+        def s(v):
+            v = v.replace('\\', '\\\\').replace('\n', '\\n').replace('\t', '\\t').replace('\r', '\\r')
+            return '\\s' + v[1:] if v.startswith(' ') else v
+
+        def l(items):
+            return ''.join(s(x).replace(';', '\\;') + ';' for x in items)
+        out = ['[gtkterm-macros]', 'version=2', '']
+        for i, m in enumerate(macros):
+            out.append('[macro:%d]' % (i + 1))
+            for k in ('label', 'shortcut', 'action', 'tab'):
+                out.append('%s=%s' % (k, s(m.get(k, ''))))
+            if m.get('args') is not None:
+                out.append('args=%s' % l(m['args']))
+            out.append('polling=%s' % ('true' if m.get('polling') else 'false'))
+            out.append('polling_period_ms=%d' % m.get('period', 1000))
+            out.append('')
+        for i, (nom, entrees) in enumerate(lists or []):
+            out += ['[list:%d]' % (i + 1), 'name=%s' % s(nom), 'displays=%s' % l(a for a, _ in entrees), 'values=%s' % l(v for _, v in entrees), '']
+        with open(path, 'w') as f:
+            f.write('\n'.join(out) + '\n')
+
     # ---------- processus ----------
     def env(self):
         e = {k: v for k, v in os.environ.items() if k not in ('DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'LD_PRELOAD', 'LANGUAGE')}

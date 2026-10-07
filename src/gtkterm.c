@@ -11,7 +11,7 @@
 /*                                                                     */
 /*   ChangeLog                                                         */
 /*      - 0.99.2 : Internationalization                                */
-/*      - 0.99.0 : added call to add_shortcuts()                       */
+/*      - 0.99.0 : macro shortcuts connected at startup                */
 /*      - 0.98 : all GUI functions moved to widgets.c                  */
 /*                                                                     */
 /***********************************************************************/
@@ -59,6 +59,7 @@ int main(int argc, char *argv[])
 	gt_link_set_default(link);
 
 	gt_profile_init_defaults(&config);
+	macros_init();
 	create_main_window();
 	interface_connect_link(link);
 
@@ -70,8 +71,6 @@ int main(int argc, char *argv[])
 
 	ConfigFlags();
 	script_panel_refresh_colors();
-
-	add_shortcuts();
 
 	set_view(ASCII_VIEW);
 

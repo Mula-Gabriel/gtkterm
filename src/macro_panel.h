@@ -4,7 +4,7 @@
 /*           GTKTerm Software                                          */
 /*                                                                     */
 /*   Purpose                                                           */
-/*      Sidebar macro button panel, polling system, entry validation */
+/*      Sidebar macro button panel (view of the macro set)            */
 /*                                                                     */
 /***********************************************************************/
 
@@ -18,5 +18,6 @@ extern GtkWidget *macro_notebook;
 
 void create_macro_panel     (void);
 void rebuild_macro_buttons  (void);
+void macro_panel_polling_changed(guint id, gboolean running);	/* rappel d'état de l'ordonnanceur ; identifiant inconnu ou sans bouton toléré */
 
 #endif
