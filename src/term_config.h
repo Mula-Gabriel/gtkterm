@@ -16,9 +16,21 @@
 #define TERM_CONFIG_H_
 
 #include "transport.h"
+#include "profile.h"
+#include "config_store.h"
 
+/* Prépare le chemin de .gtktermrc et charge le magasin ; sans interface (appelé avant gtk_init) */
 void config_file_init(void);
-const gchar *get_config_file_path(void);
+GtConfigStore *config_get_store(void);
+/* Relit le fichier s'il a changé depuis la dernière lecture ou écriture (autre instance, modification à la main) ; à appeler au début
+ * de chaque écriture, avant d'appliquer le changement : relire, appliquer un seul changement, enregistrer */
+void config_reload_store(void);
+/* Enregistre le magasin ; en cas d'erreur : boîte si interactive, sinon g_printerr */
+gboolean config_save_store(gboolean interactive);
+/* Écritures partielles : macros_file du profil actif, update_url de [general] (seulement s'il a changé) ; jamais les options de
+ * ligne de commande */
+void config_remember_macros_file(void);
+void config_save_update_url(const gchar *url);
 void save_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_paned, gboolean script_visible);
 void load_window_state(GtkWidget *window, GtkWidget *paned, GtkWidget *script_paned, gboolean *script_visible_out);
 void ConfigFlags(void);
@@ -27,12 +39,12 @@ gint Lis_Config(GtkWidget *bouton, GtkWidget **Combos);
 void Config_Terminal(GtkAction *action, gpointer data);
 void select_config_callback(GtkAction *action, gpointer data);
 void save_config_callback(GtkAction *action, gpointer data);
-void save_config_silent(void);
 void delete_config_callback(GtkAction *action, gpointer data);
 void load_macros_file_callback(GtkAction *action, gpointer data);
 void save_macros_file_callback(GtkAction *action, gpointer data);
+/* Valide le profil en cours (une seule boîte d'avertissements) puis l'applique au terminal */
 void Verify_configuration(void);
-gint Load_configuration_from_file(gchar *);
+gint Load_configuration_from_file(const gchar *name);
 gint Check_configuration_file(void);
 void check_text_input(GtkEditable *editable,
                       gchar       *new_text,
@@ -41,67 +53,29 @@ void check_text_input(GtkEditable *editable,
                       gpointer     user_data);
 void clear_scrollback(void);
 
-struct configuration_port
-{
-	gchar port[1024];
-	gint transport_type;         // TRANSPORT_SERIAL, TRANSPORT_TCP_CLIENT, TRANSPORT_TCP_SERVER
-	gchar socket_host[256];
-	gchar socket_port[16];
-	guint vitesse;               // baud rate
-	gint bits;                   // 5 - 6 - 7 - 8
-	gint stops;                  // 1 - 2
-	GtParity parite;             // GT_PARITY_NONE, _ODD, _EVEN ("none", "odd", "even" dans .gtktermrc)
-	GtFlow flux;                 // GT_FLOW_NONE, _XONXOFF, _RTSCTS, _RS485 ("none", "xon", "rts", "rs485" dans .gtktermrc)
-	gint delai;                  // end of char delay: in ms
-	gint rs485_rts_time_before_transmit;
-	gint rs485_rts_time_after_transmit;
-	gint car;                    // caractère attendu (0-255), -1 : aucun
-	gboolean echo;               // echo local
-	gboolean crlfauto;           // line feed auto
-	gboolean autoreconnect_enabled;	// enable autoreconnect
-	gboolean esc_clear_screen;   // clear screen when receive ESC char ('\x1b' - 27)
-	gboolean timestamp;
-	gboolean disable_port_lock;
-	gchar update_url[1024];
-	gboolean update_check_startup;
-	gchar update_prefix[256];
-};
-
-/* Unique point de conversion de la configuration vers les paramètres du transport ; à libérer avec transport_params_clear */
-void config_to_transport_params(const struct configuration_port *c, TransportParams *p);
 void configure_echo(gboolean echo);
 void configure_crlfauto(gboolean crlfauto);
 void configure_autoreconnect_enable(gboolean autoreconnect);
 void configure_esc_clear_screen(gboolean esc_clear_screen);
 
+/* Profil en cours : profil chargé, modifié par les options de ligne de commande et les dialogues (jamais enregistré sans action explicite) */
+extern GtProfile config;
+
+/* Réglages globaux (groupe [general] du fichier de configuration) */
 typedef struct
 {
-	gboolean block_cursor;
-	gint rows;
-	gint columns;
-	gint scrollback;
-	gboolean visual_bell;
-	GdkRGBA foreground_color;
-	GdkRGBA background_color;
-	gchar *font;
-} display_config_t;
+	gchar *update_url;
+	gchar *update_prefix;
+	gboolean update_check_startup;
+} GtkTermSettings;
 
-extern display_config_t term_conf;
+extern GtkTermSettings settings;
 
-#define DEFAULT_FONT "Monospace 12"
-#define DEFAULT_SCROLLBACK 10000
+#define GTKTERM_DEFAULT_UPDATE_URL "https://github.com/Mula-Gabriel/gtkterm.git"
+#define GTKTERM_DEFAULT_UPDATE_PREFIX "/usr/local"
 
-#define DEFAULT_PORT "/dev/ttyS0"
-#define DEFAULT_SPEED 115200
-#define DEFAULT_PARITY GT_PARITY_NONE
-#define DEFAULT_BITS 8
-#define DEFAULT_STOP 1
-#define DEFAULT_FLOW GT_FLOW_NONE
-#define DEFAULT_DELAY 0
-#define DEFAULT_CHAR -1
-#define DEFAULT_DELAY_RS485 30
-#define DEFAULT_ECHO FALSE
-#define DEFAULT_BACKGROUDCOLOR  1.0,1.0,1.0,1.0
-#define DEFAULT_FOREGROUNDCOLOR 0.0,0.0,0.0,0.0
+void config_color_to_rgba(const GtColor *c, GdkRGBA *out);
+/* Applique au terminal la police, les couleurs, la taille (colonnes × lignes), le défilement et la forme du curseur du profil en cours */
+void config_apply_to_terminal(void);
 
 #endif

@@ -10,7 +10,6 @@
 #include "term_config.h"
 #include "git_revision.h"
 
-extern struct configuration_port config;
 
 /* Remembered "skip this version" sha for the current session. */
 static gchar skipped_revision[64] = "";
@@ -84,7 +83,7 @@ static void run_update_script(GtkWindow *parent)
 	 */
 	const TerminalDef *def = get_terminal_def(term_name);
 	gchar *inner_cmd = g_strdup_printf("sh '%s' '%s' '%s' '%d'; echo; echo '>>> Appuyez sur Entrée pour fermer...'; read",
-			script, config.update_url, config.update_prefix, getpid());
+			script, settings.update_url, settings.update_prefix, getpid());
 	gchar *inner = g_shell_quote(inner_cmd);
 	g_free(inner_cmd);
 	gchar *cmd;
@@ -221,7 +220,7 @@ static void on_ls_remote_done(GObject *source, GAsyncResult *res, gpointer data)
 void update_check(GtkWindow *parent, gboolean manual)
 {
 	/* Startup check obeys the toggle; the manual button ignores it. */
-	if(!manual && !config.update_check_startup)
+	if(!manual && !settings.update_check_startup)
 		return;
 
 	/* If we don't know our own commit, only the manual path proceeds. */
@@ -233,7 +232,7 @@ void update_check(GtkWindow *parent, gboolean manual)
 	   une authentification échoue au lieu d'attendre une saisie dans un terminal invisible (M34). */
 	GSubprocessLauncher *launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_SILENCE);
 	g_subprocess_launcher_setenv(launcher, "GIT_TERMINAL_PROMPT", "0", TRUE);
-	GSubprocess *proc = g_subprocess_launcher_spawn(launcher, &error, "git", "ls-remote", "--", config.update_url, "HEAD", NULL);
+	GSubprocess *proc = g_subprocess_launcher_spawn(launcher, &error, "git", "ls-remote", "--", settings.update_url, "HEAD", NULL);
 	g_object_unref(launcher);
 
 	if(proc == NULL)

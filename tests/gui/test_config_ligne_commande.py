@@ -1,0 +1,21 @@
+# Les options de ligne de commande ne sont pas enregistrées par une écriture partielle (fin de M10).
+from gtktest import *
+
+e = Env('config_ligne_commande')
+autre = os.path.join(e.root, 'port-du-profil')
+os.symlink(e.pty, autre)
+ma = os.path.join(e.root, 'macros2.ini')
+e.write_macros(ma, [('M2', 'None', 'M2', '', '', 0, 1000)])
+e.write_rc(e.profile(port=autre))
+e.start(args=['--port', e.pty], force_port=False); time.sleep(2)
+check(wait_until(lambda: status_text(e.app).startswith(e.pty), 5), 'port de la ligne de commande utilise', status_text(e.app))
+bw = Broadway(e.display)
+term = find1(e.app, 'terminal')
+menu_key(bw, e.app, 'Configuration', 'Load macros file...', focus_obj=term)
+file_dialog(bw, e.app, 'Load macros file', ma)
+check(wait_until(lambda: find(e.app, 'push button', '^M2$', showing=True), 5), 'fichier de macros charge')
+contenu = open(e.rc).read()
+check('port=%s' % autre in contenu, 'le profil garde son port (pas celui de --port)', contenu[:400])
+check('macros_file=%s' % ma in contenu, 'chemin du fichier de macros enregistre')
+finish(e)
+sys.exit(conclude())

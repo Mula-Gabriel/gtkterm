@@ -8,8 +8,8 @@
 #include "macro_panel.h"
 #include "stubs.h"
 
-struct configuration_port config;
-display_config_t term_conf;
+GtProfile config;
+GtkTermSettings settings;
 GtkAccelGroup *shortcuts = NULL;
 
 void

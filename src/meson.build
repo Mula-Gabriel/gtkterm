@@ -16,8 +16,6 @@ core_sources = [
 	'macros_format.h',
 	'macros_list.c',
 	'macros_list.h',
-	'parsecfg.c',
-	'parsecfg.h',
 	'serial_termios.c',
 	'serial_termios.h',
 	'config_file.c',
@@ -32,6 +30,10 @@ core_sources = [
 	'view_render.h',
 	'transport.c',
 	'transport.h',
+	'profile.c',
+	'profile.h',
+	'config_store.c',
+	'config_store.h',
 ]
 
 gtkterm_core = static_library(

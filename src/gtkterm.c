@@ -25,7 +25,6 @@
 #include "update.h"
 #include "term_config.h"
 #include "cmdline.h"
-#include "parsecfg.h"
 #include "link.h"
 #include "macros.h"
 #include "user_signals.h"
@@ -59,6 +58,7 @@ int main(int argc, char *argv[])
 	link = gt_link_new();
 	gt_link_set_default(link);
 
+	gt_profile_init_defaults(&config);
 	create_main_window();
 	interface_connect_link(link);
 

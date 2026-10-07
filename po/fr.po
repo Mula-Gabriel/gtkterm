@@ -768,6 +768,29 @@ msgstr "Impossible de trouver la section %s\n"
 msgid "Main Window"
 msgstr "Fenêtre principale"
 
+#: ../src/config_store.c
+#, c-format
+msgid "The configuration file %s could not be read: nothing has been written to it."
+msgstr "Le fichier de configuration %s n'a pas pu être lu : rien n'y a été écrit."
+
+#: ../src/config_store.c
+#, c-format
+msgid "Cannot create directory %s: %s"
+msgstr "Impossible de créer le dossier %s : %s"
+
+#: ../src/term_config.c
+#, c-format
+msgid ""
+"Cannot read configuration file: %s\n"
+"The default configuration is used and nothing will be written to this file."
+msgstr ""
+"Impossible de lire le fichier de configuration : %s\n"
+"La configuration par défaut est utilisée et rien ne sera écrit dans ce fichier."
+
+#: ../src/term_config.c
+msgid "The configuration name cannot be empty."
+msgstr "Le nom de la configuration ne peut pas être vide."
+
 #~ msgid "File selection"
 #~ msgstr "Sélection de fichier"
 

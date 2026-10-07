@@ -70,7 +70,6 @@ gboolean idle(gpointer pointer);
 void remove_input(void);
 void add_input(void);
 
-extern struct configuration_port config;
 extern gboolean crlfauto_on;
 extern gboolean timestamp_on;
 
@@ -228,7 +227,7 @@ gboolean ecriture(GIOChannel *source, GIOCondition condition, gpointer data)
 
 		car = current_buffer;
 
-		if(config.delai != 0 || config.car != -1)
+		if(config.wait_delay_ms != 0 || config.wait_char != -1)
 		{
 			/* search for next LF, sans lire au-delà des données (borne testée avant *car) */
 			bytes_to_write = current_buffer_position;
@@ -268,14 +267,14 @@ gboolean ecriture(GIOChannel *source, GIOCondition condition, gpointer data)
 
 		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(ProgressBar), (gfloat)car_written/(gfloat)nb_car );
 
-		if(config.delai != 0 && lf_found)
+		if(config.wait_delay_ms != 0 && lf_found)
 		{
 			remove_input();
-			g_timeout_add(config.delai, (GSourceFunc)timer, NULL);
+			g_timeout_add(config.wait_delay_ms, (GSourceFunc)timer, NULL);
 			waiting_for_timer = TRUE;
 			return FALSE;
 		}
-		else if(config.car != -1 && lf_found)
+		else if(config.wait_char != -1 && lf_found)
 		{
 			remove_input();
 			waiting_for_char = TRUE;
@@ -327,17 +326,17 @@ void add_input(void)
 	}
 }
 
-/* La comparaison avec config.car a quitté le transport (sous-projet 2) : faite ici, sur les octets reçus par la liaison */
+/* La comparaison avec config.wait_char a quitté le transport (sous-projet 2) : faite ici, sur les octets reçus par la liaison */
 void files_on_received(GtkTermLink *link, GBytes *data, gint64 wall_time_us, gpointer user_data)
 {
 	gsize len;
 	const guint8 *p = g_bytes_get_data(data, &len);
 
-	if(!waiting_for_char || config.car == -1)
+	if(!waiting_for_char || config.wait_char == -1)
 		return;
 	for(gsize i = 0; i < len; i++)
 	{
-		if(p[i] == (guint8)config.car)
+		if(p[i] == (guint8)config.wait_char)
 		{
 			waiting_for_char = FALSE;
 			add_input();

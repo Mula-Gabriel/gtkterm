@@ -21,6 +21,12 @@ gui_scenarios = [
 	'test_raccourcis_macros',
 	'test_polling',
 	'test_fermeture_fenetre',
+	'test_config_migration',
+	'test_config_profils',
+	'test_config_ligne_commande',
+	'test_config_verrou',
+	'test_config_fichier_vide',
+	'test_config_valeurs_corrigees',
 ]
 
 foreach s : gui_scenarios

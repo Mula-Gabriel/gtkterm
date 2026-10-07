@@ -1,4 +1,0 @@
-# Fuites connues de parsecfg.c (revue §5 : chaque cfgParse abandonne les tableaux précédents).
-# parsecfg est remplacé par GKeyFile au sous-projet 3 : supprimer ce fichier à ce moment-là.
-# Filtre sur le fichier source : ne masque rien hors de parsecfg.c.
-leak:parsecfg.c

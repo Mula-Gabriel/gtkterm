@@ -8,7 +8,7 @@ Tests unitaires GLib GTest des modules sans GTK (bibliothèque `gtkterm_core`, v
 meson test -C build                 # tout
 meson test -C build --suite unit    # tests unitaires seulement
 meson test -C build --suite lint    # syntaxe des exemples Lua (luac -p)
-meson test -C build test_parsecfg -v   # un test, statut de chaque sous-test (le détail est dans build/meson-logs/testlog.txt)
+meson test -C build test_config_store -v   # un test, statut de chaque sous-test (le détail est dans build/meson-logs/testlog.txt)
 ```
 
 `ninja -C build` construit aussi les exécutables de test (meson les rattache toujours à la cible par défaut). Pour une construction sans tests : `meson setup build -Dtests=false` (c'est ce que fait `data/gtkterm-update.sh`).
@@ -34,9 +34,9 @@ Corriger un bogue = rendre le cas conforme **et** remplacer son identifiant par 
 
 - Un exécutable par module : `tests/test_<module>.c`, déclaré dans le dictionnaire `unit_tests` de `tests/meson.build`.
 - Un cas par fonction de test ; pour une table de cas, une entrée par cas avec `g_test_add_data_func`. Ne jamais appeler `test_conclude()` deux fois dans un même cas.
-- Un cas qui peut planter le processus s'exécute dans un sous-processus (`g_test_trap_subprocess`), voir `test_fichier_vide_puis_ecriture` dans `test_parsecfg.c`.
+- Un cas qui peut planter le processus s'exécute dans un sous-processus (`g_test_trap_subprocess`).
 - Fichiers temporaires : `g_dir_make_tmp`, `test_write_file()`, `test_rmdir()`.
-- Tests unitaires du cœur GLib (dictionnaire `unit_tests` de `tests/meson.build`) : `test_history`, `test_rx_transform`, `test_device_match`, `test_view_render`, `test_baudrates`, `test_parsecfg`, `test_macros_format`, `test_macros_list`, `test_serial_termios`, `test_config_file`.
+- Tests unitaires du cœur GLib (dictionnaire `unit_tests` de `tests/meson.build`) : `test_history`, `test_rx_transform`, `test_device_match`, `test_view_render`, `test_baudrates`, `test_macros_format`, `test_macros_list`, `test_serial_termios`, `test_config_file`, `test_profile`, `test_config_store`.
 - Tests d'intégration (dictionnaire `integration_tests` de `tests/meson.build`) : `test_link`, `test_transport` (n'a plus besoin de bouchons : le transport n'appelle plus l'interface), `test_macros_send`, `test_script_engine`. Un module de src/ qui dépend de l'interface se compile avec les bouchons de tests/stubs/ (`stub_link.c` remplace l'ancien `stub_display.c`, `stub_journal.c`, `stub_macros.c`, `stub_ui.c`) ; un bouchon enregistre l'appel (stub_record) et ne contient aucune logique métier.
 - Style : celui de `.clang-format` (tabulations, Allman, `if(`).
 
@@ -47,7 +47,7 @@ meson setup build-asan -Db_sanitize=address,undefined
 meson test -C build-asan
 ```
 
-Les fuites connues de `parsecfg.c` sont neutralisées par `tests/lsan.supp` (variable `LSAN_OPTIONS` posée par `tests/meson.build`) ; n'y ajouter que des fonctions de `parsecfg.c`.
+LeakSanitizer vérifie les fuites sans aucune suppression : toute fuite fait échouer le test.
 
 valgrind, pour les erreurs mémoire (les fuites sont vérifiées par ASan) :
 
@@ -55,7 +55,7 @@ valgrind, pour les erreurs mémoire (les fuites sont vérifiées par ASan) :
 meson test -C build --suite unit --wrap='valgrind --error-exitcode=1 --leak-check=no'
 ```
 
-Les fuites ne sont pas vérifiées par valgrind ici (--leak-check=no) : celles, connues, de parsecfg.c le feraient échouer ; elles sont vérifiées par LeakSanitizer (build-asan), qui les ignore grâce à tests/lsan.supp.
+Les fuites ne sont pas vérifiées par valgrind ici (--leak-check=no) : elles le sont par LeakSanitizer (build-asan).
 
 ## Suite graphique (`tests/gui/`)
 
