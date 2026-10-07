@@ -691,15 +691,17 @@ static void list_snapshot_free(gpointer p)
 static gboolean main_snapshot_lists_cb(gpointer user_data)
 {
     GPtrArray *out = user_data;
-    gint n_lists = macro_list_count();
+    const GtMacroLists *lists = gt_macro_set_get_lists(macros_get_set());
+    gint n_lists = gt_macro_lists_count(lists);
     for (int i = 0; i < n_lists; i++) {
         ListSnapshot *s = g_new0(ListSnapshot, 1);
-        s->name = g_strdup(macro_list_name(i) ? macro_list_name(i) : "");
+        const gchar *name = gt_macro_lists_name(lists, i);
+        s->name = g_strdup(name ? name : "");
         s->displays = g_ptr_array_new_with_free_func(g_free);
         s->values = g_ptr_array_new_with_free_func(g_free);
-        for (int e = 0; e < macro_list_entry_count(i); e++) {
-            const gchar *disp = macro_list_entry_display(i, e);
-            const gchar *val  = macro_list_entry_value(i, e);
+        for (int e = 0; e < gt_macro_lists_entry_count(lists, i); e++) {
+            const gchar *disp = gt_macro_lists_entry_display(lists, i, e);
+            const gchar *val  = gt_macro_lists_entry_value(lists, i, e);
             g_ptr_array_add(s->displays, g_strdup(disp ? disp : ""));
             g_ptr_array_add(s->values, g_strdup(val ? val : ""));
         }
@@ -725,12 +727,12 @@ static void macro_snapshot_free(gpointer p)
 static gboolean main_snapshot_macros_cb(gpointer user_data)
 {
     GPtrArray *out = user_data;
-    gint count = 0;
-    macro_t *macros = get_shortcuts(&count);
-    for (int i = 0; macros != NULL && i < count; i++) {
+    GtMacroSet *set = macros_get_set();
+    for (guint i = 0; i < gt_macro_set_count(set); i++) {
+        const GtMacro *m = gt_macro_set_get(set, i);
         MacroSnapshot *s = g_new0(MacroSnapshot, 1);
-        s->label = g_strdup(macros[i].label ? macros[i].label : "");
-        s->infos = macros[i].action ? macro_get_arg_infos(macros[i].action, &s->n_args) : NULL;
+        s->label = g_strdup(m->label);
+        s->infos = macro_get_arg_infos(gt_macro_set_get_lists(set), m->action, &s->n_args);
         g_ptr_array_add(out, s);
     }
     return G_SOURCE_REMOVE;
@@ -812,32 +814,20 @@ typedef struct {
     int          n_args;
     gchar      **args;
     gboolean     found;
-    gint         expected;
-    gint         written;
+    gboolean     ok;
 } MainMacroData;
 
-/* Résolution, mise en forme et envoi sur le thread principal : l'ordre avec gtkterm.send est respecté (M27). */
+/* Résolution et envoi sur le thread principal, par le seul envoi de macro de l'interface (macros_send) : ordre respecté avec
+ * gtkterm.send (M27). Sans argument Lua, les arguments enregistrés, comme le raccourci et le polling. */
 static gboolean main_send_macro_cb(gpointer user_data)
 {
     MainMacroData *d = user_data;
-    gint count = 0;
-    macro_t *macros = get_shortcuts(&count);
-    int idx = d->index;
+    GtMacroSet *set = macros_get_set();
+    const GtMacro *m = d->index >= 0 ? gt_macro_set_get(set, (guint)d->index) : gt_macro_set_find_label(set, d->label);
 
-    if (idx < 0 && d->label && macros) {
-        for (int i = 0; i < count; i++)
-            if (macros[i].label && strcmp(macros[i].label, d->label) == 0) { idx = i; break; }
-    }
-    d->found = (macros != NULL && idx >= 0 && idx < count && macros[idx].action != NULL);
-    if (!d->found)
-        return G_SOURCE_REMOVE;
-
-    gchar *formatted = format_action_with_args(macros[idx].action, (const gchar **)d->args, d->n_args);
-    GByteArray *buf = parse_macro_string(formatted);
-    g_free(formatted);
-    d->expected = (gint)buf->len;
-    d->written = buf->len > 0 ? (gint)gt_link_send(gt_link_get_default(), buf->data, buf->len, GT_SEND_MACRO) : 0;
-    g_byte_array_free(buf, TRUE);
+    d->found = gt_macro_is_sendable(m);
+    if (d->found)
+        d->ok = macros_send(m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
     return G_SOURCE_REMOVE;
 }
 
@@ -848,7 +838,7 @@ static gboolean main_send_macro_cb(gpointer user_data)
 
 static int l_send_macro(lua_State *L)
 {
-    MainMacroData d = { -1, NULL, 0, NULL, FALSE, 0, 0 };
+    MainMacroData d = { -1, NULL, 0, NULL, FALSE, FALSE };
 
     if (lua_type(L, 1) == LUA_TNUMBER)
         d.index = (int)lua_tointeger(L, 1);
@@ -870,7 +860,7 @@ static int l_send_macro(lua_State *L)
         lua_pushstring(L, "macro not found");
         return 2;
     }
-    lua_pushboolean(L, d.written == d.expected);
+    lua_pushboolean(L, d.ok);
     return 1;
 }
 

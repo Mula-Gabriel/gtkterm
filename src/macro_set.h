@@ -1,0 +1,59 @@
+/* macro_set.h — jeu de macros sans GTK : identifiants stables, arguments enregistrés, réglages de polling, expansion unique.
+ * Utilisé uniquement sur le fil principal. */
+
+#ifndef MACRO_SET_H_
+#define MACRO_SET_H_
+
+#include <glib.h>
+
+#include "macros_list.h"
+
+#define GT_MACRO_PERIOD_MIN_MS     1u
+#define GT_MACRO_PERIOD_MAX_MS     86400000u	/* 24 h */
+#define GT_MACRO_PERIOD_DEFAULT_MS 1000u
+
+typedef struct
+{
+	guint    id;			/* stable pendant la vie du jeu, jamais 0, jamais réutilisé dans le processus */
+	gchar   *label;			/* jamais NULL ("" possible) */
+	gchar   *shortcut;		/* jamais NULL ; "" = aucun raccourci */
+	gchar   *action;		/* jamais NULL */
+	gchar   *tab;			/* jamais NULL ; "" = onglet par défaut (nom décidé par l'interface) */
+	gchar  **args;			/* NULL, ou exactement macro_count_format_args() éléments */
+	gboolean polling;		/* mode polling activé (persistant) ; la marche n'est jamais persistée */
+	guint    polling_period_ms;	/* toujours dans [GT_MACRO_PERIOD_MIN_MS, GT_MACRO_PERIOD_MAX_MS] */
+} GtMacro;
+
+typedef struct _GtMacroSet GtMacroSet;
+
+/* Une ligne de la fenêtre d'édition : id 0 = nouvelle macro. */
+typedef struct
+{
+	guint        id;
+	const gchar *label;
+	const gchar *shortcut;
+	const gchar *action;
+	const gchar *tab;
+} GtMacroEdit;
+
+GtMacroSet         *gt_macro_set_new          (void);
+void                gt_macro_set_free         (GtMacroSet *set);
+guint               gt_macro_set_count        (const GtMacroSet *set);
+const GtMacro      *gt_macro_set_get          (const GtMacroSet *set, guint index);
+const GtMacro      *gt_macro_set_find         (const GtMacroSet *set, guint id);
+gint                gt_macro_set_index_of     (const GtMacroSet *set, guint id);
+const GtMacro      *gt_macro_set_find_label   (const GtMacroSet *set, const gchar *label);
+guint               gt_macro_set_append       (GtMacroSet *set, const gchar *label, const gchar *shortcut, const gchar *action, const gchar *tab);
+const GtMacroLists *gt_macro_set_get_lists    (const GtMacroSet *set);
+void                gt_macro_set_take_lists   (GtMacroSet *set, GtMacroLists *lists);
+gboolean            gt_macro_set_set_arg      (GtMacroSet *set, guint id, gint arg_index, const gchar *value);
+gboolean            gt_macro_set_set_args     (GtMacroSet *set, guint id, const gchar *const *args, gint n_args);
+gboolean            gt_macro_set_set_polling  (GtMacroSet *set, guint id, gboolean polling, guint period_ms);
+void                gt_macro_set_apply_edits  (GtMacroSet *set, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists);
+
+gboolean            gt_macro_action_is_separator(const gchar *action, gchar **label_out);
+gboolean            gt_macro_is_sendable      (const GtMacro *macro);
+GBytes             *gt_macro_expand           (const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args);
+gboolean            gt_macro_period_parse     (const gchar *text, guint *period_ms);
+
+#endif

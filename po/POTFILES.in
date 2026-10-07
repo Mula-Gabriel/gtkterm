@@ -10,6 +10,7 @@ src/i18n.c
 src/interface.c
 src/link.c
 src/logging.c
+src/macro_file.c
 src/macro_panel.c
 src/macros.c
 src/macros_format.c

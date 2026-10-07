@@ -1000,3 +1000,27 @@ msgstr "fin du flux"
 #: ../src/transport.c
 msgid "Accept error"
 msgstr "Erreur d'acceptation"
+
+#: ../src/macros.c
+#, c-format
+msgid "Cannot load macros file: %s"
+msgstr "Impossible de charger le fichier de macros : %s"
+
+#: ../src/macros.c
+#, c-format
+msgid "Cannot save macros file: %s"
+msgstr "Impossible d'enregistrer le fichier de macros : %s"
+
+#: ../src/macro_file.c
+msgid "Unsupported macros file version (written by a newer GTKTerm?)"
+msgstr "Version de fichier de macros non prise en charge (écrit par une version plus récente de GTKTerm ?)"
+
+#: ../src/macro_file.c
+#, c-format
+msgid "%s is not a GTKTerm macros file"
+msgstr "%s n'est pas un fichier de macros de GTKTerm"
+
+#: ../src/macro_file.c
+#, c-format
+msgid "%s was not overwritten: it is not in the current macros format and its backup %s already exists with a different content"
+msgstr "%s n'a pas été écrasé : il n'est pas au format actuel des macros et sa copie %s existe déjà avec un contenu différent"

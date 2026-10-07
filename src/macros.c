@@ -27,6 +27,8 @@
 #include "macros.h"
 #include "macros_list.h"
 #include "macros_format.h"
+#include "macro_file.h"
+#include "macro_panel.h"
 #include "term_config.h"
 
 #include <config.h>
@@ -38,6 +40,7 @@ enum
   COLUMN_LABEL,
   COLUMN_ACTION,
   COLUMN_TAB,
+  COLUMN_ID,
   NUM_COLUMNS
 };
 
@@ -49,257 +52,296 @@ enum
   LIST_NUM_COLUMNS
 };
 
-macro_t *macros = NULL;
 static GtkWidget *window = NULL;
 static GtkTreeModel *lists_model = NULL;
 
-macro_t *
-get_shortcuts (gint *size)
+static GtMacroSet *current_set = NULL;
+static GtMacroPoller *poller = NULL;
+static gchar *current_path = NULL;
+static GPtrArray *closures = NULL;		/* GClosure * connectées à connected_group */
+static GtkAccelGroup *connected_group = NULL;
+static gchar *last_save_error = NULL;		/* dernier échec d'enregistrement signalé (chemin, domaine, code) : une seule boîte par échec */
+
+static gboolean
+poller_send (guint id, gpointer user_data)
 {
-  gint i = 0;
-
-  if (macros != NULL)
-    {
-      while (macros[i].shortcut != NULL || macros[i].label != NULL)
-        i++;
-    }
-  *size = i;
-  return macros;
-}
-
-/* Nom affiché d'une macro : son libellé, à défaut son raccourci (C8 : le libellé peut être absent). */
-static const gchar *
-macro_display_name (gint macro_index)
-{
-  const gchar *label = macros[macro_index].label;
-
-  if (label != NULL && label[0] != '\0')
-    return label;
-  return macros[macro_index].shortcut != NULL ? macros[macro_index].shortcut : "";
-}
-
-void
-send_macro_with_args (gint macro_index, const gchar **args, gint n_args)
-{
-  gint nb_macros = 0;
-  get_shortcuts (&nb_macros);
-  if (macro_index < 0 || macro_index >= nb_macros || macros[macro_index].action == NULL)
-    return;
-
-  gchar *formatted = format_action_with_args (macros[macro_index].action, args, n_args);
-  GByteArray *buffer = parse_macro_string (formatted);
-  g_free (formatted);
-
-  if (buffer->len > 0)
-    gt_link_send (gt_link_get_default (), buffer->data, buffer->len, GT_SEND_MACRO);
-  g_byte_array_free (buffer, TRUE);
-
-  gchar *message = g_strdup_printf (_ ("Macro \"%s\" sent!"),
-                                    macro_display_name (macro_index));
-  Put_temp_message (message, 800);
-  g_free (message);
-}
-
-void
-send_macro_with_arg (gint macro_index, const gchar *arg_str)
-{
-  const gchar *args[] = { arg_str };
-  send_macro_with_args (macro_index, args, 1);
-}
-
-/* Fonction principale de callback pour l'exécution d'une macro (raccourci clavier, polling sans arguments).
-   Retourne TRUE quand la macro a été traitée : GTK ne propage alors pas la touche au terminal (M43).
-   Indice inconnu ou macro sans action : FALSE, la touche suit son cours. */
-gboolean
-shortcut_callback (gpointer number)
-{
-  gint macro_index = GPOINTER_TO_INT (number);
-  gint nb_macros = 0;
-  gchar **args;
-
-  get_shortcuts (&nb_macros);
-  if (macro_index < 0 || macro_index >= nb_macros || macros[macro_index].action == NULL)
-    return FALSE;
-
-  /* Même chemin que le panneau : expansion avec les arguments enregistrés de la macro (M15). */
-  args = macros[macro_index].args;
-  send_macro_with_args (macro_index, (const gchar **) args, args != NULL ? (gint) g_strv_length (args) : 0);
-  return TRUE;
-}
-
-void
-create_shortcuts (macro_t *macro, gint size)
-{
-  macros = g_malloc0 ((size + 1) * sizeof (macro_t));
-  if (macros != NULL)
-    {
-      memcpy (macros, macro, size * sizeof (macro_t));
-      macros[size].label = NULL;
-      macros[size].shortcut = NULL;
-      macros[size].action = NULL;
-      macros[size].tab = NULL;
-    }
-  else
-    perror ("malloc");
-}
-
-void
-add_shortcuts (void)
-{
-  gint nb_macros = 0;
-  guint acc_key;
-  GdkModifierType mod;
-
-  if (macros == NULL)
-    return;
-
-  get_shortcuts (&nb_macros);
-  for (gint i = 0; i < nb_macros; i++)
-    {
-      /* add_shortcuts est appelé à plusieurs endroits : une seule connexion par macro (M17). */
-      if (macros[i].closure != NULL)
-        {
-          gtk_accel_group_disconnect (shortcuts, macros[i].closure);
-          macros[i].closure = NULL;
-        }
-      if (macros[i].shortcut == NULL)
-        continue;
-      gtk_accelerator_parse (macros[i].shortcut, &acc_key, &mod);
-      if (acc_key == 0)
-        continue;
-      macros[i].closure = g_cclosure_new_swap (G_CALLBACK (shortcut_callback), GINT_TO_POINTER (i), NULL);
-      gtk_accel_group_connect (shortcuts, acc_key, mod, GTK_ACCEL_MASK, macros[i].closure);
-    }
+  return macros_send (id, NULL, -1);
 }
 
 static void
-macros_destroy (void)
+poller_state (guint id, gboolean running, gpointer user_data)
 {
-  gint nb_macros = 0;
-
-  if (macros == NULL)
-    return;
-
-  get_shortcuts (&nb_macros);
-  for (gint i = 0; i < nb_macros; i++)
-    {
-      g_free (macros[i].shortcut);
-      g_free (macros[i].action);
-      g_free (macros[i].label);
-      g_free (macros[i].tab);
-      g_strfreev (macros[i].args);
-    }
-  g_free (macros);
-  macros = NULL;
+  macro_panel_polling_changed (id, running);
 }
 
 void
-remove_shortcuts (void)
+macros_init (void)
 {
-  gint nb_macros = 0;
-
-  if (macros == NULL)
+  if (current_set != NULL)
     return;
+  current_set = gt_macro_set_new ();
+  poller = gt_macro_poller_new (current_set, poller_send, poller_state, NULL);
+}
 
-  get_shortcuts (&nb_macros);
-  for (gint i = 0; i < nb_macros; i++)
-    if (macros[i].closure != NULL)
-      {
-        gtk_accel_group_disconnect (shortcuts, macros[i].closure);
-        macros[i].closure = NULL;
-      }
+GtMacroSet *
+macros_get_set (void)
+{
+  return current_set;
+}
 
-  macros_destroy ();
+GtMacroPoller *
+macros_get_poller (void)
+{
+  return poller;
+}
+
+gboolean
+macros_send (guint id, const gchar *const *args, gint n_args)
+{
+  const GtMacro *m = gt_macro_set_find (current_set, id);
+  GBytes *bytes;
+  const guint8 *data;
+  gsize len = 0;
+  gssize written = 0;
+  gchar *message;
+
+  if (!gt_macro_is_sendable (m))
+    return FALSE;
+  /* Nom affiché : le libellé, à défaut le raccourci (C8) ; pris avant l'envoi, dont les gestionnaires ne doivent pas toucher au jeu */
+  message = g_strdup_printf (_ ("Macro \"%s\" sent!"), m->label[0] != '\0' ? m->label : m->shortcut);
+  bytes = gt_macro_expand (current_set, m, args, n_args);
+  data = g_bytes_get_data (bytes, &len);
+  if (len > 0)
+    written = gt_link_send (gt_link_get_default (), data, len, GT_SEND_MACRO);
+  g_bytes_unref (bytes);
+  /* Rien d'écrit (port fermé ou perdu) : pas de « envoyée », le « — lost » de la barre d'état reste visible */
+  if (written > 0)
+    Put_temp_message (message, 800);
+  g_free (message);
+  return len == 0 || (written >= 0 && (gsize) written == len);
+}
+
+/* Rappel d'un raccourci (g_cclosure_new_swap : la donnée arrive en premier). TRUE : la touche est traitée et n'atteint pas
+   le terminal (M43) ; macro disparue ou non envoyable : FALSE, la touche suit son cours. Le résultat de l'écriture n'y change
+   rien (§6.2) : port fermé ou perdu, la touche d'une macro envoyable reste consommée, elle ne part pas dans le terminal. */
+static gboolean
+shortcut_cb (gpointer data)
+{
+  guint id = GPOINTER_TO_UINT (data);
+  gboolean sendable = gt_macro_is_sendable (gt_macro_set_find (current_set, id));
+
+  if (sendable)
+    macros_send (id, NULL, -1);
+  return sendable;
+}
+
+static void
+shortcuts_disconnect (void)
+{
+  if (closures == NULL || connected_group == NULL)
+    return;
+  for (guint i = 0; i < closures->len; i++)
+    gtk_accel_group_disconnect (connected_group, g_ptr_array_index (closures, i));
+  g_ptr_array_set_size (closures, 0);
+  connected_group = NULL;
+}
+
+/* Une seule connexion par macro (M17), par identifiant : un raccourci suit sa macro quand l'ordre change */
+static void
+shortcuts_connect (void)
+{
+  shortcuts_disconnect ();
+  if (shortcuts == NULL || current_set == NULL)
+    return;
+  if (closures == NULL)
+    closures = g_ptr_array_new ();
+  connected_group = shortcuts;
+  for (guint i = 0; i < gt_macro_set_count (current_set); i++)
+    {
+      const GtMacro *m = gt_macro_set_get (current_set, i);
+      guint key = 0;
+      GdkModifierType mods = 0;
+      GClosure *closure;
+
+      if (m->shortcut[0] == '\0')
+        continue;
+      gtk_accelerator_parse (m->shortcut, &key, &mods);
+      if (key == 0)
+        continue;
+      closure = g_cclosure_new_swap (G_CALLBACK (shortcut_cb), GUINT_TO_POINTER (m->id), NULL);
+      gtk_accel_group_connect (connected_group, key, mods, GTK_ACCEL_MASK, closure);
+      g_ptr_array_add (closures, closure);
+    }
+}
+
+void
+macros_changed (void)
+{
+  shortcuts_connect ();
+  rebuild_macro_buttons ();
+}
+
+void
+macros_replace_set (GtMacroSet *set)
+{
+  GtMacroSet *old;
+
+  macros_init ();
+  /* Fenêtre d'édition ouverte : ses lignes et ses listes décrivent l'ancien jeu. La valider ou la fermer ensuite appliquerait ces
+     lignes au nouveau jeu (identifiants inconnus : toutes nouvelles, arguments et polling perdus) et les enregistrerait dans le
+     nouveau fichier. Elle est donc fermée sans enregistrer : gtk_widget_destroy n'émet pas delete-event (pas de Save_shortcuts),
+     et on_window_destroy remet window et lists_model à NULL. */
+  if (window != NULL)
+    gtk_widget_destroy (window);
+  /* L'ordonnanceur s'arrête pendant que l'ancien jeu est encore le jeu courant : les rappels d'état voient des boutons cohérents */
+  gt_macro_poller_set_set (poller, set);
+  old = current_set;
+  current_set = set;
+  gt_macro_set_free (old);
+  macros_changed ();
+}
+
+const gchar *
+macros_file_get_path (void)
+{
+  return current_path;
+}
+
+gchar *
+macros_file_default_path (void)
+{
+  return g_build_filename (g_get_user_config_dir (), "gtkterm_macros.ini", NULL);
+}
+
+static gchar *
+resolve_path (const gchar *path)
+{
+  if (path != NULL)
+    return g_strdup (path);
+  if (current_path != NULL)
+    return g_strdup (current_path);
+  return macros_file_default_path ();
+}
+
+static void
+report_error (gboolean interactive, const gchar *text)
+{
+  if (interactive)
+    show_message ((gchar *) text, MSG_ERR);
+  else
+    g_warning ("%s", text);
+}
+
+static gboolean
+load_error_idle (gpointer data)
+{
+  show_message (data, MSG_ERR);
+  return G_SOURCE_REMOVE;
+}
+
+gboolean
+macros_load_file (const gchar *path, gboolean interactive)
+{
+  gchar *load_path = resolve_path (path);
+  GtMacroSet *set = NULL;
+  GError *error = NULL;
+  gboolean ok = TRUE;
+
+  if (!gt_macro_file_load (load_path, &set, &error))
+    {
+      gboolean missing = g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT);
+
+      if (!missing && interactive)
+        {
+          gchar *text = g_strdup_printf (_ ("Cannot load macros file: %s"), error->message);
+
+          /* Choix dans le menu : jeu et chemin courants inchangés, rien n'est perdu */
+          show_message (text, MSG_ERR);
+          g_free (text);
+          g_error_free (error);
+          g_free (load_path);
+          return FALSE;
+        }
+      if (!missing)
+        {
+          /* Profil (non interactif) : jeu vide, mais le chemin courant devient ce fichier. Les enregistrements suivants le visent
+             (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
+             n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
+             et l'utilisateur sait que ses macros n'ont pas été lues. */
+          gchar *text = g_strdup_printf (_ ("Cannot load macros file: %s"), error->message);
+
+          g_warning ("%s", text);
+          g_idle_add_full (G_PRIORITY_DEFAULT_IDLE, load_error_idle, text, g_free);
+          ok = FALSE;
+        }
+      /* Fichier absent (premier lancement, profil qui pointe un fichier pas encore créé) : jeu vide, créé au premier enregistrement */
+      g_clear_error (&error);
+      set = gt_macro_set_new ();
+    }
+  g_free (current_path);
+  current_path = load_path;
+  g_clear_pointer (&last_save_error, g_free);
+  macros_replace_set (set);
+  return ok;
+}
+
+void
+macros_forget_save_error (void)
+{
+  g_clear_pointer (&last_save_error, g_free);
+}
+
+gboolean
+macros_save_file (const gchar *path, gboolean interactive)
+{
+  gchar *save_path = resolve_path (path);
+  GError *error = NULL;
+
+  if (!gt_macro_file_save (current_set, save_path, &error))
+    {
+      /* Chaque frappe dans un argument enregistre : un même échec n'ouvre qu'une boîte. L'échec est reconnu à son chemin et à son
+         erreur, pas au texte : celui de g_file_set_contents cite un fichier temporaire au nom aléatoire, différent à chaque essai. */
+      gchar *key = g_strdup_printf ("%s\n%s:%d", save_path, g_quark_to_string (error->domain), error->code);
+
+      if (g_strcmp0 (key, last_save_error) != 0)
+        {
+          gchar *text = g_strdup_printf (_ ("Cannot save macros file: %s"), error->message);
+
+          report_error (interactive, text);
+          g_free (text);
+        }
+      g_free (last_save_error);
+      last_save_error = key;
+      g_error_free (error);
+      g_free (save_path);
+      return FALSE;
+    }
+  g_clear_pointer (&last_save_error, g_free);
+  g_free (current_path);
+  current_path = save_path;
+  return TRUE;
 }
 
 static GtkTreeModel *
 create_model (void)
 {
-  gint i = 0;
-  GtkListStore *store;
+  GtkListStore *store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
   GtkTreeIter iter;
 
-  /* create list store */
-  store = gtk_list_store_new (NUM_COLUMNS,
-                              G_TYPE_STRING,
-                              G_TYPE_STRING,
-                              G_TYPE_STRING,
-                              G_TYPE_STRING);
-
-  /* add data to the list store */
-  if (macros != NULL)
+  for (guint i = 0; i < gt_macro_set_count (current_set); i++)
     {
-      while (1)
-        {
-          if (macros[i].shortcut == NULL && macros[i].action == NULL && macros[i].label == NULL)
-            break;
+      const GtMacro *m = gt_macro_set_get (current_set, i);
 
-          gtk_list_store_append (store, &iter);
-          gtk_list_store_set (store, &iter,
-                              COLUMN_LABEL, macros[i].label,
-                              COLUMN_SHORTCUT, macros[i].shortcut,
-                              COLUMN_ACTION, macros[i].action,
-                              COLUMN_TAB, macros[i].tab ? macros[i].tab : "",
-                              -1);
-          i++;
-        }
+      gtk_list_store_append (store, &iter);
+      gtk_list_store_set (store, &iter,
+                          COLUMN_LABEL, m->label,
+                          COLUMN_SHORTCUT, m->shortcut[0] != '\0' ? m->shortcut : _ ("None"),
+                          COLUMN_ACTION, m->action,
+                          COLUMN_TAB, m->tab,
+                          COLUMN_ID, m->id,
+                          -1);
     }
-
   return GTK_TREE_MODEL (store);
-}
-
-static gboolean
-action_edited (GtkCellRendererText *cell,
-               const gchar *path_string,
-               const gchar *new_text,
-               gpointer data)
-{
-  GtkTreeModel *model = (GtkTreeModel *) data;
-  GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
-  GtkTreeIter iter;
-
-  gtk_tree_model_get_iter (model, &iter, path);
-
-  gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_ACTION, new_text, -1);
-  gtk_tree_path_free (path);
-
-  return TRUE;
-}
-
-static gboolean
-label_edited (GtkCellRendererText *cell,
-              const gchar *path_string,
-              const gchar *new_text,
-              gpointer data)
-{
-  GtkTreeModel *model = (GtkTreeModel *) data;
-  GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
-  GtkTreeIter iter;
-
-  gtk_tree_model_get_iter (model, &iter, path);
-
-  gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_LABEL, new_text, -1);
-  gtk_tree_path_free (path);
-
-  return TRUE;
-}
-
-static gboolean
-tab_edited (GtkCellRendererText *cell,
-            const gchar *path_string,
-            const gchar *new_text,
-            gpointer data)
-{
-  GtkTreeModel *model = (GtkTreeModel *) data;
-  GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
-  GtkTreeIter iter;
-
-  gtk_tree_model_get_iter (model, &iter, path);
-
-  gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_TAB, new_text, -1);
-  gtk_tree_path_free (path);
-
-  return TRUE;
 }
 
 static gboolean
@@ -319,48 +361,47 @@ cell_editing_started (GtkCellRenderer *renderer, GtkCellEditable *editable,
 }
 
 static void
+cell_edited (GtkCellRendererText *cell, const gchar *path_string, const gchar *new_text, gpointer data)
+{
+  GtkTreeModel *model = data;
+  gint column = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (cell), "column"));
+  GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
+  GtkTreeIter iter;
+
+  if (gtk_tree_model_get_iter (model, &iter, path))
+    gtk_list_store_set (GTK_LIST_STORE (model), &iter, column, new_text, -1);
+  gtk_tree_path_free (path);
+}
+
+/* Colonne texte ; editable : rendu relié à cell_edited sur le modèle de la vue */
+static void
+append_text_column (GtkTreeView *treeview, const gchar *title, gint column, gboolean editable, gboolean sortable, gint min_width)
+{
+  GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
+  GtkTreeViewColumn *col;
+
+  if (editable)
+    {
+      g_object_set_data (G_OBJECT (renderer), "column", GINT_TO_POINTER (column));
+      g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
+      g_signal_connect (renderer, "edited", G_CALLBACK (cell_edited), gtk_tree_view_get_model (treeview));
+      g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
+    }
+  col = gtk_tree_view_column_new_with_attributes (title, renderer, "text", column, NULL);
+  if (sortable)
+    gtk_tree_view_column_set_sort_column_id (col, column);
+  gtk_tree_view_column_set_resizable (col, TRUE);
+  gtk_tree_view_column_set_min_width (col, min_width);
+  gtk_tree_view_append_column (treeview, col);
+}
+
+static void
 add_columns (GtkTreeView *treeview)
 {
-  GtkCellRenderer *renderer;
-  GtkTreeViewColumn *column;
-  GtkTreeModel *model = gtk_tree_view_get_model (treeview);
-
-  renderer = gtk_cell_renderer_text_new ();
-  g_signal_connect (renderer, "edited", G_CALLBACK (label_edited), model);
-  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
-  g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
-  column = gtk_tree_view_column_new_with_attributes (_ ("Label"), renderer, "text", COLUMN_LABEL, NULL);
-  gtk_tree_view_column_set_sort_column_id (column, COLUMN_LABEL);
-  gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_column_set_min_width (column, 80);
-  gtk_tree_view_append_column (treeview, column);
-
-  renderer = gtk_cell_renderer_text_new ();
-  column = gtk_tree_view_column_new_with_attributes (_ ("Shortcut"), renderer, "text", COLUMN_SHORTCUT, NULL);
-  gtk_tree_view_column_set_sort_column_id (column, COLUMN_SHORTCUT);
-  gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_column_set_min_width (column, 80);
-  gtk_tree_view_append_column (treeview, column);
-
-  renderer = gtk_cell_renderer_text_new ();
-  g_signal_connect (renderer, "edited", G_CALLBACK (action_edited), model);
-  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
-  column = gtk_tree_view_column_new_with_attributes (_ ("Action"), renderer, "text", COLUMN_ACTION, NULL);
-  g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
-  gtk_tree_view_column_set_sort_column_id (column, COLUMN_ACTION);
-  gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_column_set_min_width (column, 120);
-  gtk_tree_view_append_column (treeview, column);
-
-  renderer = gtk_cell_renderer_text_new ();
-  g_signal_connect (renderer, "edited", G_CALLBACK (tab_edited), model);
-  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
-  g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
-  column = gtk_tree_view_column_new_with_attributes (_ ("Tab"), renderer, "text", COLUMN_TAB, NULL);
-  gtk_tree_view_column_set_sort_column_id (column, COLUMN_TAB);
-  gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_column_set_min_width (column, 60);
-  gtk_tree_view_append_column (treeview, column);
+  append_text_column (treeview, _ ("Label"), COLUMN_LABEL, TRUE, TRUE, 80);
+  append_text_column (treeview, _ ("Shortcut"), COLUMN_SHORTCUT, FALSE, TRUE, 80);
+  append_text_column (treeview, _ ("Action"), COLUMN_ACTION, TRUE, TRUE, 120);
+  append_text_column (treeview, _ ("Tab"), COLUMN_TAB, TRUE, TRUE, 60);
 }
 
 static gint
@@ -397,8 +438,9 @@ Add_shortcut (GtkWidget *button, gpointer pointer)
     }
 
   gtk_list_store_set (GTK_LIST_STORE (model), &new_iter,
-                      COLUMN_SHORTCUT, "None",
-                      COLUMN_TAB, _ ("General"),
+                      COLUMN_SHORTCUT, _ ("None"),
+                      COLUMN_TAB, "",
+                      COLUMN_ID, 0u,
                       -1);
 
   return FALSE;
@@ -450,17 +492,28 @@ Delete_macro (GtkWidget *button, gpointer pointer)
   return FALSE;
 }
 
+/* La liste est en sélection multiple : gtk_tree_selection_get_selected n'y fonctionne pas (M44) */
+static gboolean
+first_selected (GtkTreeView *treeview, GtkTreeIter *iter)
+{
+  GtkTreeModel *model = NULL;
+  GList *rows = gtk_tree_selection_get_selected_rows (gtk_tree_view_get_selection (treeview), &model);
+  gboolean found = rows != NULL && gtk_tree_model_get_iter (model, iter, rows->data);
+
+  g_list_free_full (rows, (GDestroyNotify) gtk_tree_path_free);
+  return found;
+}
+
 static gboolean
 Delete_shortcut (GtkWidget *button, gpointer pointer)
 {
   GtkTreeIter iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
   GtkTreeModel *model = gtk_tree_view_get_model (treeview);
-  GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
 
-  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+  if (first_selected (treeview, &iter))
     {
-      gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_SHORTCUT, "None", -1);
+      gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_SHORTCUT, _ ("None"), -1);
     }
 
   return FALSE;
@@ -582,157 +635,68 @@ Move_down (GtkWidget *button, gpointer pointer)
   return FALSE;
 }
 
-static void save_lists_from_model (GtkTreeModel *model);
+static GtMacroLists *
+lists_from_model (GtkTreeModel *model)
+{
+  GtMacroLists *lists = gt_macro_lists_new ();
+  GtkTreeIter iter;
+  gboolean valid;
 
+  for (valid = gtk_tree_model_get_iter_first (model, &iter); valid; valid = gtk_tree_model_iter_next (model, &iter))
+    {
+      gchar *name = NULL, *display = NULL, *value = NULL;
+
+      gtk_tree_model_get (model, &iter, LIST_COLUMN_NAME, &name, LIST_COLUMN_DISPLAY, &display, LIST_COLUMN_VALUE, &value, -1);
+      gt_macro_lists_add (lists, name, display, value);
+      g_free (name);
+      g_free (display);
+      g_free (value);
+    }
+  return lists;
+}
+
+/* Validation de la fenêtre : les lignes, dans l'ordre affiché, avec leur identifiant ; arguments et polling suivent
+   l'identifiant, jamais la position (M16). */
 static gboolean
 Save_shortcuts (GtkWidget *button, gpointer pointer)
 {
+  GtkTreeModel *model = gtk_tree_view_get_model (GTK_TREE_VIEW (pointer));
+  GArray *rows = g_array_new (FALSE, TRUE, sizeof (GtMacroEdit));
+  GPtrArray *strings = g_ptr_array_new_with_free_func (g_free);
   GtkTreeIter iter;
-  GtkTreeView *treeview = (GtkTreeView *) pointer;
-  GtkTreeModel *model = gtk_tree_view_get_model (treeview);
-  gint i = 0;
+  gboolean valid;
 
-  /* Préserver args et état polling avant de détruire les macros */
-  gint old_count = 0;
-  macro_t *old_macros = get_shortcuts (&old_count);
-  gchar    ***saved_args           = g_new0 (gchar **,  old_count);
-  gboolean  *saved_polling_enabled = g_new0 (gboolean,  old_count);
-  guint     *saved_polling_period  = g_new0 (guint,     old_count);
-  for (gint k = 0; k < old_count; k++)
+  for (valid = gtk_tree_model_get_iter_first (model, &iter); valid; valid = gtk_tree_model_iter_next (model, &iter))
     {
-      if (old_macros[k].args != NULL)
-        saved_args[k] = g_strdupv (old_macros[k].args);
-      saved_polling_enabled[k] = old_macros[k].polling_enabled;
-      saved_polling_period[k]  = old_macros[k].polling_period_ms;
-    }
+      GtMacroEdit row = { 0 };
+      gchar *label = NULL, *shortcut = NULL, *action = NULL, *tab = NULL;
 
-  remove_shortcuts ();
-
-  /* Les listes d'abord : « %#Nom » n'est une liste que si elle existe, ce qui conditionne le décompte des arguments restaurés ci-dessous (F1). */
-  if (lists_model)
-    save_lists_from_model (lists_model);
-
-  if (gtk_tree_model_get_iter_first (model, &iter))
-    {
-      do
+      gtk_tree_model_get (model, &iter, COLUMN_ID, &row.id, COLUMN_LABEL, &label, COLUMN_SHORTCUT, &shortcut,
+                          COLUMN_ACTION, &action, COLUMN_TAB, &tab, -1);
+      /* « None » affiché (traduit) = pas de raccourci ; « None » non traduit est normalisé par le modèle */
+      if (g_strcmp0 (shortcut, _ ("None")) == 0)
         {
-          i++;
+          g_free (shortcut);
+          shortcut = g_strdup ("");
         }
-      while (gtk_tree_model_iter_next (model, &iter));
-
-      gtk_tree_model_get_iter_first (model, &iter);
-      macros = g_malloc0 ((i + 1) * sizeof (macro_t));
-      i = 0;
-      if (macros != NULL)
-        {
-          do
-            {
-              gtk_tree_model_get (model, &iter,
-                                  COLUMN_LABEL, &(macros[i].label),
-                                  COLUMN_SHORTCUT, &(macros[i].shortcut),
-                                  COLUMN_ACTION, &(macros[i].action),
-                                  COLUMN_TAB, &(macros[i].tab),
-                                  -1);
-
-              /* Une ligne sans libellé ni raccourci ne doit pas ressembler à la sentinelle de fin du tableau (M42). */
-              if (macros[i].label == NULL)
-                macros[i].label = g_strdup ("");
-              if (macros[i].shortcut == NULL)
-                macros[i].shortcut = g_strdup ("None");
-              if (macros[i].action == NULL)
-                macros[i].action = g_strdup ("");
-
-              /* Restaurer les args si le nombre de spécificateurs est identique */
-              if (i < old_count && saved_args[i] != NULL &&
-                  g_strv_length (saved_args[i]) == (guint) macro_count_format_args (macros[i].action))
-                {
-                  macros[i].args = saved_args[i];
-                  saved_args[i] = NULL;
-                }
-              else
-                {
-                  macros[i].args = NULL;
-                }
-
-              /* Restaurer l'état polling */
-              if (i < old_count)
-                {
-                  macros[i].polling_enabled    = saved_polling_enabled[i];
-                  macros[i].polling_period_ms  = saved_polling_period[i]
-                                                 ? saved_polling_period[i] : 1000;
-                }
-              else
-                {
-                  macros[i].polling_enabled   = FALSE;
-                  macros[i].polling_period_ms = 1000;
-                }
-              i++;
-            }
-          while (gtk_tree_model_iter_next (model, &iter));
-
-          macros[i].label = NULL;
-          macros[i].shortcut = NULL;
-          macros[i].action = NULL;
-          macros[i].tab = NULL;
-          macros[i].args = NULL;
-        }
+      row.label = label;
+      row.shortcut = shortcut;
+      row.action = action;
+      row.tab = tab;
+      g_ptr_array_add (strings, label);
+      g_ptr_array_add (strings, shortcut);
+      g_ptr_array_add (strings, action);
+      g_ptr_array_add (strings, tab);
+      g_array_append_val (rows, row);
     }
-
-  for (gint k = 0; k < old_count; k++)
-    g_strfreev (saved_args[k]);
-  g_free (saved_args);
-  g_free (saved_polling_enabled);
-  g_free (saved_polling_period);
-
-  add_shortcuts ();
-
-  rebuild_macro_buttons ();
-  macros_file_save (NULL);
+  gt_macro_set_apply_edits (current_set, (const GtMacroEdit *) rows->data, rows->len, lists_model != NULL ? lists_from_model (lists_model) : NULL);
+  gt_macro_poller_sync (poller);
+  macros_changed ();
+  macros_save_file (NULL, TRUE);
+  config_remember_macros_file ();
+  g_ptr_array_unref (strings);
+  g_array_unref (rows);
   return FALSE;
-}
-
-void
-macro_set_arg (gint macro_index, gint arg_index, const gchar *value)
-{
-  gint nb_macros = 0;
-  get_shortcuts (&nb_macros);
-  if (macro_index >= nb_macros || macros[macro_index].action == NULL)
-    return;
-
-  gint n_args = macro_count_format_args (macros[macro_index].action);
-  if (arg_index >= n_args)
-    return;
-
-  if (macros[macro_index].args == NULL ||
-      (gint) g_strv_length (macros[macro_index].args) < n_args)
-    {
-      gchar **new_args = g_new0 (gchar *, n_args + 1);
-      for (gint k = 0; k < n_args; k++)
-        {
-          if (macros[macro_index].args != NULL &&
-              k < (gint) g_strv_length (macros[macro_index].args) &&
-              macros[macro_index].args[k] != NULL)
-            new_args[k] = g_strdup (macros[macro_index].args[k]);
-          else
-            new_args[k] = g_strdup ("");
-        }
-      g_strfreev (macros[macro_index].args);
-      macros[macro_index].args = new_args;
-    }
-
-  g_free (macros[macro_index].args[arg_index]);
-  macros[macro_index].args[arg_index] = g_strdup (value ? value : "");
-}
-
-void
-macro_set_polling (gint macro_index, gboolean enabled, guint period_ms)
-{
-  gint nb_macros = 0;
-  get_shortcuts (&nb_macros);
-  if (macro_index >= nb_macros)
-    return;
-  macros[macro_index].polling_enabled = enabled;
-  macros[macro_index].polling_period_ms = period_ms;
 }
 
 static gboolean
@@ -741,7 +705,6 @@ key_pressed (GtkWidget *window, GdkEventKey *key, gpointer pointer)
   GtkTreeIter iter;
   GtkTreeView *treeview = (GtkTreeView *) pointer;
   GtkTreeModel *model = gtk_tree_view_get_model (treeview);
-  GtkTreeSelection *selection = gtk_tree_view_get_selection (treeview);
   gchar *str = NULL;
 
   switch (key->keyval)
@@ -766,7 +729,7 @@ key_pressed (GtkWidget *window, GdkEventKey *key, gpointer pointer)
       break;
     }
 
-  if (gtk_tree_selection_get_selected (selection, NULL, &iter))
+  if (first_selected (treeview, &iter))
     {
       GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
       str = gtk_accelerator_name (key->keyval, key->state & ~GDK_MOD2_MASK);
@@ -822,18 +785,19 @@ create_lists_model (void)
                                             G_TYPE_STRING,
                                             G_TYPE_STRING);
 
-  gint n_lists = macro_list_count ();
+  const GtMacroLists *lists = gt_macro_set_get_lists (current_set);
+  gint n_lists = gt_macro_lists_count (lists);
   for (gint li = 0; li < n_lists; li++)
     {
-      gint n_entries = macro_list_entry_count (li);
+      gint n_entries = gt_macro_lists_entry_count (lists, li);
       for (gint ei = 0; ei < n_entries; ei++)
         {
           GtkTreeIter iter;
           gtk_list_store_append (store, &iter);
           gtk_list_store_set (store, &iter,
-                              LIST_COLUMN_NAME, macro_list_name (li),
-                              LIST_COLUMN_DISPLAY, macro_list_entry_display (li, ei),
-                              LIST_COLUMN_VALUE, macro_list_entry_value (li, ei),
+                              LIST_COLUMN_NAME, gt_macro_lists_name (lists, li),
+                              LIST_COLUMN_DISPLAY, gt_macro_lists_entry_display (lists, li, ei),
+                              LIST_COLUMN_VALUE, gt_macro_lists_entry_value (lists, li, ei),
                               -1);
         }
     }
@@ -841,90 +805,12 @@ create_lists_model (void)
   return GTK_TREE_MODEL (store);
 }
 
-static gboolean
-list_name_edited (GtkCellRendererText *cell,
-                  const gchar *path_string,
-                  const gchar *new_text,
-                  gpointer data)
-{
-  GtkTreeModel *model = (GtkTreeModel *) data;
-  GtkTreeIter iter;
-  GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
-
-  if (gtk_tree_model_get_iter (model, &iter, path))
-    gtk_list_store_set (GTK_LIST_STORE (model), &iter, LIST_COLUMN_NAME, new_text, -1);
-
-  gtk_tree_path_free (path);
-  return TRUE;
-}
-
-static gboolean
-list_display_edited (GtkCellRendererText *cell,
-                     const gchar *path_string,
-                     const gchar *new_text,
-                     gpointer data)
-{
-  GtkTreeModel *model = (GtkTreeModel *) data;
-  GtkTreeIter iter;
-  GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
-
-  if (gtk_tree_model_get_iter (model, &iter, path))
-    gtk_list_store_set (GTK_LIST_STORE (model), &iter, LIST_COLUMN_DISPLAY, new_text, -1);
-
-  gtk_tree_path_free (path);
-  return TRUE;
-}
-
-static gboolean
-list_value_edited (GtkCellRendererText *cell,
-                   const gchar *path_string,
-                   const gchar *new_text,
-                   gpointer data)
-{
-  GtkTreeModel *model = (GtkTreeModel *) data;
-  GtkTreeIter iter;
-  GtkTreePath *path = gtk_tree_path_new_from_string (path_string);
-
-  if (gtk_tree_model_get_iter (model, &iter, path))
-    gtk_list_store_set (GTK_LIST_STORE (model), &iter, LIST_COLUMN_VALUE, new_text, -1);
-
-  gtk_tree_path_free (path);
-  return TRUE;
-}
-
 static void
 add_list_columns (GtkTreeView *treeview)
 {
-  GtkCellRenderer *renderer;
-  GtkTreeViewColumn *column;
-  GtkTreeModel *model = gtk_tree_view_get_model (treeview);
-
-  renderer = gtk_cell_renderer_text_new ();
-  g_signal_connect (renderer, "edited", G_CALLBACK (list_name_edited), model);
-  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
-  g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
-  column = gtk_tree_view_column_new_with_attributes (_ ("List"), renderer, "text", LIST_COLUMN_NAME, NULL);
-  gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_column_set_min_width (column, 80);
-  gtk_tree_view_append_column (treeview, column);
-
-  renderer = gtk_cell_renderer_text_new ();
-  g_signal_connect (renderer, "edited", G_CALLBACK (list_display_edited), model);
-  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
-  g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
-  column = gtk_tree_view_column_new_with_attributes (_ ("Display"), renderer, "text", LIST_COLUMN_DISPLAY, NULL);
-  gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_column_set_min_width (column, 80);
-  gtk_tree_view_append_column (treeview, column);
-
-  renderer = gtk_cell_renderer_text_new ();
-  g_signal_connect (renderer, "edited", G_CALLBACK (list_value_edited), model);
-  g_signal_connect (renderer, "editing-started", G_CALLBACK (cell_editing_started), NULL);
-  g_object_set (G_OBJECT (renderer), "editable", TRUE, NULL);
-  column = gtk_tree_view_column_new_with_attributes (_ ("Value"), renderer, "text", LIST_COLUMN_VALUE, NULL);
-  gtk_tree_view_column_set_resizable (column, TRUE);
-  gtk_tree_view_column_set_min_width (column, 120);
-  gtk_tree_view_append_column (treeview, column);
+  append_text_column (treeview, _ ("List"), LIST_COLUMN_NAME, TRUE, FALSE, 80);
+  append_text_column (treeview, _ ("Display"), LIST_COLUMN_DISPLAY, TRUE, FALSE, 80);
+  append_text_column (treeview, _ ("Value"), LIST_COLUMN_VALUE, TRUE, FALSE, 120);
 }
 
 static gboolean
@@ -1006,33 +892,6 @@ Delete_list_entry (GtkWidget *button, gpointer pointer)
   return FALSE;
 }
 
-static void
-save_lists_from_model (GtkTreeModel *model)
-{
-  macro_lists_free ();
-  macro_lists_init ();
-
-  GtkTreeIter iter;
-  if (gtk_tree_model_get_iter_first (model, &iter))
-    {
-      do
-        {
-          gchar *name = NULL, *display = NULL, *value = NULL;
-          gtk_tree_model_get (model, &iter,
-                              LIST_COLUMN_NAME, &name,
-                              LIST_COLUMN_DISPLAY, &display,
-                              LIST_COLUMN_VALUE, &value,
-                              -1);
-          if (name && display)
-            macro_list_add (name, display, value ? value : display);
-          g_free (name);
-          g_free (display);
-          g_free (value);
-        }
-      while (gtk_tree_model_iter_next (model, &iter));
-    }
-}
-
 static GtkWidget *
 build_lists_page (void)
 {
@@ -1046,6 +905,7 @@ build_lists_page (void)
 
   lists_model = create_lists_model ();
   GtkWidget *treeview = gtk_tree_view_new_with_model (lists_model);
+  g_object_unref (lists_model);		/* la vue garde sa référence ; lists_model remis à NULL à la destruction de la fenêtre */
   gtk_tree_selection_set_mode (gtk_tree_view_get_selection (GTK_TREE_VIEW (treeview)), GTK_SELECTION_MULTIPLE);
 
   add_list_columns (GTK_TREE_VIEW (treeview));
@@ -1078,6 +938,13 @@ build_lists_page (void)
   return vbox;
 }
 
+static void
+on_window_destroy (GtkWidget *widget, gpointer data)
+{
+  window = NULL;
+  lists_model = NULL;		/* libéré avec sa vue */
+}
+
 void
 Config_macros (GtkAction *action, gpointer data)
 {
@@ -1087,13 +954,18 @@ Config_macros (GtkAction *action, gpointer data)
   GtkWidget *treeview;
   GtkWidget *button;
   GtkWidget *separator;
-  g_print ("Config_macros called\n");
+
+  /* Une seule fenêtre d'édition : une seconde ouverture la ramène au premier plan */
+  if (window != NULL)
+    {
+      gtk_window_present (GTK_WINDOW (window));
+      return;
+    }
 
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title (GTK_WINDOW (window), _ ("Configure Macros"));
 
-  g_signal_connect (window, "destroy",
-                    G_CALLBACK (gtk_widget_destroyed), &window);
+  g_signal_connect (window, "destroy", G_CALLBACK (on_window_destroy), NULL);
   gtk_container_set_border_width (GTK_CONTAINER (window), 8);
 
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 8);
@@ -1185,309 +1057,4 @@ Config_macros (GtkAction *action, gpointer data)
   gtk_window_set_default_size (GTK_WINDOW (window), 400, 500);
 
   gtk_widget_show_all (window);
-}
-
-/* --- Fichier macros séparé --- */
-
-static gchar *macros_file_path = NULL;
-
-const gchar *
-macros_file_get_default_path (void)
-{
-  return g_build_filename (g_get_user_config_dir (), "gtkterm_macros.ini", NULL);
-}
-
-void
-macros_file_set_path (const gchar *path)
-{
-  g_free (macros_file_path);
-  macros_file_path = g_strdup (path);
-}
-
-const gchar *
-macros_file_get_path (void)
-{
-  return macros_file_path;
-}
-
-static gchar *
-get_macros_file_path (void)
-{
-  if (macros_file_path)
-    return macros_file_path;
-  static gchar *default_path = NULL;
-  if (!default_path)
-    default_path = (gchar *) macros_file_get_default_path ();
-  return default_path;
-}
-
-static void
-write_macros_to_file (const gchar *path, macro_t *m, gint size)
-{
-  GError *error = NULL;
-  GKeyFile *kf = g_key_file_new ();
-
-  for (gint i = 0; i < size; i++)
-    {
-      gchar *args_str = m[i].args ? g_strjoinv ("|", m[i].args) : g_strdup ("");
-      gchar *key = g_strdup_printf ("macro_%d", i);
-      gchar *val = g_strdup_printf ("%s::%s::%s::%s::%s::%d::%u",
-                                    m[i].label    ? m[i].label    : "",
-                                    m[i].shortcut ? m[i].shortcut : "",
-                                    m[i].action   ? m[i].action   : "",
-                                    m[i].tab      ? m[i].tab      : "",
-                                    args_str,
-                                    m[i].polling_enabled ? 1 : 0,
-                                    m[i].polling_period_ms);
-      g_key_file_set_string (kf, "macros", key, val);
-      g_free (key);
-      g_free (val);
-      g_free (args_str);
-    }
-
-  gint n_lists = macro_list_count ();
-  for (gint li = 0; li < n_lists; li++)
-    {
-      GString *list_str = g_string_new (macro_list_name (li));
-      g_string_append_c (list_str, ':');
-      gint n_entries = macro_list_entry_count (li);
-      for (gint ei = 0; ei < n_entries; ei++)
-        {
-          if (ei > 0)
-            g_string_append_c (list_str, '|');
-          g_string_append (list_str, macro_list_entry_display (li, ei));
-          g_string_append_c (list_str, '=');
-          g_string_append (list_str, macro_list_entry_value (li, ei));
-        }
-      gchar *key = g_strdup_printf ("list_%d", li);
-      g_key_file_set_string (kf, "lists", key, list_str->str);
-      g_free (key);
-      g_string_free (list_str, TRUE);
-    }
-
-  gchar *data = g_key_file_to_data (kf, NULL, &error);
-  if (data)
-    {
-      g_file_set_contents (path, data, -1, &error);
-      g_free (data);
-    }
-
-  g_key_file_free (kf);
-
-  if (error)
-    {
-      g_printerr ("Error writing macros file: %s\n", error->message);
-      g_error_free (error);
-    }
-}
-
-void
-macros_file_save (const gchar *path)
-{
-  gint size = 0;
-  macro_t *m = get_shortcuts (&size);
-  gchar *save_path = path ? g_strdup (path) : g_strdup (get_macros_file_path ());
-
-  g_free (macros_file_path);
-  macros_file_path = g_strdup (save_path);
-
-  write_macros_to_file (save_path, m, size);
-  g_free (save_path);
-}
-
-void
-macros_file_load (const gchar *path)
-{
-  GError *error = NULL;
-  GKeyFile *kf = g_key_file_new ();
-  gchar *load_path = path ? g_strdup (path) : g_strdup (get_macros_file_path ());
-
-  if (!g_file_test (load_path, G_FILE_TEST_EXISTS))
-    {
-      g_free (load_path);
-      g_key_file_free (kf);
-      return;
-    }
-
-  if (!g_key_file_load_from_file (kf, load_path, G_KEY_FILE_NONE, &error))
-    {
-      g_printerr ("Error reading macros file: %s\n", error->message);
-      g_error_free (error);
-      g_free (load_path);
-      g_key_file_free (kf);
-      return;
-    }
-
-  g_free (macros_file_path);
-  macros_file_path = g_strdup (load_path);
-  g_free (load_path);
-
-  /* Charger les listes d'abord : « %#Nom » n'est une liste que si elle existe, ce qui conditionne le décompte des arguments des macros (F1). */
-  macro_lists_free ();
-  macro_lists_init ();
-
-  gchar **list_keys = g_key_file_get_keys (kf, "lists", NULL, NULL);
-  if (list_keys)
-    {
-      for (gint i = 0; list_keys[i] != NULL; i++)
-        {
-          gchar *val = g_key_file_get_string (kf, "lists", list_keys[i], NULL);
-          if (val)
-            {
-              gchar *colon = strchr (val, ':');
-              if (colon)
-                {
-                  gchar *list_name = g_strndup (val, colon - val);
-                  gchar *entries_str = colon + 1;
-                  gchar **entries = g_strsplit (entries_str, "|", -1);
-                  for (gint ei = 0; entries[ei] != NULL; ei++)
-                    {
-                      gchar *eq = strchr (entries[ei], '=');
-                      if (eq)
-                        {
-                          gchar *display = g_strndup (entries[ei], eq - entries[ei]);
-                          gchar *value = g_strdup (eq + 1);
-                          macro_list_add (list_name, display, value);
-                          g_free (display);
-                          g_free (value);
-                        }
-                      else
-                        {
-                          macro_list_add (list_name, entries[ei], entries[ei]);
-                        }
-                    }
-                  g_strfreev (entries);
-                  g_free (list_name);
-                }
-              g_free (val);
-            }
-        }
-      g_strfreev (list_keys);
-    }
-
-  /* Charger les macros */
-  gchar **macro_keys = g_key_file_get_keys (kf, "macros", NULL, NULL);
-  if (macro_keys)
-    {
-      gint count = g_strv_length (macro_keys);
-      macro_t *new_macros = g_malloc0 ((count + 1) * sizeof (macro_t));
-
-      for (gint i = 0; i < count; i++)
-        {
-          gchar *val = g_key_file_get_string (kf, "macros", macro_keys[i], NULL);
-          if (val)
-            {
-              gchar *sep1 = strstr (val, "::");
-              gchar *sep2 = sep1 ? strstr (sep1 + 2, "::") : NULL;
-
-              if (sep1 && sep2)
-                {
-                  new_macros[i].label = g_strndup (val, sep1 - val);
-                  new_macros[i].shortcut = g_strndup (sep1 + 2, sep2 - (sep1 + 2));
-
-                  gchar *sep3 = strstr (sep2 + 2, "::");
-                  if (sep3)
-                    {
-                      gchar *sep4 = strstr (sep3 + 2, "::");
-                      if (sep4)
-                        {
-                          new_macros[i].action = g_strndup (sep2 + 2, sep3 - (sep2 + 2));
-                          new_macros[i].tab = g_strndup (sep3 + 2, sep4 - (sep3 + 2));
-
-                          gchar *sep5 = strstr (sep4 + 2, "::");
-                          if (sep5)
-                            {
-                              gchar *args_str = g_strndup (sep4 + 2, sep5 - (sep4 + 2));
-                              gchar **args_arr = g_strsplit (args_str, "|", -1);
-                              g_free (args_str);
-                              gint n_fmt = macro_count_format_args (new_macros[i].action);
-                              if (n_fmt > 0 && (gint) g_strv_length (args_arr) == n_fmt)
-                                new_macros[i].args = args_arr;
-                              else
-                                {
-                                  g_strfreev (args_arr);
-                                  new_macros[i].args = NULL;
-                                }
-
-                              gchar *sep6 = strstr (sep5 + 2, "::");
-                              if (sep6)
-                                {
-                                  gchar *en_str = g_strndup (sep5 + 2, sep6 - (sep5 + 2));
-                                  new_macros[i].polling_enabled = (g_strcmp0 (en_str, "1") == 0);
-                                  g_free (en_str);
-                                  new_macros[i].polling_period_ms = (guint)strtoul (sep6 + 2, NULL, 10);
-                                }
-                              else
-                                {
-                                  gchar *en_str = g_strdup (sep5 + 2);
-                                  new_macros[i].polling_enabled = (g_strcmp0 (en_str, "1") == 0);
-                                  g_free (en_str);
-                                  new_macros[i].polling_period_ms = 1000;
-                                }
-                            }
-                          else
-                            {
-                              gchar **args_arr = g_strsplit (sep4 + 2, "|", -1);
-                              gint n_fmt = macro_count_format_args (new_macros[i].action);
-                              if (n_fmt > 0 && (gint) g_strv_length (args_arr) == n_fmt)
-                                new_macros[i].args = args_arr;
-                              else
-                                {
-                                  g_strfreev (args_arr);
-                                  new_macros[i].args = NULL;
-                                }
-                              new_macros[i].polling_enabled = FALSE;
-                              new_macros[i].polling_period_ms = 1000;
-                            }
-                        }
-                      else
-                        {
-                          new_macros[i].action = g_strdup (sep2 + 2);
-                          new_macros[i].tab = g_strdup (sep3 + 2);
-                          new_macros[i].args = NULL;
-                          new_macros[i].polling_enabled = FALSE;
-                          new_macros[i].polling_period_ms = 1000;
-                        }
-                    }
-                  else
-                    {
-                      new_macros[i].action = g_strdup (sep2 + 2);
-                      new_macros[i].tab = g_strdup ("");
-                      new_macros[i].args = NULL;
-                      new_macros[i].polling_enabled = FALSE;
-                      new_macros[i].polling_period_ms = 1000;
-                    }
-
-                  if (!new_macros[i].label) new_macros[i].label = g_strdup ("");
-                  if (!new_macros[i].shortcut) new_macros[i].shortcut = g_strdup ("None");
-                }
-              else
-                {
-                  new_macros[i].label = g_strdup ("");
-                  new_macros[i].shortcut = g_strdup ("None");
-                  new_macros[i].action = g_strdup ("");
-                  new_macros[i].tab = g_strdup ("");
-                  new_macros[i].args = NULL;
-                  new_macros[i].polling_enabled = FALSE;
-                  new_macros[i].polling_period_ms = 1000;
-                }
-
-              g_free (val);
-            }
-        }
-
-      new_macros[count].label = NULL;
-      new_macros[count].shortcut = NULL;
-      new_macros[count].action = NULL;
-      new_macros[count].tab = NULL;
-      new_macros[count].args = NULL;
-
-      remove_shortcuts ();
-      create_shortcuts (new_macros, count);
-
-      g_free (new_macros);
-      g_strfreev (macro_keys);
-    }
-
-  g_key_file_free (kf);
 }
