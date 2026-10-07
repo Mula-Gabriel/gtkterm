@@ -10,7 +10,6 @@
 
 struct configuration_port config;
 display_config_t term_conf;
-gboolean waiting_for_char = FALSE;
 GtkAccelGroup *shortcuts = NULL;
 
 void
@@ -47,10 +46,4 @@ void
 rebuild_macro_buttons(void)
 {
 	stub_record("rebuild_macro_buttons", NULL);
-}
-
-void
-add_input(void)
-{
-	stub_record("add_input", NULL);
 }

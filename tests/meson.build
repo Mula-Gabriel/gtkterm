@@ -12,6 +12,10 @@ unit_tests = {
 	'test_parsecfg' : [],
 	'test_serial_termios' : [],
 	'test_config_file' : [],
+	'test_history' : [],
+	'test_rx_transform' : [],
+	'test_device_match' : [],
+	'test_view_render' : [],
 }
 
 # Sans effet hors construction avec -Db_sanitize=address ; voir tests/README.md.
@@ -31,22 +35,27 @@ endforeach
 # Tests d'intégration : vrais modules de src/ compilés avec des bouchons d'interface (tests/stubs/), sans fenêtre.
 stub_journal = files('stubs/stub_journal.c')
 stub_ui = files('stubs/stub_ui.c')
-stub_display = files('stubs/stub_display.c')
+stub_link = files('stubs/stub_link.c')
 stubs_inc = include_directories('stubs')
 
 integration_tests = {
+	'test_link' : {
+		'sources' : files('../src/link.c'),
+		'deps' : [gudev_deps, util_dep],
+		'link_args' : [],
+	},
 	'test_transport' : {
-		'sources' : files('../src/transport.c') + stub_journal + stub_ui + stub_display,
-		'deps' : [gtk_deps, util_dep],
+		'sources' : [],
+		'deps' : [util_dep],
 		'link_args' : ['-Wl,--wrap=ioctl'],
 	},
 	'test_macros_send' : {
-		'sources' : files('../src/macros.c') + stub_journal + stub_ui + stub_display,
+		'sources' : files('../src/macros.c') + stub_journal + stub_ui + stub_link,
 		'deps' : [gtk_deps],
 		'link_args' : [],
 	},
 	'test_script_engine' : {
-		'sources' : files('../src/script_engine.c', 'stubs/stub_macros.c') + stub_journal + stub_display,
+		'sources' : files('../src/script_engine.c', 'stubs/stub_macros.c') + stub_journal + stub_link,
 		'deps' : [gtk_deps, lua_dep, util_dep],
 		'link_args' : [],
 	},
@@ -62,3 +71,8 @@ endforeach
 
 # Syntaxe de tous les exemples Lua de scripts/ au moment du test ; sauté (code 77) si luac est absent.
 test('lua-syntax', find_program('sh'), args : [files('lua-syntax.sh'), meson.project_source_root() / 'scripts'], suite : 'lint')
+
+subdir('gui')
+
+# La suite graphique ne tourne que sur demande : meson test -C build --suite gui
+add_test_setup('default', exclude_suites : ['gui'], is_default : true)

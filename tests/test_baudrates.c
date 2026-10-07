@@ -7,7 +7,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include "serial.h"
+#include "transport.h"
 
 static void
 test_table_triee(void)

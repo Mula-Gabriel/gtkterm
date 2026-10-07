@@ -47,6 +47,7 @@ test_raccourci_avec_arguments_enregistres(void)
 	shortcut_callback(GINT_TO_POINTER(0));
 	s = envoye();
 	g_assert_cmpstr(s, ==, "V42\r");
+	g_assert_cmpint(stub_last_origin(), ==, GT_SEND_MACRO);
 	g_free(s);
 	remove_shortcuts();
 }

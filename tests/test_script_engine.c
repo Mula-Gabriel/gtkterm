@@ -1,5 +1,5 @@
-/* Tests d'intégration du vrai moteur Lua (script_engine.c) sans interface : bouchons pour send_serial, la fonction
- * d'écoute du port principal et get_shortcuts. Le thread principal fait tourner une GMainLoop pendant le script. */
+/* Tests d'intégration du vrai moteur Lua (script_engine.c) sans interface : bouchons pour la liaison (envois, signal
+ * « received ») et get_shortcuts. Le thread principal fait tourner une GMainLoop pendant le script. */
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -119,6 +119,7 @@ test_envois_sur_le_thread_principal_et_dans_l_ordre(void)
 	g_assert_cmpuint(octets->len, ==, 2);
 	g_assert_cmpmem(octets->data, octets->len, "AB", 2);
 	g_assert_true(stub_send_thread() == thread_principal);
+	g_assert_cmpint(stub_last_origin(), ==, GT_SEND_LUA);
 }
 
 static void
