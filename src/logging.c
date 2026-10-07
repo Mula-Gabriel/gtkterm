@@ -25,9 +25,9 @@
 #include <glib.h>
 
 #include "interface.h"
-#include "serial.h"
-#include "buffer.h"
+#include "link.h"
 #include "logging.h"
+#include "rx_transform.h"
 
 #include <config.h>
 #include <glib/gi18n.h>
@@ -38,7 +38,10 @@ static gboolean	  Logging;
 static gchar     *LoggingFileName;
 static FILE      *LoggingFile;
 static gchar     *logfile_default = NULL;
-static gboolean   LoggingSuspended = FALSE;	/* vrai pendant le rejeu du tampon : ces octets sont déjà journalisés */
+static GtRxTransform *log_transform = NULL;	/* état de ligne propre au journal */
+
+extern gboolean crlfauto_on;
+extern gboolean timestamp_on;
 
 static gint OpenLogFile(gchar *filename)
 {
@@ -78,6 +81,8 @@ static gint OpenLogFile(gchar *filename)
 	{
 		logfile_default = g_strdup(LoggingFileName);
 		Logging = TRUE;
+		if(log_transform != NULL)
+			gt_rx_transform_reset(log_transform);
 	}
 
 	return FALSE;
@@ -133,6 +138,8 @@ void logging_clear(void)
 		toggle_logging_sensitivity(Logging);
 		toggle_logging_pause_resume(Logging);
 	}
+	else if(log_transform != NULL)
+		gt_rx_transform_reset(log_transform);
 }
 
 void logging_pause_resume(void)
@@ -169,19 +176,29 @@ void logging_stop(void)
 	toggle_logging_pause_resume(Logging);
 }
 
-/* Suspend (TRUE) ou reprend (FALSE) la journalisation sans fermer le journal (M31) */
-void logging_set_suspended(gboolean suspended)
+/* Message d'échec d'écriture du journal, affiché depuis la boucle principale */
+static gboolean log_failed_idle_cb(gpointer data)
 {
-	LoggingSuspended = suspended;
+	show_message(_("Failed to log data\n"), MSG_ERR);
+	return G_SOURCE_REMOVE;
 }
 
-void log_chars(const gchar *chars, guint size)
+/* Échec d'écriture : le journal s'arrête tout de suite et le message est différé. log_write s'exécute sous le signal
+   « received » de la liaison (surveillance du descripteur du transport) : la boucle imbriquée d'une boîte de dialogue
+   pourrait y fermer le transport en cours de lecture ; et un journal laissé actif rouvrirait une boîte à chaque réception. */
+static void log_write_failed(void)
+{
+	logging_stop();
+	g_idle_add(log_failed_idle_cb, NULL);
+}
+
+static void log_write(const gchar *chars, guint size)
 {
 	guint writeAttempts = 0;
 	guint bytesWritten = 0;
 
 	/* if we are not logging exit */
-	if(LoggingFile == NULL || Logging == FALSE || LoggingSuspended)
+	if(LoggingFile == NULL || Logging == FALSE)
 	{
 		return;
 	}
@@ -196,10 +213,29 @@ void log_chars(const gchar *chars, guint size)
 		}
 		else
 		{
-			show_message(_("Failed to log data\n"), MSG_ERR);
+			log_write_failed();
 			return;
 		}
 	}
 
-	fflush(LoggingFile);
+	/* Disque plein : souvent signalé au vidage seulement, le flux étant tamponné */
+	if(fflush(LoggingFile) != 0)
+		log_write_failed();
+}
+
+void logging_on_received(GtkTermLink *link, GBytes *data, gint64 wall_time_us, gpointer user_data)
+{
+	gsize len;
+	const guint8 *p = g_bytes_get_data(data, &len);
+	GString *text;
+
+	if(LoggingFile == NULL || Logging == FALSE)
+		return;
+	if(log_transform == NULL)
+		log_transform = gt_rx_transform_new(crlfauto_on, timestamp_on);
+	gt_rx_transform_set_options(log_transform, crlfauto_on, timestamp_on);
+	text = g_string_new(NULL);
+	gt_rx_transform_feed(log_transform, p, len, wall_time_us, text);
+	log_write(text->str, (guint)text->len);
+	g_string_free(text, TRUE);
 }

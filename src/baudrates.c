@@ -21,7 +21,7 @@
 
 #include <config.h>
 
-#include "serial.h"
+#include "transport.h"
 
 const struct baudrate baudrate_list[] = {
 #include "baudrates.h"

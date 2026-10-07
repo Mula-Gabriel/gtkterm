@@ -50,8 +50,8 @@ struct configuration_port
 	guint vitesse;               // baud rate
 	gint bits;                   // 5 - 6 - 7 - 8
 	gint stops;                  // 1 - 2
-	gint parite;                 // 0 : None, 1 : Odd, 2 : Even
-	gint flux;                   // 0 : None, 1 : Xon/Xoff, 2 : RTS/CTS, 3 : RS485halfduplex
+	GtParity parite;             // GT_PARITY_NONE, _ODD, _EVEN ("none", "odd", "even" dans .gtktermrc)
+	GtFlow flux;                 // GT_FLOW_NONE, _XONXOFF, _RTSCTS, _RS485 ("none", "xon", "rts", "rs485" dans .gtktermrc)
 	gint delai;                  // end of char delay: in ms
 	gint rs485_rts_time_before_transmit;
 	gint rs485_rts_time_after_transmit;
@@ -66,6 +66,13 @@ struct configuration_port
 	gboolean update_check_startup;
 	gchar update_prefix[256];
 };
+
+/* Unique point de conversion de la configuration vers les paramètres du transport ; à libérer avec transport_params_clear */
+void config_to_transport_params(const struct configuration_port *c, TransportParams *p);
+void configure_echo(gboolean echo);
+void configure_crlfauto(gboolean crlfauto);
+void configure_autoreconnect_enable(gboolean autoreconnect);
+void configure_esc_clear_screen(gboolean esc_clear_screen);
 
 typedef struct
 {
@@ -86,10 +93,10 @@ extern display_config_t term_conf;
 
 #define DEFAULT_PORT "/dev/ttyS0"
 #define DEFAULT_SPEED 115200
-#define DEFAULT_PARITY 0
+#define DEFAULT_PARITY GT_PARITY_NONE
 #define DEFAULT_BITS 8
 #define DEFAULT_STOP 1
-#define DEFAULT_FLOW 0
+#define DEFAULT_FLOW GT_FLOW_NONE
 #define DEFAULT_DELAY 0
 #define DEFAULT_CHAR -1
 #define DEFAULT_DELAY_RS485 30

@@ -15,6 +15,8 @@
 #ifndef WIDGETS_H_
 #define WIDGETS_H_
 
+#include "link.h"
+
 #define MSG_WRN 0
 #define MSG_ERR 1
 
@@ -23,8 +25,6 @@
 
 void create_main_window(void);
 void Set_status_message(gchar *);
-void put_text(const gchar *, guint);
-void put_hexadecimal(const gchar *, guint);
 void Set_local_echo(gboolean);
 void show_message(gchar *, gint);
 void clear_display(void);
@@ -33,11 +33,12 @@ void Set_crlfauto(gboolean crlfauto);
 void Set_autoreconnect_enabled(gboolean autoreconnect_enabled);
 void Set_esc_clear_screen(gboolean esc_clear_screen);
 void Set_timestamp(gboolean timestamp);
-gint send_serial(gchar *, gint);
 void Put_temp_message(const gchar *, gint);
 void Set_window_title(gchar *msg);
 void interface_close_port(void);
 void interface_open_port(void);
+void interface_connect_link(GtkTermLink *link);
+void interface_disconnect_link(GtkTermLink *link);
 
 void toggle_logging_pause_resume(gboolean currentlyLogging);
 void toggle_logging_sensitivity(gboolean currentlyLogging);

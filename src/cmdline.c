@@ -110,9 +110,9 @@ int read_command_line(int argc, char **argv)
 
 		case 'a':
 			if(!strcmp(optarg, "odd"))
-				config.parite = 1;
+				config.parite = GT_PARITY_ODD;
 			else if(!strcmp(optarg, "even"))
-				config.parite = 2;
+				config.parite = GT_PARITY_EVEN;
 			break;
 
 		case 't':
@@ -133,11 +133,11 @@ int read_command_line(int argc, char **argv)
 
 		case 'w':
 			if(!strcmp(optarg, "Xon"))
-				config.flux = 1;
+				config.flux = GT_FLOW_XONXOFF;
 			else if(!strcmp(optarg, "RTS"))
-				config.flux = 2;
+				config.flux = GT_FLOW_RTSCTS;
 			else if(!strcmp(optarg, "RS485"))
-				config.flux = 3;
+				config.flux = GT_FLOW_RS485;
 			break;
 
 		case 'd':

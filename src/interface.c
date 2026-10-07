@@ -70,17 +70,17 @@
 #include "term_config.h"
 #include "files.h"
 #include "search.h"
-#include "serial.h"
 #include "interface.h"
 #include "macro_panel.h"
 #include "script_panel.h"
-#include "buffer.h"
 #include "macros.h"
 #include "terminal_display.h"
+#include "link.h"
 #include "logging.h"
-#include "device_monitor.h"
 #include "update.h"
 #include "git_revision.h"
+
+#define POLL_DELAY 100	/* ms, lecture des lignes modem */
 
 #include <glib/gprintf.h>
 #include <glib/gi18n.h>
@@ -215,29 +215,21 @@ void view_index_toggled_callback(GSimpleAction *action, GVariant *parameter, gpo
 
 void set_view(guint type)
 {
-	clear_display();
-	set_clear_func(clear_display);
 	switch(type)
 	{
-	case ASCII_VIEW:
-		g_simple_action_set_state(action_view_ascii, g_variant_new_boolean(TRUE));
-		g_simple_action_set_enabled(action_view_index, FALSE);
-		g_simple_action_set_enabled(action_view_hex_chars, FALSE);
-		set_display_func(put_text);
-		break;
 	case HEXADECIMAL_VIEW:
 		g_simple_action_set_state(action_view_hex, g_variant_new_boolean(TRUE));
 		g_simple_action_set_enabled(action_view_index, TRUE);
 		g_simple_action_set_enabled(action_view_hex_chars, TRUE);
-		set_display_func(put_hexadecimal);
+		terminal_display_set_mode(GT_VIEW_HEX);
 		break;
 	default:
-		set_display_func(NULL);
+		g_simple_action_set_state(action_view_ascii, g_variant_new_boolean(TRUE));
+		g_simple_action_set_enabled(action_view_index, FALSE);
+		g_simple_action_set_enabled(action_view_hex_chars, FALSE);
+		terminal_display_set_mode(GT_VIEW_ASCII);
+		break;
 	}
-	/* Rejeu du tampon dans la nouvelle vue : ces octets ont été journalisés à leur réception (M31) */
-	logging_set_suspended(TRUE);
-	write_buffer();
-	logging_set_suspended(FALSE);
 }
 
 void view_radio_callback(GtkWidget *widget, gpointer data)
@@ -255,29 +247,34 @@ void Set_local_echo(gboolean echo)
 {
 	echo_on = echo;
 	g_simple_action_set_state(action_local_echo, g_variant_new_boolean(echo_on));
+	terminal_display_redraw();
 }
 
 void echo_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data)
 {
 	echo_on = g_variant_get_boolean(parameter);
 	configure_echo(echo_on);
+	terminal_display_redraw();
 }
 
 void Set_crlfauto(gboolean crlfauto)
 {
 	crlfauto_on = crlfauto;
 	g_simple_action_set_state(action_crlf_auto, g_variant_new_boolean(crlfauto_on));
+	terminal_display_redraw();
 }
 
 void Set_autoreconnect_enabled(gboolean autoreconnect_enabled)
 {
 	autoreconnect_on = autoreconnect_enabled;
+	g_object_set(gt_link_get_default(), "auto-reconnect", autoreconnect_on, NULL);
 	g_simple_action_set_state(action_autoreconnect, g_variant_new_boolean(autoreconnect_on));
 }
 
 void Autoreconnect_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data)
 {
 	autoreconnect_on = g_variant_get_boolean(parameter);
+	g_object_set(gt_link_get_default(), "auto-reconnect", autoreconnect_on, NULL);
 	configure_autoreconnect_enable(autoreconnect_on);
 }
 
@@ -285,6 +282,7 @@ void CR_LF_auto_toggled_callback(GSimpleAction *action, GVariant *parameter, gpo
 {
 	crlfauto_on = g_variant_get_boolean(parameter);
 	configure_crlfauto(crlfauto_on);
+	terminal_display_redraw();
 }
 
 void Set_esc_clear_screen(gboolean esc_clear_screen)
@@ -303,12 +301,14 @@ void Set_timestamp(gboolean timestamp)
 {
 	timestamp_on = timestamp;
 	g_simple_action_set_state(action_timestamp, g_variant_new_boolean(timestamp_on));
+	terminal_display_redraw();
 }
 
 void timestamp_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data)
 {
 	timestamp_on = g_variant_get_boolean(parameter);
 	config.timestamp = timestamp_on ? TRUE : FALSE;
+	terminal_display_redraw();
 }
 	void toggle_logging_pause_resume(gboolean currentlyLogging)
 {
@@ -388,11 +388,16 @@ static GtkWidget *build_submenu(GtkWidget *menu_shell, const char *title, GCallb
 	return menu;
 }
 
+static void clear_screen_callback(GtkWidget *widget, gpointer data)
+{
+	gt_link_clear_history(gt_link_get_default());
+}
+
 static void populate_file_menu(GtkWidget *menu)
 {
 	GtkWidget *item;
 	item = gtk_menu_item_new_with_mnemonic(_("Clear screen"));
-	connect_menu_item_callback(item, G_CALLBACK(clear_buffer));
+	connect_menu_item_callback(item, G_CALLBACK(clear_screen_callback));
 	gtk_widget_add_accelerator(item, "activate", shortcuts, GDK_KEY_l, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_ACCEL_VISIBLE);
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
@@ -969,18 +974,18 @@ void show_control_signals(int stat)
 
 void signals_send_break_callback(GtkAction *action, gpointer data)
 {
-	sendbreak();
+	gt_link_send_break(gt_link_get_default());
 	Put_temp_message(_("Break signal sent!"), 800);
 }
 
 void signals_toggle_DTR_callback(GtkAction *action, gpointer data)
 {
-	Set_signals(0);
+	gt_link_toggle_line(gt_link_get_default(), GT_MODEM_DTR);
 }
 
 void signals_toggle_RTS_callback(GtkAction *action, gpointer data)
 {
-	Set_signals(1);
+	gt_link_toggle_line(gt_link_get_default(), GT_MODEM_RTS);
 }
 
 void signals_close_port(GtkAction *action, gpointer data)
@@ -1014,9 +1019,11 @@ gboolean control_signals_read(void)
 	gtk_widget_set_sensitive(menu_item_toggle_dtr, TRUE);
 	gtk_widget_set_sensitive(menu_item_toggle_rts, TRUE);
 
-	state = lis_sig();
+	state = gt_link_get_modem_lines(gt_link_get_default());
 	if(state >= 0)
 		show_control_signals(state);
+	else if(gt_link_get_state(gt_link_get_default()) != GT_LINK_OPEN)
+		show_control_signals(0);	/* port perdu, en reconnexion ou fermé : voyants éteints plutôt que figés */
 
 	return TRUE;
 }
@@ -1034,26 +1041,64 @@ void Set_window_title(gchar *msg)
 	g_free(header);
 }
 
+static void on_link_status(GObject *object, GParamSpec *pspec, gpointer user_data)
+{
+	const gchar *text = gt_link_get_status_text(GT_LINK(object));
+
+	Set_status_message((gchar *)text);
+	Set_window_title((gchar *)text);
+}
+
+/* Erreur d'une ouverture demandée par l'utilisateur (jamais pendant une reconnexion) */
+static void on_link_open_failed(GtkTermLink *link, const gchar *message, gpointer user_data)
+{
+	show_message((gchar *)message, MSG_ERR);
+}
+
+/* Gestionnaires de l'interface sur la liaison : connectés par interface_connect_link, tous retirés par interface_disconnect_link */
+static const struct
+{
+	const gchar *signal;
+	GCallback callback;
+} link_handlers[] =
+{
+	{ "notify::status-text", G_CALLBACK(on_link_status) },
+	{ "open-failed", G_CALLBACK(on_link_open_failed) },
+	{ "received", G_CALLBACK(terminal_display_on_received) },
+	{ "received", G_CALLBACK(logging_on_received) },
+	{ "received", G_CALLBACK(files_on_received) },
+	{ "notify::state", G_CALLBACK(files_on_link_state) },
+	{ "sent", G_CALLBACK(terminal_display_on_sent) },
+	{ "history-cleared", G_CALLBACK(terminal_display_on_history_cleared) },
+};
+
+void interface_connect_link(GtkTermLink *link)
+{
+	for(gsize i = 0; i < G_N_ELEMENTS(link_handlers); i++)
+		g_signal_connect(link, link_handlers[i].signal, link_handlers[i].callback, NULL);
+	on_link_status(G_OBJECT(link), NULL, NULL);
+}
+
+/* Avant la fermeture finale de la liaison : la fenêtre peut déjà être détruite (bouton « Fermer » de la barre de titre),
+   ses widgets ne doivent plus recevoir l'état ni les octets de la liaison */
+void interface_disconnect_link(GtkTermLink *link)
+{
+	for(gsize i = 0; i < G_N_ELEMENTS(link_handlers); i++)
+		g_signal_handlers_disconnect_by_func(link, link_handlers[i].callback, NULL);
+}
+
 void interface_open_port(void)
 {
-	Config_port();
+	TransportParams params;
 
-	gchar *message;
-	message = get_port_string();
-	Set_status_message(message);
-	Set_window_title(message);
-	g_free(message);
+	config_to_transport_params(&config, &params);
+	gt_link_open(gt_link_get_default(), &params, NULL);	/* un échec émet open-failed : une boîte de dialogue */
+	transport_params_clear(&params);
 }
 
 void interface_close_port(void)
 {
-	Close_port();
-
-	gchar *message;
-	message = get_port_string();
-	Set_status_message(message);
-	Set_window_title(message);
-	g_free(message);
+	gt_link_close(gt_link_get_default());
 }
 
 void show_message(gchar *message, gint type_msg)
@@ -1118,7 +1163,7 @@ gboolean Send_Hexadecimal(GtkWidget *widget, GdkEventKey *event, gpointer pointe
 		buff[j++] = scan_val;
 	}
 
-	send_serial(buff, j);
+	gt_link_send(gt_link_get_default(), (const guint8 *)buff, j, GT_SEND_HEX);
 	g_free(buff);
 
 	message = g_strdup_printf(_("%d byte(s) sent!"), j);

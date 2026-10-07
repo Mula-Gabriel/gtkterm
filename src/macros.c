@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "interface.h"
+#include "link.h"
 #include "macros.h"
 #include "macros_list.h"
 #include "macros_format.h"
@@ -90,7 +91,7 @@ send_macro_with_args (gint macro_index, const gchar **args, gint n_args)
   g_free (formatted);
 
   if (buffer->len > 0)
-    send_serial ((gchar *) buffer->data, buffer->len);
+    gt_link_send (gt_link_get_default (), buffer->data, buffer->len, GT_SEND_MACRO);
   g_byte_array_free (buffer, TRUE);
 
   gchar *message = g_strdup_printf (_ ("Macro \"%s\" sent!"),

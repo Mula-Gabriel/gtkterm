@@ -22,7 +22,16 @@ core_sources = [
 	'serial_termios.h',
 	'config_file.c',
 	'config_file.h',
-	'serial.h',
+	'history.c',
+	'history.h',
+	'rx_transform.c',
+	'rx_transform.h',
+	'device_match.c',
+	'device_match.h',
+	'view_render.c',
+	'view_render.h',
+	'transport.c',
+	'transport.h',
 ]
 
 gtkterm_core = static_library(
@@ -48,12 +57,8 @@ git_revision_h = vcs_tag(
 )
 
 sources = [
-	'buffer.c',
-	'buffer.h',
 	'cmdline.c',
 	'cmdline.h',
-	'device_monitor.c',
-	'device_monitor.h',
 	'files.c',
 	'files.h',
 	'gtkterm.c',
@@ -69,11 +74,10 @@ sources = [
 	'macro_panel.h',
 	'search.c',
 	'search.h',
-	'serial.c',
+	'link.c',
+	'link.h',
 	'term_config.c',
 	'term_config.h',
-	'transport.c',
-	'transport.h',
 	'update.c',
 	'update.h',
 	'user_signals.c',
@@ -86,7 +90,7 @@ sources = [
 	gresources
 ]
 
-executable(
+gtkterm_exe = executable(
 	'gtkterm', sources,
 	export_dynamic : true,
 	dependencies : [
