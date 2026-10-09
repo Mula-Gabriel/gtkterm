@@ -33,6 +33,15 @@ else
 	git clone --branch "$BRANCH" "$REPO_URL" "$WORKDIR"
 fi
 
+# --- 1b. continuer avec le script de la version téléchargée --------------
+# Le script installé est celui de l'ancienne version : ses dépendances de construction peuvent ne plus convenir (passage à GTK 4).
+# On se relance une seule fois sur la copie téléchargée si elle diffère ; GTKTERM_UPDATE_REEXEC empêche une boucle.
+NEW_SCRIPT="$WORKDIR/data/gtkterm-update.sh"
+if [ -z "${GTKTERM_UPDATE_REEXEC:-}" ] && [ -r "$NEW_SCRIPT" ] && ! cmp -s "$0" "$NEW_SCRIPT"; then
+	echo ">>> Continuing with the downloaded update script..."
+	GTKTERM_UPDATE_REEXEC=1 exec sh "$NEW_SCRIPT" "$REPO_URL" "$PREFIX" "$OLD_PID"
+fi
+
 # --- 2. detect distro & build dep list ---------------------------------
 PM=""
 if [ -r /etc/os-release ]; then
