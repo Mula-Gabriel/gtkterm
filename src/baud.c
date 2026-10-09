@@ -43,6 +43,14 @@ unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 	return cfgetobaud(&tio);
 }
 
+unsigned int get_port_baudrate(int port_fd)
+{
+	struct termios tio;
+
+	CHK(tcgetattr(port_fd, &tio));
+	return cfgetobaud(&tio);
+}
+
 #elif defined(HAVE_LINUX_TERMIOS_H)
 
 #include <sys/types.h>
@@ -106,6 +114,16 @@ unsigned int set_port_baudrate(unsigned int baud, int port_fd)
 	return tio.c_ospeed;
 }
 
+unsigned int get_port_baudrate(int port_fd)
+{
+	struct termios2 tio;
+
+	if (ioctl(port_fd, TCGETS2, &tio) < 0)
+		return 0;
+	/* Débit standard réglé par cfsetospeed (code Bxxx) ou débit libre (BOTHER) : c_ospeed vaut le débit dans les deux cas. */
+	return tio.c_ospeed;
+}
+
 #else  /* No baud_t interface, not Linux */
 
 #include "transport.h"
@@ -136,6 +154,14 @@ int set_port_baudrate(unsigned int baud, int port_fd)
 	CHK(cfsetospeed(&tio, speed));
 	CHK(cfsetispeed(&tio, speed));
 	CHK(tcsetattr(port_fd, TCSANOW, &tio));
+	CHK(tcgetattr(port_fd, &tio));
+	return speed_t_to_baud(cfgetospeed(&tio));
+}
+
+unsigned int get_port_baudrate(int port_fd)
+{
+	struct termios tio;
+
 	CHK(tcgetattr(port_fd, &tio));
 	return speed_t_to_baud(cfgetospeed(&tio));
 }

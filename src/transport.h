@@ -128,5 +128,7 @@ extern const gboolean speed_t_is_sane;
 speed_t find_standard_baudrate(unsigned int);
 unsigned int speed_t_to_baud(speed_t);
 unsigned int set_port_baudrate(unsigned int, int);
+/* Débit de sortie effectif du port (nombre de bauds, quelle que soit la glibc), 0 en cas d'erreur. */
+unsigned int get_port_baudrate(int);
 
 #endif

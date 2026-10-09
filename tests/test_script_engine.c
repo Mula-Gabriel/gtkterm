@@ -532,7 +532,7 @@ typedef struct
 {
 	int esclave;
 	gboolean lu;
-	speed_t vitesse;
+	guint vitesse;
 	tcflag_t cflag;
 } ParamsPty;
 
@@ -545,7 +545,7 @@ piloter_parametres(gpointer data)
 	if(!p->lu && journal_contient("ouvert\n"))
 	{
 		g_assert_cmpint(tcgetattr(p->esclave, &tio), ==, 0);
-		p->vitesse = cfgetospeed(&tio);
+		p->vitesse = get_port_baudrate(p->esclave);
 		p->cflag = tio.c_cflag;
 		p->lu = TRUE;
 		stub_inject_rx("fin", 3);
@@ -587,7 +587,7 @@ test_serie_parametres(void)
 	stub_reset();
 	g_assert_true(executer_avec(script, 15000, piloter_parametres, &p));
 	g_assert_true(p.lu);
-	g_assert_cmpuint(p.vitesse, ==, B115200);
+	g_assert_cmpuint(p.vitesse, ==, 115200);
 	g_assert_cmpuint(p.cflag & CSTOPB, ==, CSTOPB);
 	g_assert_true(journal_contient("parite false invalid parity\n"));
 	g_assert_true(journal_contient("bits false invalid bits\n"));

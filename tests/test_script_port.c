@@ -175,7 +175,7 @@ test_serie_pty(void)
 
 	/* Paramètres appliqués (une pty n'expose que le débit et CSTOPB) */
 	g_assert_cmpint(tcgetattr(esclave, &tio), ==, 0);
-	g_assert_cmpuint(cfgetospeed(&tio), ==, B115200);
+	g_assert_cmpuint(get_port_baudrate(esclave), ==, 115200);
 	g_assert_cmpuint(tio.c_cflag & CSTOPB, ==, CSTOPB);
 
 	/* Réception dans la file */

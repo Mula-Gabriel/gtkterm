@@ -290,7 +290,8 @@ test_termios_sans_heritage(void)
 	g_assert_cmpint(tcgetattr(gt_transport_get_fd(t), &tio), ==, 0);
 	g_assert_cmpuint(tio.c_cflag & CSIZE, ==, CS8);
 	g_assert_cmpuint(tio.c_cflag & (CSTOPB | CRTSCTS), ==, 0);
-	g_assert_cmpuint(cfgetospeed(&tio), ==, B115200);
+	/* Relu sans cfgetospeed : avant la glibc 2.42, un débit posé par BOTHER s'y relit 4096 (BOTHER) sur une pty. */
+	g_assert_cmpuint(get_port_baudrate(gt_transport_get_fd(t)), ==, 115200);
 	gt_transport_close(t);
 
 	/* Fermeture d'une instance série : réglages d'origine restaurés, débit compris (relevé avant de le changer, M3) */

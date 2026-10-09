@@ -176,13 +176,15 @@ port_brancher(Port *p)
 	g_assert_cmpint(symlink(ttyname(p->esclave), p->lien), ==, 0);
 }
 
-/* Le maître et l'esclave disparaissent ; le lien reste, pendant */
+/* Le maître et l'esclave disparaissent, le lien aussi (comme le nœud d'un adaptateur USB débranché) : un lien laissé pendant vers
+ * /dev/pts/N désignerait la prochaine pty créée sur la machine, que le noyau numérote au plus petit libre, et la liaison s'y reconnecterait. */
 static void
 port_debrancher(Port *p)
 {
 	close(p->esclave);
 	close(p->maitre);
 	p->esclave = p->maitre = -1;
+	g_unlink(p->lien);
 }
 
 static void
@@ -379,7 +381,7 @@ test_ouverture_echouee_puis_branchement(void)
 
 	g_object_set(link, "auto-reconnect", TRUE, NULL);
 	port_brancher(&p);
-	port_debrancher(&p);		/* lien pendant : l'adaptateur n'est pas encore branché */
+	port_debrancher(&p);		/* lien absent : l'adaptateur n'est pas encore branché */
 	ouvrir_serie_echec(link, &p);
 	g_assert_cmpint(o.open_failed, ==, 1);
 	g_assert_cmpint(gt_link_get_state(link), ==, GT_LINK_RECONNECTING);
@@ -567,7 +569,7 @@ test_perte_puis_reconnexion(void)
 	port_debrancher(&p);
 	g_assert_true(attendre_etat(link, GT_LINK_RECONNECTING, 2000));
 	g_assert_true(g_str_has_suffix(gt_link_get_status_text(link), " — reconnecting…"));
-	iterer(200);	/* plusieurs essais silencieux sur un lien pendant */
+	iterer(200);	/* plusieurs essais silencieux sur un port absent */
 	g_assert_cmpint(gt_link_get_state(link), ==, GT_LINK_RECONNECTING);
 	port_brancher(&p);
 	g_assert_true(attendre_etat(link, GT_LINK_OPEN, 2000));
