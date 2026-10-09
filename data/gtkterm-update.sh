@@ -8,6 +8,7 @@
 # Privileged steps (dependency install, meson install) use pkexec.
 
 set -eu
+# L'URL vient de la configuration (modifiable) : jamais interprétée comme une option ni comme un transport « ext:: » qui lancerait une commande.
 
 REPO_URL="${1:-https://github.com/Mula-Gabriel/gtkterm.git}"
 PREFIX="${2:-/usr/local}"
@@ -23,14 +24,14 @@ echo ">>> workdir:$WORKDIR"
 # --- 1. get the source -------------------------------------------------
 if [ -d "$WORKDIR/.git" ]; then
 	echo ">>> Updating existing checkout..."
-	git -C "$WORKDIR" remote set-url origin "$REPO_URL"
-	git -C "$WORKDIR" fetch origin "$BRANCH"
+	git -C "$WORKDIR" remote set-url origin -- "$REPO_URL"
+	git -C "$WORKDIR" -c protocol.ext.allow=never fetch origin "$BRANCH"
 	git -C "$WORKDIR" reset --hard "origin/$BRANCH"
 else
 	echo ">>> Cloning..."
 	rm -rf "$WORKDIR"
 	mkdir -p "$(dirname "$WORKDIR")"
-	git clone --branch "$BRANCH" "$REPO_URL" "$WORKDIR"
+	git -c protocol.ext.allow=never clone --branch "$BRANCH" -- "$REPO_URL" "$WORKDIR"
 fi
 
 # --- 1b. continuer avec le script de la version téléchargée --------------
