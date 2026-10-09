@@ -207,19 +207,27 @@ class Env:
         return self.link
 
     def unplug(self):
+        """Débranche : pty fermée ET lien retiré (comme le nœud d'un adaptateur USB). Un lien laissé pendant vers /dev/pts/N désignerait la
+        prochaine pty créée sur la machine (numérotée au plus petit libre), et GTKTerm s'y reconnecterait."""
         for fd in (self.master, self.slave):
             try:
                 os.close(fd)
             except OSError:
                 pass
         self.master = self.slave = -1
+        if getattr(self, 'link', None):
+            try:
+                os.unlink(self.link)
+            except FileNotFoundError:
+                pass
 
     def replug(self):
         self.master, self.slave = os.openpty()
         tty.setraw(self.slave)
         self.pty = os.ttyname(self.slave)
         os.set_blocking(self.master, False)
-        os.unlink(self.link)
+        if os.path.lexists(self.link):
+            os.unlink(self.link)
         os.symlink(self.pty, self.link)
 
     # ---------- pty ----------
