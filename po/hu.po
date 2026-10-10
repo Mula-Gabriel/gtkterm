@@ -7,757 +7,32 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 0.99.4\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2020-03-09 10:41+0100\n"
+"POT-Creation-Date: 2026-10-10 04:16+0200\n"
 "PO-Revision-Date: 2005-03-09 21:17+0100\n"
 "Last-Translator: Bus Jozsef <busj@mailbox.hu>\n"
 "Language-Team: hu <hu@li.org>\n"
 "Language: \n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Poedit-Language: Hungarian\n"
 "X-Poedit-Country: HUNGARY\n"
 "X-Poedit-SourceCharset: iso-8859-2\n"
 
-#: ../src/buffer.c:164
-msgid "ERROR: Buffer is not initialized!\n"
-msgstr "HIBA: inicializálatlan buffer!\n"
-
-#: ../src/cmdline.c:37
-#, c-format
-msgid ""
-"\n"
-"GTKTerm version %s\n"
-msgstr ""
-"\n"
-"GTKTerm verzió %s\n"
-
-#: ../src/cmdline.c:38
-#, fuzzy
-msgid "\t (c) Julien Schmitt\n"
-msgstr "\t (c) Julien Schmitt - julien@jls-info.com\n"
-
-#: ../src/cmdline.c:39
-msgid ""
-"\n"
-"This program is released under the terms of the GPL V.2\n"
-msgstr ""
-"\n"
-"A program GPL V.2 alatt terjeszthető\n"
-
-#: ../src/cmdline.c:40
-msgid "\t ** Use at your own risks! **\n"
-msgstr "\t ** Csak saját felelősségedre használd! **\n"
-
-#: ../src/cmdline.c:41
-msgid ""
-"\n"
-"Command line options\n"
-msgstr ""
-"\n"
-"Parancssori opciók\n"
-
-#: ../src/cmdline.c:42
-msgid "--help or -h: this help screen\n"
-msgstr "--help vagy -h: súgó megjelenítése\n"
-
-#: ../src/cmdline.c:43
-msgid "--config <configuration> or -c: load configuration\n"
-msgstr "--config <konfiguráció> vagy -c: konfiguráció betöltése\n"
-
-#: ../src/cmdline.c:44
-msgid "--port <device> or -p: serial port device (default /dev/ttyS0)\n"
-msgstr "--port <eszköz> vagy -p: soros port (alapértelmezett /dev/ttyS0)\n"
-
-#: ../src/cmdline.c:45
-msgid "--speed <speed> or -s: serial port speed (default 9600)\n"
-msgstr ""
-"--speed <sebesség> vagy -s: soros port sebesség (alapértelmezett 9600)\n"
-
-#: ../src/cmdline.c:46
-msgid "--bits <bits> or -b: number of bits (default 8)\n"
-msgstr "--bits <bitek száma> vagy -b: bitek száma (alapértelmezett 8)\n"
-
-#: ../src/cmdline.c:47
-msgid "--stopbits <stopbits> or -t: number of stopbits (default 1)\n"
-msgstr "--stopbits <stopbit> vagy -t: stop bitek száma (alapértelmezett 1)\n"
-
-#: ../src/cmdline.c:48
-msgid "--parity <odd | even> or -a: parity (default none)\n"
-msgstr ""
-"--parity <odd(páratlan) | even(páros)> vagy -a: paritás (alapértelmezett "
-"none)\n"
-
-#: ../src/cmdline.c:49
-#, fuzzy
-msgid "--flow <Xon | RTS | RS485> or -w: flow control (default none)\n"
-msgstr "--flow <Xon | CTS | RS485> vagy -w: folyamatvezérlés(nincs alapértelmezés)\n"
-
-#: ../src/cmdline.c:50
-msgid "--delay <ms> or -d: end of line delay in ms (default none)\n"
-msgstr ""
-"--delay <tizedmásodperc> vagy -d: sorvége késleltetés (nincs "
-"alapértelmezés)\n"
-
-#: ../src/cmdline.c:51
-msgid ""
-"--char <char> or -r: wait for a special char at end of line (default none)\n"
-msgstr ""
-"--char <karakter> vagy -r: speciális karakterre várakozás a sor végén "
-"(nincs alapértelmezés)\n"
-
-#: ../src/cmdline.c:52
-msgid "--file <filename> or -f: default file to send (default none)\n"
-msgstr ""
-"--file <fájlnév> vagy -f: megadott fájlt küld (nincs alapértelmezés)\n"
-
-#: ../src/cmdline.c:53
-msgid ""
-"--rts_time_before <ms> or -x: for RS-485, time in ms before transmit with "
-"rts on\n"
-msgstr ""
-
-#: ../src/cmdline.c:54
-msgid ""
-"--rts_time_after <ms> or -y: for RS-485, time in ms after transmit with rts "
-"on\n"
-msgstr ""
-
-#: ../src/cmdline.c:55
-msgid "--echo or -e: switch on local echo\n"
-msgstr "--echo vagy -e: helyi visszhang bekapcsolása\n"
-
-#: ../src/cmdline.c:56
-msgid ""
-"--disable-port-lock or -L: does not lock serial port. Allows to send to "
-"serial port from different terminals\n"
-msgstr ""
-
-#: ../src/cmdline.c:57
-msgid ""
-"                      Note: incoming data are displayed randomly on only "
-"one terminal\n"
-msgstr ""
-
-#: ../src/cmdline.c:167
-msgid "Undefined command line option\n"
-msgstr "Félreértett parancssori opció\n"
-
-#: ../src/files.c:77
-msgid "Send RAW File"
-msgstr ""
-
-#: ../src/files.c:96
-#, c-format
-msgid "Error opening file\n"
-msgstr "Hiba fájl megnyitásakor\n"
-
-#: ../src/files.c:110
-#, c-format
-msgid "%s: transfer in progress..."
-msgstr "%s: átvitel folyamatban..."
-
-#: ../src/files.c:128
-msgid "Cancel"
-msgstr "Mégsem"
-
-#: ../src/files.c:143
-#, fuzzy, c-format
-msgid "Cannot read file %s: %s\n"
-msgstr "Fájl olvasása sikertelen: %s: %s\n"
-
-#: ../src/files.c:178
-#, fuzzy, c-format
-msgid "Error sending file\n"
-msgstr "Hiba fájl megnyitásakor\n"
-
-#: ../src/files.c:206
-#, fuzzy, c-format
-msgid "Error sending file: %s\n"
-msgstr "Hiba fájl megnyitásakor\n"
-
-#: ../src/files.c:292
-msgid "Save RAW File"
-msgstr ""
-
-#: ../src/files.c:311
-#, c-format
-msgid "File error\n"
-msgstr "Fájlhiba!\n"
-
-#: ../src/files.c:322 ../src/logging.c:68 ../src/logging.c:123
-#, fuzzy, c-format
-msgid "Cannot open file %s: %s\n"
-msgstr "%s fájl megnyitása nem sikerült: %s\n"
-
-#. Toplevel
-#: ../src/interface.c:145
-#, fuzzy
-msgid "_File"
-msgstr "/_Fájl"
-
-#: ../src/interface.c:146
-msgid "_Edit"
-msgstr ""
-
-#: ../src/interface.c:147
-msgid "_Log"
-msgstr ""
-
-#: ../src/interface.c:148
-#, fuzzy
-msgid "_Configuration"
-msgstr "/_Beállítások"
-
-#: ../src/interface.c:149
-#, fuzzy
-msgid "Control _signals"
-msgstr "/_Ellenörző jelek"
-
-#: ../src/interface.c:150
-#, fuzzy
-msgid "_View"
-msgstr "/_Nézet"
-
-#: ../src/interface.c:151
-#, fuzzy
-msgid "Hexadecimal _chars"
-msgstr "/Nézet/Hexadecimális _karakter"
-
-#: ../src/interface.c:152
-#, fuzzy
-msgid "_Help"
-msgstr "/_Súgó"
-
-#: ../src/interface.c:156
-#, fuzzy
-msgid "_Clear screen"
-msgstr "/Fájl/Képernyő törlése"
-
-#: ../src/interface.c:157
-msgid "_Clear scrollback"
-msgstr ""
-
-#: ../src/interface.c:158
-#, fuzzy
-msgid "Send _RAW file"
-msgstr "/Fájl/Raw fájl _küldése"
-
-#: ../src/interface.c:159
-#, fuzzy
-msgid "_Save RAW file"
-msgstr "/Fájl/Raw fájl _mentése"
-
-#. Log Menu
-#: ../src/interface.c:167
-msgid "To file..."
-msgstr ""
-
-#. Confuguration Menu
-#: ../src/interface.c:173
-#, fuzzy
-msgid "_Port"
-msgstr "Port:"
-
-#: ../src/interface.c:174
-#, fuzzy
-msgid "_Main window"
-msgstr "/Beállítások/_Főablak"
-
-#: ../src/interface.c:175
-msgid "_Macros"
-msgstr ""
-
-#: ../src/interface.c:176
-#, fuzzy
-msgid "_Load configuration"
-msgstr "Konfiguráció betöltés"
-
-#: ../src/interface.c:177
-#, fuzzy
-msgid "_Save configuration"
-msgstr "Konfiguráció mentése"
-
-#: ../src/interface.c:178
-#, fuzzy
-msgid "_Delete configuration"
-msgstr "Konfiguráció törlése"
-
-#. Signals Menu
-#: ../src/interface.c:181
-msgid "Send break"
-msgstr ""
-
-#: ../src/interface.c:182
-#, fuzzy
-msgid "_Open Port"
-msgstr "Nincs nyitott port"
-
-#: ../src/interface.c:183
-msgid "_Close Port"
-msgstr ""
-
-#: ../src/interface.c:184
-msgid "Toggle DTR"
-msgstr ""
-
-#: ../src/interface.c:185
-msgid "Toggle RTS"
-msgstr ""
-
-#. Configuration Menu
-#: ../src/interface.c:194
-msgid "Local _echo"
-msgstr ""
-
-#: ../src/interface.c:195
-msgid "_CR LF auto"
-msgstr ""
-
-#: ../src/interface.c:196
-msgid "Timestamp"
-msgstr ""
-
-#. View Menu
-#: ../src/interface.c:199
-#, fuzzy
-msgid "Show _index"
-msgstr "/Nézet/_Index megjelenítése"
-
-#: ../src/interface.c:200
-#, fuzzy
-msgid "_Send hexadecimal data"
-msgstr "/Nézet/Hexadecimális adat _küldés"
-
-#: ../src/interface.c:205
-#, fuzzy
-msgid "_ASCII"
-msgstr "/Nézet/_ASCII"
-
-#: ../src/interface.c:206
-#, fuzzy
-msgid "_Hexadecimal"
-msgstr "/Nézet/_Hexadecimális"
-
-#: ../src/interface.c:422
-msgid "Resume"
-msgstr ""
-
-#: ../src/interface.c:567
-msgid "Hexadecimal data to send (separator: ';' or space): "
-msgstr "Hexadecimális adat küldés (elválasztó: ';' vagy szóköz):"
-
-#: ../src/interface.c:736
-msgid ""
-"GTKTerm is a simple GTK+ terminal used to communicate with the serial port."
-msgstr ""
-
-#: ../src/interface.c:776
-#, fuzzy
-msgid "Break signal sent!"
-msgstr "Break signál küldve!"
-
-#: ../src/interface.c:882
-#, fuzzy, c-format
-msgid "0 byte(s) sent!"
-msgstr "\"%s\": %d bájt(ok) küldve!"
-
-#: ../src/interface.c:896
-msgid "Improper formatted hex input, 0 bytes sent!"
-msgstr ""
-
-#: ../src/interface.c:907
-#, fuzzy, c-format
-msgid "%d byte(s) sent!"
-msgstr "\"%s\": %d bájt(ok) küldve!"
-
-#: ../src/logging.c:49
-#, fuzzy, c-format
-msgid "Filename error\n"
-msgstr "Fájlhiba!\n"
-
-#: ../src/logging.c:88
-#, fuzzy
-msgid "Log file selection"
-msgstr "Tallózás"
-
-#: ../src/logging.c:184
-msgid "Failed to log data\n"
-msgstr ""
-
-#: ../src/macros.c:144
-#, c-format
-msgid "Macro \"%s\" sent!"
-msgstr "Makró \"%s\" elküldve!"
-
-#: ../src/macros.c:275
-msgid "Shortcut"
-msgstr "Gyorsbillentyű"
-
-#: ../src/macros.c:432
-msgid ""
-"The \"action\" field of a macro is the data to be sent on the port. Text can "
-"be entered, but also special chars, like \\n, \\t, \\r, etc. You can also "
-"enter hexadecimal data preceded by a '\\'. The hexadecimal data should not "
-"begin with a letter (eg. use \\0FF and not \\FF)\n"
-"Examples:\n"
-"\t\"Hello\\n\" sends \"Hello\" followed by a Line Feed\n"
-"\t\"Hello\\0A\" does the same thing but the LF is entered in hexadecimal"
-msgstr ""
-"A makró \"action\" mezője az adat, amit a portra küld. Beírható szöveg is, "
-"vagy speciális karakterek, mint \\n, \\t, \\r,  stb. Hexadecimális adat is "
-"szerepelhet, megelőzve '\\' karakterrel. A hexadecimális adat nem kezdődhet "
-"betűvel (pl. \\0FF használatos \\FF helyett) \n"
-"Példák: \n"
-"\t\"Hello\\n\" \"Hello\" küldése, utána egy soremelés\n"
-"\t\"Hello\\0A\" ugyanaz, csak a soremelés hexában van megadva."
-
-#: ../src/macros.c:452
-msgid "Configure Macros"
-msgstr "A makrók beállítása"
-
-#: ../src/macros.c:489
-msgid "_Add"
-msgstr "_Hozzáadás"
-
-#: ../src/macros.c:493
-msgid "_Delete"
-msgstr "_Törlés"
-
-#: ../src/macros.c:497
-msgid "_Capture Shortcut"
-msgstr "Billentyűparancsok"
-
-#: ../src/parsecfg.c:355
-#, c-format
-msgid "Cannot open configuration file `%s'.\n"
-msgstr "Nem tölthető be a `%s' konfigurációs fájl.\n"
-
-#: ../src/parsecfg.c:358
-#, c-format
-msgid "Cannot create configuration file `%s'.\n"
-msgstr "Nem hozható létre a `%s' konfigurációs fájl.\n"
-
-#: ../src/parsecfg.c:361
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"Syntax error\n"
-msgstr ""
-"%s(%d): %s\n"
-"Szintaktikai hiba\n"
-
-#: ../src/parsecfg.c:364
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"Unrecognized parameter\n"
-msgstr ""
-"%s(%d): %s\n"
-"Érvénytelen paraméter\n"
-
-#: ../src/parsecfg.c:367
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"Internal error\n"
-msgstr ""
-"%s(%d): %s\n"
-"Végzetes hiba\n"
-
-#: ../src/parsecfg.c:370
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"Invalid number\n"
-msgstr ""
-"%s(%d): %s\n"
-"Érvénytelen szám\n"
-
-#: ../src/parsecfg.c:373
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"Out of range\n"
-msgstr ""
-"%s(%d): %s\n"
-"Hibás értéktartomány\n"
-
-#: ../src/parsecfg.c:376
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"Cannot allocate memory.\n"
-msgstr ""
-"%s(%d): %s\n"
-"Nem sikerült memóriát foglalni.\n"
-
-#: ../src/parsecfg.c:379
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"It must be specified TRUE or FALSE.\n"
-msgstr ""
-"%s(%d): %s\n"
-"Meg kell adni, hogy TRUE vagy FALSE.\n"
-
-#: ../src/parsecfg.c:382
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"The section name is already used.\n"
-msgstr ""
-"%s(%d): %s\n"
-"Ez a név már foglalt.\n"
-
-#: ../src/parsecfg.c:385
-#, c-format
-msgid ""
-"%s(%d)\n"
-"There is no closing bracket.\n"
-msgstr ""
-"%s(%d)\n"
-"Hiányzik a záró kapocs. .\n"
-
-#: ../src/parsecfg.c:390
-#, c-format
-msgid ""
-"%s(%d): %s\n"
-"Unexplained error\n"
-msgstr ""
-"%s(%d): %s\n"
-"Rejtélyes hiba\n"
-
-#: ../src/serial.c:154
-#, fuzzy, c-format
-msgid "Cannot open %s: %s\n"
-msgstr "Nem lehet megnyitni a %s-t: %s\n"
-
-#: ../src/serial.c:167
-#, c-format
-msgid ""
-"Cannot lock port! The serial port may currently be in use by another "
-"program.\n"
-msgstr ""
-
-#: ../src/serial.c:235
-#, c-format
-msgid "Arbitrary baud rates not supported"
-msgstr ""
-
-#: ../src/serial.c:352 ../src/serial.c:398
-msgid "Control signals read"
-msgstr "Ellenörző jelek olvasása"
-
-#: ../src/serial.c:364
-msgid "DTR write"
-msgstr "DTR írás"
-
-#: ../src/serial.c:374
-msgid "RTS write"
-msgstr "RTS írás"
-
-#: ../src/serial.c:452
-msgid "No open port"
-msgstr "Nincs nyitott port"
-
-#: ../src/term_config.c:193
-#, fuzzy
-msgid ""
-"No serial devices found!\n"
-"\n"
-"Searched the following device path patterns:\n"
-"\t/dev/ttyS*\n"
-"\t/dev/tts/*\n"
-"\t/dev/ttyUSB*\n"
-"\t/dev/usb/tts/*\n"
-"\n"
-"Enter a different device path in the 'Port' box.\n"
-msgstr ""
-"Nem találok valódi soros eszközt a /dev könyvtárban!\n"
-"Legalább egy eszköz kellene ezek közül:\n"
-"/dev/ttyS*\n"
-"/dev/tts/*\n"
-"/dev/ttyUSB*\n"
-"/dev/usb/tts/*\n"
-
-#: ../src/term_config.c:202
-msgid "Configuration"
-msgstr "Konfiguráció"
-
-#: ../src/term_config.c:206
-msgid "Serial port"
-msgstr "Soros port"
-
-#: ../src/term_config.c:212
-#, fuzzy
-msgid "Port:"
-msgstr "Port:"
-
-#: ../src/term_config.c:214
-msgid "Baud Rate:"
-msgstr ""
-
-#: ../src/term_config.c:216
-#, fuzzy
-msgid "Parity:"
-msgstr "Paritás:"
-
-#: ../src/term_config.c:362
-#, fuzzy
-msgid "Bits:"
-msgstr "Bitek:"
-
-#: ../src/term_config.c:364
-#, fuzzy
-msgid "Stopbits:"
-msgstr "Stoppbitek:"
-
-#: ../src/term_config.c:366
-#, fuzzy
-msgid "Flow control:"
-msgstr "Folyamatvezérlés:"
-
-#. create an expander widget to hide the 'Advanced features'
-#: ../src/term_config.c:417
-#, fuzzy
-msgid "Advanced Configuration Options"
-msgstr "Konfigurációk"
-
-#: ../src/term_config.c:422
-msgid "ASCII file transfer"
-msgstr "ASCII fájl átvitel"
-
-#: ../src/term_config.c:428
-#, fuzzy
-msgid "End of line delay (milliseconds):"
-msgstr "Sorvég késleltetés (tizedmásodperc):"
-
-#: ../src/term_config.c:444
-#, fuzzy
-msgid "Wait for this special character before passing to next line:"
-msgstr "Speciális karakterre várakozás az következő sor elött:"
-
-#: ../src/term_config.c:457
-msgid "RS-485 half-duplex parameters (RTS signal used to send)"
-msgstr ""
-
-#: ../src/term_config.c:464
-msgid "Time with RTS 'on' before transmit (milliseconds):"
-msgstr ""
-
-#: ../src/term_config.c:466
-msgid "Time with RTS 'on' after transmit (milliseconds):"
-msgstr ""
-
-#: ../src/term_config.c:591
-msgid "Load configuration"
-msgstr "Konfiguráció betöltés"
-
-#: ../src/term_config.c:601
-msgid "Delete configuration"
-msgstr "Konfiguráció törlése"
-
-#: ../src/term_config.c:631 ../src/term_config.c:896
-msgid ""
-"Cannot read configuration file!\n"
-"Config file may contain invalid parameter.\n"
-msgstr ""
-
-#: ../src/term_config.c:637
-msgid "Configurations"
-msgstr "Konfigurációk"
-
-#: ../src/term_config.c:704
-msgid "Save configuration"
-msgstr "Konfiguráció mentése"
-
-#: ../src/term_config.c:716
-#, fuzzy
-msgid "Configuration name: "
-msgstr "Konfiguráció név:"
-
-#: ../src/term_config.c:750
-msgid ""
-"Cannot save configuration file!\n"
-"Config file may contain invalid parameter.\n"
-msgstr ""
-
-#: ../src/term_config.c:770
-#, fuzzy
-msgid "Cannot overwrite section!"
-msgstr "Nem sikerült felülírni a szekciót!"
-
-#: ../src/term_config.c:775
-#, fuzzy
-msgid "Cannot read configuration file!"
-msgstr "Konfigurációs fájl beolvasása nem sikerült!"
-
-#: ../src/term_config.c:785
-#, c-format
-msgid "Configuration [%s] saved\n"
-msgstr "Beállítások [%s] elmentve\n"
-
-#: ../src/term_config.c:804
-msgid ""
-"Cannot write configuration file!\n"
-"Config file may contain invalid parameter.\n"
-msgstr ""
-
-#: ../src/term_config.c:819
-#, fuzzy, c-format
-msgid ""
-"<b>Section [%s] already exists.</b>\n"
-"\n"
-"Do you want to overwrite it ?"
-msgstr ""
-"\n"
-"A(z) [%s] szekció már létezik.\n"
-"Felül kívánja írni?\n"
-
-#: ../src/term_config.c:879
-#, fuzzy
-msgid "Cannot delete section!"
-msgstr "Szekció nem törölhető!"
-
-#: ../src/term_config.c:1060
+#: src/app_config.c:176
 #, c-format
 msgid "No section \"%s\" in configuration file\n"
 msgstr "A konfigurációs file-ban nincs \"%s\"  szekció\n"
 
-#: ../src/term_config.c:1105
+#. Le message de lecture contient déjà le chemin du fichier
+#: src/app_config.c:234
 #, c-format
-msgid "Baudrate %d may not be supported by all hardware"
-msgstr ""
-
-#: ../src/term_config.c:1112
-#, fuzzy, c-format
 msgid ""
-"Invalid number of stop-bits: %d\n"
-"Falling back to default number of stop-bits number: %d\n"
+"Cannot read configuration file: %s\n"
+"The default configuration is used and nothing will be written to this file."
 msgstr ""
-"Hibás stop bit: %d\n"
-"Visszaállítva az alapértelmezett stop bit: %d\n"
 
-#: ../src/term_config.c:1120
-#, fuzzy, c-format
-msgid ""
-"Invalid number of bits: %d\n"
-"Falling back to default number of bits: %d\n"
-msgstr ""
-"Hibás bit szám: %d\n"
-"Visszaállítva az alapértelmezett bit szám: %d\n"
-
-#: ../src/term_config.c:1128
-#, fuzzy, c-format
-msgid ""
-"Invalid delay: %d ms\n"
-"Falling back to default delay: %d ms\n"
-msgstr ""
-"Hibás késleltetés: %d\n"
-"Visszaállítva az alapértelmezett késleltetés: %d\n"
-
-#: ../src/term_config.c:1158
+#: src/app_config.c:248
 #, c-format
 msgid ""
 "Configuration file (%s) with\n"
@@ -766,14 +41,1595 @@ msgstr ""
 "A (%s) [alapértelmezett] konfigurációs\n"
 "fájl létrehozva.\n"
 
-#: ../src/term_config.c:1414
-#, c-format
-msgid "Cannot find section %s\n"
-msgstr "%s szekció nem található\n"
+#: src/app_config.c:303
+#, fuzzy
+msgid "Cannot delete section!"
+msgstr "Szekció nem törölhető!"
 
-#: ../src/term_config.c:1454
-msgid "Main Window"
+#: src/capture.c:29 src/rx_logger.c:72
+#, fuzzy, c-format
+msgid "Cannot open file %s: %s"
+msgstr "%s fájl megnyitása nem sikerült: %s\n"
+
+#: src/capture.c:38
+#, fuzzy, c-format
+msgid "Cannot write file %s: %s"
+msgstr "Nem sikerült írni a(z) %s célfájlt\n"
+
+#: src/cmdline.c:60
+#, c-format
+msgid ""
+"\n"
+"GTKTerm version %s\n"
 msgstr ""
+"\n"
+"GTKTerm verzió %s\n"
+
+#: src/cmdline.c:61
+#, fuzzy
+msgid "\t (c) Julien Schmitt\n"
+msgstr "\t (c) Julien Schmitt - julien@jls-info.com\n"
+
+#: src/cmdline.c:62
+msgid ""
+"\n"
+"This program is released under the terms of the GPL V.2\n"
+msgstr ""
+"\n"
+"A program GPL V.2 alatt terjeszthető\n"
+
+#: src/cmdline.c:63
+msgid "\t ** Use at your own risks! **\n"
+msgstr "\t ** Csak saját felelősségedre használd! **\n"
+
+#: src/cmdline.c:64
+msgid ""
+"\n"
+"Command line options\n"
+msgstr ""
+"\n"
+"Parancssori opciók\n"
+
+#: src/cmdline.c:65
+msgid "--help or -h: this help screen\n"
+msgstr "--help vagy -h: súgó megjelenítése\n"
+
+#: src/cmdline.c:66
+msgid "--config <configuration> or -c: load configuration\n"
+msgstr "--config <konfiguráció> vagy -c: konfiguráció betöltése\n"
+
+#: src/cmdline.c:67
+msgid "--port <device> or -p: serial port device (default /dev/ttyS0)\n"
+msgstr "--port <eszköz> vagy -p: soros port (alapértelmezett /dev/ttyS0)\n"
+
+#: src/cmdline.c:68
+msgid "--speed <speed> or -s: serial port speed (default 9600)\n"
+msgstr ""
+"--speed <sebesség> vagy -s: soros port sebesség (alapértelmezett 9600)\n"
+
+#: src/cmdline.c:69
+msgid "--bits <bits> or -b: number of bits (default 8)\n"
+msgstr "--bits <bitek száma> vagy -b: bitek száma (alapértelmezett 8)\n"
+
+#: src/cmdline.c:70
+msgid "--stopbits <stopbits> or -t: number of stopbits (default 1)\n"
+msgstr "--stopbits <stopbit> vagy -t: stop bitek száma (alapértelmezett 1)\n"
+
+#: src/cmdline.c:71
+#, fuzzy
+msgid "--parity <none | odd | even> or -a: parity (default none)\n"
+msgstr ""
+"--parity <odd(páratlan) | even(páros)> vagy -a: paritás (alapértelmezett "
+"none)\n"
+
+#: src/cmdline.c:72
+#, fuzzy
+msgid "--flow <none | Xon | RTS | RS485> or -w: flow control (default none)\n"
+msgstr ""
+"--flow <Xon | CTS | RS485> vagy -w: folyamatvezérlés(nincs alapértelmezés)\n"
+
+#: src/cmdline.c:73
+msgid "--delay <ms> or -d: end of line delay in ms (default none)\n"
+msgstr ""
+"--delay <tizedmásodperc> vagy -d: sorvége késleltetés (nincs "
+"alapértelmezés)\n"
+
+#: src/cmdline.c:74
+msgid ""
+"--char <char> or -r: wait for a special char at end of line (default none)\n"
+msgstr ""
+"--char <karakter> vagy -r: speciális karakterre várakozás a sor végén (nincs "
+"alapértelmezés)\n"
+
+#: src/cmdline.c:75
+msgid "--file <filename> or -f: default file to send (default none)\n"
+msgstr "--file <fájlnév> vagy -f: megadott fájlt küld (nincs alapértelmezés)\n"
+
+#: src/cmdline.c:76
+msgid ""
+"--rts_time_before <ms> or -x: for RS-485, time in ms before transmit with "
+"rts on\n"
+msgstr ""
+
+#: src/cmdline.c:77
+msgid ""
+"--rts_time_after <ms> or -y: for RS-485, time in ms after transmit with rts "
+"on\n"
+msgstr ""
+
+#: src/cmdline.c:78
+msgid "--echo or -e: switch on local echo\n"
+msgstr "--echo vagy -e: helyi visszhang bekapcsolása\n"
+
+#: src/cmdline.c:79
+msgid ""
+"--disable-port-lock or -L: does not lock serial port. Allows to send to "
+"serial port from different terminals\n"
+msgstr ""
+
+#: src/cmdline.c:80
+msgid ""
+"                      Note: incoming data are displayed randomly on only one "
+"terminal\n"
+msgstr ""
+
+#: src/cmdline.c:81
+msgid "--transport <serial|tcp-client|tcp-server> or -T: transport type\n"
+msgstr ""
+
+#: src/cmdline.c:82
+msgid "--host <hostname> or -H: TCP host\n"
+msgstr ""
+
+#: src/cmdline.c:83
+msgid "--tcp-port <port> or -P: TCP port\n"
+msgstr ""
+
+#: src/cmdline.c:100
+#, c-format
+msgid "Invalid value for option %s: \"%s\""
+msgstr ""
+
+#: src/cmdline.c:217
+#, c-format
+msgid "Missing value for option %s"
+msgstr ""
+
+#. Élément fautif tel qu'écrit (« --nimporte », « -Z », « --echo=1 »)
+#: src/cmdline.c:222
+#, fuzzy, c-format
+msgid "Unknown command line option: %s"
+msgstr "Félreértett parancssori opció\n"
+
+#: src/config_store.c:717
+#, c-format
+msgid ""
+"The configuration file %s could not be read: nothing has been written to it."
+msgstr ""
+
+#: src/config_store.c:726
+#, fuzzy, c-format
+msgid "Cannot create directory %s: %s"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/file_sender.c:129 src/file_sender.c:155
+#, fuzzy, c-format
+msgid "Error sending file: %s"
+msgstr "Hiba fájl megnyitásakor\n"
+
+#: src/file_sender.c:235
+msgid "A file is already being sent"
+msgstr ""
+
+#: src/file_sender.c:245
+#, fuzzy, c-format
+msgid "Cannot read file %s: %s"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/file_sender.c:251
+#, fuzzy, c-format
+msgid "Cannot read file %s: not a regular file"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/file_sender.c:284 src/ui/file_actions.c:144
+#, fuzzy
+msgid "Error sending file"
+msgstr "Hiba fájl megnyitásakor\n"
+
+#: src/file_sender.c:292
+msgid "File transfer cancelled"
+msgstr ""
+
+#: src/link.c:102
+#, c-format
+msgid "tcp://%s:%s (server, no client)"
+msgstr ""
+
+#: src/link.c:103
+#, c-format
+msgid "tcp://%s:%s (server)"
+msgstr ""
+
+#: src/link.c:112 src/link.c:601 src/transport.c:466
+msgid "No open port"
+msgstr "Nincs nyitott port"
+
+#: src/link.c:119
+#, c-format
+msgid "%s — connecting…"
+msgstr ""
+
+#: src/link.c:122
+#, c-format
+msgid "%s — lost"
+msgstr ""
+
+#: src/link.c:125
+#, c-format
+msgid "%s — reconnecting…"
+msgstr ""
+
+#: src/link.c:324
+msgid "device removed"
+msgstr ""
+
+#: src/macro_file.c:54
+#, c-format
+msgid "Unsupported macros file version (written by a newer GTKTerm?)"
+msgstr ""
+
+#. Des groupes, aucun de connu : fichier étranger refusé, jamais lu comme un jeu vide qui l'écraserait ensuite
+#: src/macro_file.c:245
+#, c-format
+msgid "%s is not a GTKTerm macros file"
+msgstr ""
+
+#: src/macro_file.c:302
+#, c-format
+msgid ""
+"%s was not overwritten: it is not in the current macros format and its "
+"backup %s already exists with a different content"
+msgstr ""
+
+#: src/macros.c:100
+#, c-format
+msgid "Macro \"%s\" sent!"
+msgstr "Makró \"%s\" elküldve!"
+
+#. Profil (non interactif) : jeu vide, mais le chemin courant devient ce fichier. Les enregistrements suivants le visent
+#. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
+#. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
+#. et l'utilisateur sait que ses macros n'ont pas été lues.
+#: src/macros.c:194 src/macros.c:209
+#, fuzzy, c-format
+msgid "Cannot load macros file: %s"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/macros.c:246
+#, fuzzy, c-format
+msgid "Cannot save macros file: %s"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/port_form.c:74
+msgid "Enter the serial port to open (for example /dev/ttyUSB0)."
+msgstr ""
+
+#: src/port_form.c:79
+#, c-format
+msgid "The baud rate must be a whole number between 1 and %d."
+msgstr ""
+
+#: src/port_form.c:84
+msgid "Invalid number of data bits or stop bits."
+msgstr ""
+
+#: src/port_form.c:89 src/port_form.c:108
+#, c-format
+msgid "Delays must be between 0 and %d ms."
+msgstr ""
+
+#: src/port_form.c:97
+msgid "Enter the host to connect to."
+msgstr ""
+
+#: src/port_form.c:102
+msgid "The TCP port must be a number between 1 and 65535."
+msgstr ""
+
+#: src/port_form.c:118
+msgid "Enter the character to wait for: exactly one ASCII character."
+msgstr ""
+
+#: src/profile.c:83
+#, c-format
+msgid "Baud rate %u may not be supported by all hardware"
+msgstr ""
+
+#: src/profile.c:87
+#, fuzzy, c-format
+msgid ""
+"Invalid number of stop-bits: %d\n"
+"Falling back to default number of stop-bits number: %d\n"
+msgstr ""
+"Hibás stop bit: %d\n"
+"Visszaállítva az alapértelmezett stop bit: %d\n"
+
+#: src/profile.c:94
+#, fuzzy, c-format
+msgid ""
+"Invalid number of bits: %d\n"
+"Falling back to default number of bits: %d\n"
+msgstr ""
+"Hibás bit szám: %d\n"
+"Visszaállítva az alapértelmezett bit szám: %d\n"
+
+#: src/profile.c:100
+#, fuzzy, c-format
+msgid ""
+"Invalid delay: %d ms\n"
+"Falling back to default delay: %d ms\n"
+msgstr ""
+"Hibás késleltetés: %d\n"
+"Visszaállítva az alapértelmezett késleltetés: %d\n"
+
+#: src/profile.c:141 src/profile.c:165
+msgid ""
+"The configuration name cannot contain \"[\", \"]\" or control characters."
+msgstr ""
+
+#: src/profile.c:147
+#, fuzzy
+msgid "The configuration name cannot be empty."
+msgstr "Konfiguráció név:"
+
+#: src/profile.c:153
+#, c-format
+msgid "The configuration name is too long (%d characters at most)."
+msgstr ""
+
+#: src/profile.c:173
+#, c-format
+msgid "\"%s\" is a reserved name."
+msgstr ""
+
+#: src/rx_logger.c:53
+#, fuzzy, c-format
+msgid "Cannot clear file %s: %s"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/rx_logger.c:55
+#, c-format
+msgid "Failed to log data to %s: %s"
+msgstr ""
+
+#: src/script_engine.c:159
+#, c-format
+msgid "[%zu bytes of log output dropped]"
+msgstr ""
+
+#: src/script_engine.c:355
+#, c-format
+msgid "Port %d: receive buffer full, oldest data dropped"
+msgstr ""
+
+#. Même message que le transport (même traduction), sans fin de ligne
+#: src/script_engine.c:603 src/transport.c:326
+#, fuzzy, c-format
+msgid "Cannot resolve %s: %s\n"
+msgstr "Nem lehet megnyitni a %s-t: %s\n"
+
+#: src/script_engine.c:1570
+#, c-format
+msgid "Script exited with status %lld"
+msgstr ""
+
+#: src/script_engine.c:1578
+#, c-format
+msgid "Lua error: %s"
+msgstr ""
+
+#: src/script_engine.c:1675
+msgid "Script already running."
+msgstr ""
+
+#: src/transport.c:171
+msgid "end of stream"
+msgstr ""
+
+#: src/transport.c:188
+#, fuzzy, c-format
+msgid "Cannot open %s: %s\n"
+msgstr "Nem lehet megnyitni a %s-t: %s\n"
+
+#: src/transport.c:196
+#, c-format
+msgid "%s is not a valid serial port\n"
+msgstr ""
+
+#: src/transport.c:206
+msgid ""
+"Cannot lock port! The serial port may currently be in use by another "
+"program.\n"
+msgstr ""
+
+#: src/transport.c:225
+#, c-format
+msgid "Unable to set baud rate %u"
+msgstr ""
+
+#: src/transport.c:301 src/transport.c:334
+#, fuzzy, c-format
+msgid "Cannot connect to %s:%s: %s\n"
+msgstr "Nem lehet megnyitni a %s-t: %s\n"
+
+#: src/transport.c:352
+#, fuzzy
+msgid "Accept error"
+msgstr "Fájlhiba!\n"
+
+#: src/transport.c:388
+#, fuzzy, c-format
+msgid "Cannot resolve port %s: %s\n"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/transport.c:390
+#, fuzzy, c-format
+msgid "Cannot resolve %s:%s: %s\n"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/transport.c:398
+#, fuzzy, c-format
+msgid "Cannot create socket: %s\n"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/transport.c:417
+#, fuzzy, c-format
+msgid "Cannot bind to %s:%s: %s%s\n"
+msgstr "Nem lehet megnyitni a %s-t: %s\n"
+
+#: src/transport.c:419
+msgid ""
+"\n"
+"Use: sudo setcap cap_net_bind_service=+ep gtkterm"
+msgstr ""
+
+#: src/transport.c:429
+#, fuzzy, c-format
+msgid "Cannot listen: %s\n"
+msgstr "Nem lehet megnyitni a %s-t: %s\n"
+
+#: src/transport.c:584
+#, fuzzy
+msgid "Control signals read set signals"
+msgstr "Ellenörző jelek olvasása"
+
+#: src/transport.c:589
+msgid "DTR write"
+msgstr "DTR írás"
+
+#: src/transport.c:589
+msgid "RTS write"
+msgstr "RTS írás"
+
+#: src/ui/about.c:37
+msgid ""
+"GTKTerm is a simple GTK+ terminal used to communicate with the serial port."
+msgstr ""
+
+#. Après le nom du programme, qui réécrit le titre
+#: src/ui/about.c:51
+msgid "About GTKTerm"
+msgstr ""
+
+#: src/ui/app_actions.c:116
+#, fuzzy
+msgid "Break signal sent!"
+msgstr "Break signál küldve!"
+
+#: src/ui/dialogs.c:139
+#, fuzzy
+msgid "Information"
+msgstr "Konfiguráció"
+
+#: src/ui/dialogs.c:141
+#, fuzzy
+msgid "Warning"
+msgstr "Figyelmeztetés:"
+
+#: src/ui/dialogs.c:143
+msgid "Error"
+msgstr ""
+
+#: src/ui/dialogs.c:164 src/ui/port_dialog.c:488 src/ui/profile_dialogs.c:305
+msgid "_OK"
+msgstr ""
+
+#: src/ui/dialogs.c:251 src/ui/file_send_window.c:47 src/ui/port_dialog.c:485
+#: src/ui/profile_dialogs.c:302 src/ui/script_panel.c:684
+#, fuzzy
+msgid "_Cancel"
+msgstr "Mégsem"
+
+#: src/ui/file_actions.c:58
+msgid "Only local files are supported"
+msgstr ""
+
+#: src/ui/file_actions.c:144
+msgid "The port is not open"
+msgstr ""
+
+#: src/ui/file_actions.c:181
+msgid "Send RAW File"
+msgstr ""
+
+#: src/ui/file_actions.c:224
+msgid "Save RAW File"
+msgstr ""
+
+#: src/ui/file_actions.c:229
+#, fuzzy
+msgid "Save ASCII File"
+msgstr "/Fájl/Raw fájl _mentése"
+
+#: src/ui/file_actions.c:276
+#, fuzzy
+msgid "Log file selection"
+msgstr "Tallózás"
+
+#. « Failed to log data to <chemin>: … » (rx_logger.c) : affiché tel quel
+#: src/ui/file_actions.c:337
+msgid "Failed to log data"
+msgstr ""
+
+#: src/ui/file_send_window.c:48
+#, c-format
+msgid "%s: transfer in progress..."
+msgstr "%s: átvitel folyamatban..."
+
+#: src/ui/hex_send_bar.c:49
+msgid "Hexadecimal data to send (separator: ';' or space): "
+msgstr "Hexadecimális adat küldés (elválasztó: ';' vagy szóköz):"
+
+#: src/ui/hex_send_bar.c:85
+#, c-format
+msgid "Invalid hexadecimal byte \"%s\", nothing sent"
+msgstr ""
+
+#: src/ui/hex_send_bar.c:93
+#, fuzzy, c-format
+msgid "%d byte(s) sent!"
+msgstr "\"%s\": %d bájt(ok) küldve!"
+
+#: src/ui/macro_editor.c:44
+msgid ""
+"Action: the data sent on the port. Plain text, plus the escapes \\r "
+"(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
+"(backslash) and \\xHH (one byte in hexadecimal, e.g. \\x0D).\n"
+"\n"
+"Arguments: each specifier gets a field in the macro panel; its value is "
+"remembered in the macros file. %d %i (integer), %u %o %x %X (unsigned), %f "
+"%e %g %a (decimal number), %c (character), %s (text), with optional flags, "
+"width, precision and length (e.g. %02X, %.3f, %ld); %% sends a percent sign. "
+"%#Name picks a value from the list \"Name\" of the Lists page; a macro whose "
+"only argument is a list of exactly two values shows two buttons.\n"
+"\n"
+"Separators: the action %& draws a line in the panel, [Title] %& a line with "
+"a title.\n"
+"\n"
+"Tab: the panel tab of the macro (empty: General). A macro without label or "
+"action is not shown in the panel; its shortcut still works.\n"
+"\n"
+"Shortcut: select a macro, click \"Capture Shortcut\", then press the keys "
+"(Ctrl, Alt or Super with a key, or a function key alone); Escape cancels. A "
+"shortcut already used by the application or by another macro is refused.\n"
+"\n"
+"Polling: right-click a macro button in the panel for \"Polling Mode\" and "
+"its period (1 to 86400000 ms); a click then starts or stops the repeated "
+"sending. Right-click the tab bar to hide or show tabs; hiding a tab stops "
+"its polling.\n"
+"\n"
+"Examples: \"Hello\\n\" sends Hello and a line feed; \"Hello\\x0A\" does the "
+"same; \"SPEED %d\\r\" asks for a number."
+msgstr ""
+
+#: src/ui/macro_editor.c:156 src/ui/macro_panel.c:288 src/ui/port_dialog.c:22
+#: src/ui/port_dialog.c:28
+msgid "None"
+msgstr ""
+
+#: src/ui/macro_editor.c:287
+msgid "Select a macro first."
+msgstr ""
+
+#: src/ui/macro_editor.c:293
+#, c-format
+msgid "Press the new shortcut for \"%s\" (Escape cancels)."
+msgstr ""
+
+#: src/ui/macro_editor.c:317
+msgid "(no label)"
+msgstr ""
+
+#: src/ui/macro_editor.c:323
+#, c-format
+msgid ""
+"%s is already used by the application command \"%s\". Press other keys, or "
+"Escape to cancel."
+msgstr ""
+
+#: src/ui/macro_editor.c:325
+#, c-format
+msgid ""
+"%s is already used by the macro \"%s\". Press other keys, or Escape to "
+"cancel."
+msgstr ""
+
+#: src/ui/macro_editor.c:348
+msgid ""
+"A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
+"F35). Press other keys, or Escape to cancel."
+msgstr ""
+
+#: src/ui/macro_editor.c:454
+msgid "Label"
+msgstr ""
+
+#: src/ui/macro_editor.c:455
+msgid "Shortcut"
+msgstr "Gyorsbillentyű"
+
+#: src/ui/macro_editor.c:456
+msgid "Action"
+msgstr ""
+
+#: src/ui/macro_editor.c:457
+msgid "Tab"
+msgstr ""
+
+#: src/ui/macro_editor.c:458
+msgid "_Add"
+msgstr "_Hozzáadás"
+
+#: src/ui/macro_editor.c:459 src/ui/profile_dialogs.c:305
+msgid "_Delete"
+msgstr "_Törlés"
+
+#: src/ui/macro_editor.c:460
+msgid "_Capture Shortcut"
+msgstr "Billentyűparancsok"
+
+#: src/ui/macro_editor.c:461
+#, fuzzy
+msgid "Delete Shortcut"
+msgstr "Gyorsbillentyű"
+
+#: src/ui/macro_editor.c:462 src/ui/macro_editor.c:474
+msgid "Move _Up"
+msgstr ""
+
+#: src/ui/macro_editor.c:463 src/ui/macro_editor.c:475
+msgid "Move _Down"
+msgstr ""
+
+#: src/ui/macro_editor.c:469
+msgid "List"
+msgstr ""
+
+#: src/ui/macro_editor.c:470
+msgid "Display"
+msgstr ""
+
+#: src/ui/macro_editor.c:471
+msgid "Value"
+msgstr ""
+
+#: src/ui/macro_editor.c:472
+msgid "_Add Entry"
+msgstr ""
+
+#: src/ui/macro_editor.c:473
+#, fuzzy
+msgid "_Delete Entry"
+msgstr "_Törlés"
+
+#: src/ui/macro_editor.c:503
+msgid "Configure Macros"
+msgstr "A makrók beállítása"
+
+#: src/ui/macro_editor.c:524 src/ui/menus.ui:119
+msgid "Macros"
+msgstr ""
+
+#: src/ui/macro_editor.c:525
+msgid "Lists"
+msgstr ""
+
+#: src/ui/macro_editor.c:535 src/ui/menus.ui:233
+#, fuzzy
+msgid "Help"
+msgstr "/_Súgó"
+
+#: src/ui/macro_editor.c:536
+msgid "Cancel"
+msgstr "Mégsem"
+
+#: src/ui/macro_editor.c:537
+msgid "OK"
+msgstr ""
+
+#: src/ui/macro_panel.c:54
+msgid "General"
+msgstr ""
+
+#: src/ui/macro_panel.c:288
+#, c-format
+msgid ""
+"Shortcut: %s\n"
+"Action: %s"
+msgstr ""
+
+#: src/ui/macro_panel.c:509
+msgid ""
+"No macros defined\n"
+"with labels"
+msgstr ""
+
+#: src/ui/macro_panel.c:565
+msgid "Period must be a whole number of milliseconds from 1 to 86400000."
+msgstr ""
+
+#: src/ui/macro_panel.c:715
+msgid "Period (ms)"
+msgstr ""
+
+#: src/ui/macro_panel.c:723
+msgid "Polling Mode"
+msgstr ""
+
+#: src/ui/menus.ui:7
+#, fuzzy
+msgid "File"
+msgstr "/_Fájl"
+
+#: src/ui/menus.ui:10
+#, fuzzy
+msgid "Clear screen"
+msgstr "/Fájl/Képernyő törlése"
+
+#: src/ui/menus.ui:14
+#, fuzzy
+msgid "Clear scrollback"
+msgstr "/Fájl/Képernyő törlése"
+
+#: src/ui/menus.ui:20
+#, fuzzy
+msgid "Send RAW file"
+msgstr "/Fájl/Raw fájl _küldése"
+
+#: src/ui/menus.ui:24
+#, fuzzy
+msgid "Save RAW file"
+msgstr "/Fájl/Raw fájl _mentése"
+
+#: src/ui/menus.ui:28
+#, fuzzy
+msgid "Save ASCII file"
+msgstr "/Fájl/Raw fájl _mentése"
+
+#: src/ui/menus.ui:34
+msgid "Quit"
+msgstr ""
+
+#: src/ui/menus.ui:40
+msgid "Edit"
+msgstr ""
+
+#: src/ui/menus.ui:43 src/ui/menus.ui:249
+msgid "Copy"
+msgstr ""
+
+#: src/ui/menus.ui:47 src/ui/menus.ui:253
+msgid "Paste"
+msgstr ""
+
+#: src/ui/menus.ui:51 src/ui/menus.ui:257
+msgid "Find"
+msgstr ""
+
+#: src/ui/menus.ui:57 src/ui/menus.ui:263
+msgid "Select All"
+msgstr ""
+
+#: src/ui/menus.ui:63
+msgid "Log"
+msgstr ""
+
+#: src/ui/menus.ui:66
+msgid "To file..."
+msgstr ""
+
+#: src/ui/menus.ui:70
+msgid "Pause"
+msgstr ""
+
+#: src/ui/menus.ui:74 src/ui/script_panel.c:765
+#, fuzzy
+msgid "Stop"
+msgstr "Stoppbitek:"
+
+#: src/ui/menus.ui:78
+msgid "Clear"
+msgstr ""
+
+#: src/ui/menus.ui:84
+msgid "Configuration"
+msgstr "Konfiguráció"
+
+#: src/ui/menus.ui:87
+#, fuzzy
+msgid "Port"
+msgstr "Port:"
+
+#: src/ui/menus.ui:91
+#, fuzzy
+msgid "Main window"
+msgstr "/Beállítások/_Főablak"
+
+#: src/ui/menus.ui:97
+msgid "Local echo"
+msgstr ""
+
+#: src/ui/menus.ui:101
+msgid "Autoreconnect"
+msgstr ""
+
+#: src/ui/menus.ui:105
+msgid "CR LF auto"
+msgstr ""
+
+#: src/ui/menus.ui:109
+#, fuzzy
+msgid "ESC clear screen"
+msgstr "/Fájl/Képernyő törlése"
+
+#: src/ui/menus.ui:113
+msgid "Timestamp"
+msgstr ""
+
+#: src/ui/menus.ui:123
+msgid "Load macros file..."
+msgstr ""
+
+#: src/ui/menus.ui:127 src/ui/profile_dialogs.c:400
+#, fuzzy
+msgid "Save macros file"
+msgstr "/Fájl/Raw fájl _mentése"
+
+#: src/ui/menus.ui:133 src/ui/profile_dialogs.c:246
+msgid "Load configuration"
+msgstr "Konfiguráció betöltés"
+
+#: src/ui/menus.ui:137 src/ui/profile_dialogs.c:246
+msgid "Save configuration"
+msgstr "Konfiguráció mentése"
+
+#: src/ui/menus.ui:141 src/ui/profile_dialogs.c:246
+msgid "Delete configuration"
+msgstr "Konfiguráció törlése"
+
+#: src/ui/menus.ui:147
+#, fuzzy
+msgid "Control signals"
+msgstr "/_Ellenörző jelek"
+
+#: src/ui/menus.ui:150
+msgid "Send break"
+msgstr ""
+
+#: src/ui/menus.ui:154
+#, fuzzy
+msgid "Open Port"
+msgstr "Nincs nyitott port"
+
+#: src/ui/menus.ui:158
+#, fuzzy
+msgid "Close Port"
+msgstr "Nincs nyitott port"
+
+#: src/ui/menus.ui:162
+msgid "Toggle DTR"
+msgstr ""
+
+#: src/ui/menus.ui:166
+msgid "Toggle RTS"
+msgstr ""
+
+#: src/ui/menus.ui:172
+#, fuzzy
+msgid "View"
+msgstr "/_Nézet"
+
+#: src/ui/menus.ui:175
+#, fuzzy
+msgid "ASCII"
+msgstr "/Nézet/_ASCII"
+
+#: src/ui/menus.ui:180
+#, fuzzy
+msgid "Hexadecimal"
+msgstr "/Nézet/_Hexadecimális"
+
+#: src/ui/menus.ui:185
+#, fuzzy
+msgid "Hexadecimal chars"
+msgstr "/Nézet/Hexadecimális _karakter"
+
+#: src/ui/menus.ui:213
+#, fuzzy
+msgid "Show index"
+msgstr "/Nézet/_Index megjelenítése"
+
+#: src/ui/menus.ui:219
+#, fuzzy
+msgid "Send hexadecimal data"
+msgstr "/Nézet/Hexadecimális adat _küldés"
+
+#: src/ui/menus.ui:223
+msgid "Macro panel"
+msgstr ""
+
+#: src/ui/menus.ui:227
+msgid "Script panel"
+msgstr ""
+
+#: src/ui/menus.ui:236
+msgid "Check for updates…"
+msgstr ""
+
+#: src/ui/menus.ui:240
+#, fuzzy
+msgid "About"
+msgstr "Névjegy..."
+
+#: src/ui/port_dialog.c:20
+#, fuzzy
+msgid "Serial"
+msgstr "Soros port"
+
+#: src/ui/port_dialog.c:20
+msgid "TCP Client"
+msgstr ""
+
+#: src/ui/port_dialog.c:20
+msgid "TCP Server"
+msgstr ""
+
+#: src/ui/port_dialog.c:22
+msgid "Odd"
+msgstr ""
+
+#: src/ui/port_dialog.c:22
+msgid "Even"
+msgstr ""
+
+#: src/ui/port_dialog.c:28
+msgid "RTS/CTS"
+msgstr ""
+
+#: src/ui/port_dialog.c:28
+msgid "Xon/Xoff"
+msgstr ""
+
+#: src/ui/port_dialog.c:28
+msgid "RS-485 half-duplex (RTS)"
+msgstr ""
+
+#: src/ui/port_dialog.c:312
+msgid "_Host:"
+msgstr ""
+
+#: src/ui/port_dialog.c:314 src/ui/port_dialog.c:344
+#, fuzzy
+msgid "_Port:"
+msgstr "Port:"
+
+#: src/ui/port_dialog.c:316
+msgid "TCP"
+msgstr ""
+
+#: src/ui/port_dialog.c:329
+#, fuzzy
+msgid "Detected serial ports"
+msgstr "Soros port"
+
+#: src/ui/port_dialog.c:334
+msgid "Standard baud rates"
+msgstr ""
+
+#: src/ui/port_dialog.c:346
+msgid "_Baud Rate:"
+msgstr ""
+
+#: src/ui/port_dialog.c:348
+#, fuzzy
+msgid "P_arity:"
+msgstr "Paritás:"
+
+#: src/ui/port_dialog.c:350
+#, fuzzy
+msgid "B_its:"
+msgstr "Bitek:"
+
+#: src/ui/port_dialog.c:352
+#, fuzzy
+msgid "_Stopbits:"
+msgstr "Stoppbitek:"
+
+#: src/ui/port_dialog.c:354
+#, fuzzy
+msgid "_Flow control:"
+msgstr "Folyamatvezérlés:"
+
+#: src/ui/port_dialog.c:359
+#, fuzzy, c-format
+msgid ""
+"No serial devices found. Searched the following device path patterns:\n"
+"%sEnter a device path in the Port box."
+msgstr ""
+"Nem találok valódi soros eszközt a /dev könyvtárban!\n"
+"Legalább egy eszköz kellene ezek közül:\n"
+"/dev/ttyS*\n"
+"/dev/tts/*\n"
+"/dev/ttyUSB*\n"
+"/dev/usb/tts/*\n"
+
+#: src/ui/port_dialog.c:371
+msgid "Serial port"
+msgstr "Soros port"
+
+#: src/ui/port_dialog.c:376
+#, fuzzy
+msgid "_Advanced Configuration Options"
+msgstr "Konfigurációk"
+
+#: src/ui/port_dialog.c:383
+#, fuzzy
+msgid "End of line _delay (milliseconds):"
+msgstr "Sorvég késleltetés (tizedmásodperc):"
+
+#: src/ui/port_dialog.c:385
+#, fuzzy
+msgid "_Wait for this special character before passing to next line:"
+msgstr "Speciális karakterre várakozás az következő sor elött:"
+
+#: src/ui/port_dialog.c:392
+msgid "ASCII file transfer"
+msgstr "ASCII fájl átvitel"
+
+#: src/ui/port_dialog.c:396
+msgid "Time with RTS 'on' _before transmit (milliseconds):"
+msgstr ""
+
+#: src/ui/port_dialog.c:398
+msgid "Time with RTS 'on' a_fter transmit (milliseconds):"
+msgstr ""
+
+#: src/ui/port_dialog.c:400
+msgid "RS-485 half-duplex parameters (RTS signal used to send)"
+msgstr ""
+
+#: src/ui/port_dialog.c:446
+#, fuzzy
+msgid "Port configuration"
+msgstr "Konfiguráció betöltés"
+
+#: src/ui/port_dialog.c:465
+msgid "_Type:"
+msgstr ""
+
+#: src/ui/port_dialog.c:467
+#, fuzzy
+msgid "Transport"
+msgstr "Soros port"
+
+#: src/ui/profile_dialogs.c:127
+#, fuzzy
+msgid "Cannot delete this configuration."
+msgstr "Szekció nem törölhető!"
+
+#: src/ui/profile_dialogs.c:147 src/ui/profile_dialogs.c:160
+#, fuzzy
+msgid "Select a configuration."
+msgstr "Konfiguráció törlése"
+
+#: src/ui/profile_dialogs.c:152
+#, fuzzy
+msgid "Cannot load this configuration."
+msgstr "Konfigurációs fájl beolvasása nem sikerült!"
+
+#: src/ui/profile_dialogs.c:163
+#, fuzzy, c-format
+msgid "Delete the configuration \"%s\"?"
+msgstr "Konfiguráció törlése"
+
+#: src/ui/profile_dialogs.c:164
+msgid "This cannot be undone."
+msgstr ""
+
+#: src/ui/profile_dialogs.c:164
+#, fuzzy
+msgid "Delete"
+msgstr "_Törlés"
+
+#: src/ui/profile_dialogs.c:175
+#, c-format
+msgid "A configuration named \"%s\" already exists."
+msgstr ""
+
+#: src/ui/profile_dialogs.c:176
+msgid "Do you want to overwrite it?"
+msgstr ""
+
+#: src/ui/profile_dialogs.c:176
+msgid "Overwrite"
+msgstr ""
+
+#: src/ui/profile_dialogs.c:221
+#, fuzzy
+msgid "No saved configuration."
+msgstr "Konfiguráció betöltés"
+
+#: src/ui/profile_dialogs.c:275
+#, fuzzy
+msgid "Configuration _name:"
+msgstr "Konfiguráció név:"
+
+#: src/ui/profile_dialogs.c:392
+msgid "Load macros file"
+msgstr ""
+
+#: src/ui/script_panel.c:20
+msgid "Editor background"
+msgstr ""
+
+#: src/ui/script_panel.c:20
+msgid "Default text"
+msgstr ""
+
+#: src/ui/script_panel.c:20
+msgid "Comments"
+msgstr ""
+
+#: src/ui/script_panel.c:20
+msgid "Keywords"
+msgstr ""
+
+#: src/ui/script_panel.c:20
+msgid "Strings"
+msgstr ""
+
+#: src/ui/script_panel.c:20
+msgid "Numbers"
+msgstr ""
+
+#: src/ui/script_panel.c:21
+#, fuzzy
+msgid "Functions"
+msgstr "Betűtípus választás"
+
+#: src/ui/script_panel.c:21
+msgid "Line numbers"
+msgstr ""
+
+#: src/ui/script_panel.c:21
+msgid "Line numbers background"
+msgstr ""
+
+#: src/ui/script_panel.c:294
+msgid "[Script stopped]\n"
+msgstr ""
+
+#: src/ui/script_panel.c:297
+msgid "[Script finished with an error]\n"
+msgstr ""
+
+#: src/ui/script_panel.c:300
+msgid "[Script finished]\n"
+msgstr ""
+
+#: src/ui/script_panel.c:351 src/ui/script_panel.c:359
+#, fuzzy
+msgid "Cannot read file"
+msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#: src/ui/script_panel.c:381
+msgid "Lua scripts (*.lua)"
+msgstr ""
+
+#: src/ui/script_panel.c:386
+msgid "All files"
+msgstr ""
+
+#: src/ui/script_panel.c:390
+msgid "Open Lua Script"
+msgstr ""
+
+#: src/ui/script_panel.c:419
+#, fuzzy
+msgid "Cannot write file"
+msgstr "Nem sikerült írni a(z) %s célfájlt\n"
+
+#: src/ui/script_panel.c:439
+msgid "Save Lua Script"
+msgstr ""
+
+#: src/ui/script_panel.c:567
+msgid "Editor on top"
+msgstr ""
+
+#: src/ui/script_panel.c:573
+msgid "Editor on the left"
+msgstr ""
+
+#: src/ui/script_panel.c:646
+msgid "Script Editor Colors"
+msgstr ""
+
+#: src/ui/script_panel.c:681
+msgid "_Reset"
+msgstr ""
+
+#: src/ui/script_panel.c:687
+msgid "_Apply"
+msgstr ""
+
+#: src/ui/script_panel.c:761
+msgid "Open"
+msgstr ""
+
+#: src/ui/script_panel.c:762
+msgid "Save"
+msgstr ""
+
+#: src/ui/script_panel.c:764
+msgid "Run"
+msgstr ""
+
+#: src/ui/script_panel.c:770
+msgid "Colors..."
+msgstr ""
+
+#: src/ui/search_bar.c:77
+msgid "Previous match"
+msgstr ""
+
+#: src/ui/search_bar.c:82
+msgid "Next match"
+msgstr ""
+
+#: src/ui/search_bar.c:151
+msgid "Invalid regular expression"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
+msgid "Terminal"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:35
+#, fuzzy
+msgid "Terminal _font"
+msgstr "A program beállításai"
+
+#: src/ui/terminal_dialog.ui:51
+#, fuzzy
+msgid "Terminal font"
+msgstr "A program beállításai"
+
+#: src/ui/terminal_dialog.ui:63
+msgid "_Scrollback lines"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:89
+msgid "_Block cursor"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:112
+msgid "_Text color"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:128
+msgid "Text color"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:141
+msgid "Back_ground color"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:157
+msgid "Background color"
+msgstr ""
+
+#: src/ui/terminal_dialog.ui:173
+msgid "_Close"
+msgstr ""
+
+#: src/ui/update_window.c:48
+msgid "No terminal emulator found. Please install xterm or similar."
+msgstr ""
+
+#: src/ui/update_window.c:53
+#, c-format
+msgid ""
+"Failed to launch update terminal:\n"
+"%s"
+msgstr ""
+
+#: src/ui/update_window.c:60
+msgid ""
+"The update is running in a terminal window.\n"
+"Follow the instructions there and restart GTKTerm when done."
+msgstr ""
+
+#: src/ui/update_window.c:97
+msgid "Update now"
+msgstr ""
+
+#: src/ui/update_window.c:97
+msgid "Later"
+msgstr ""
+
+#: src/ui/update_window.c:97
+msgid "Skip this version"
+msgstr ""
+
+#: src/ui/update_window.c:103
+#, c-format
+msgid ""
+"Latest revision: %.12s\n"
+"Installed revision: %.12s"
+msgstr ""
+
+#: src/ui/update_window.c:109
+msgid "A new version of GTKTerm is available."
+msgstr ""
+
+#: src/ui/update_window.c:152
+#, c-format
+msgid "Could not check for updates: %s"
+msgstr ""
+
+#: src/ui/update_window.c:165
+msgid "GTKTerm is up to date."
+msgstr ""
+
+#: src/ui/update_window.c:168
+#, c-format
+msgid "The installed revision is unknown; the latest revision is %.12s."
+msgstr ""
+
+#: src/ui/update_window.c:174
+#, c-format
+msgid "A new version is available (%.12s)."
+msgstr ""
+
+#: src/ui/update_window.c:197
+msgid "Please enter the URL of the source repository."
+msgstr ""
+
+#: src/ui/update_window.c:205
+msgid "Checking…"
+msgstr ""
+
+#: src/ui/update_window.c:262
+msgid "Updates"
+msgstr ""
+
+#: src/ui/update_window.c:274
+msgid "Installed revision:"
+msgstr ""
+
+#: src/ui/update_window.c:279
+msgid "Update source:"
+msgstr ""
+
+#: src/ui/update_window.c:285
+msgid "Update source"
+msgstr ""
+
+#: src/ui/update_window.c:288
+msgid "Check for updates at startup"
+msgstr ""
+
+#: src/ui/update_window.c:302
+msgid "Check now"
+msgstr ""
+
+#: src/ui/update_window.c:304
+msgid "Close"
+msgstr ""
+
+#: src/update_check.c:121
+#, c-format
+msgid "git ls-remote failed (exit status %d)"
+msgstr ""
+
+#: src/update_check.c:131
+msgid "The remote repository did not report a HEAD revision."
+msgstr ""
+
+#. GTask diffère le rappel à l'itération suivante : jamais d'appel pendant cette fonction
+#: src/update_check.c:150
+msgid "No update source URL."
+msgstr ""
+
+#, fuzzy, c-format
+#~ msgid "Cannot save file %s: %s"
+#~ msgstr "Fájl olvasása sikertelen: %s: %s\n"
+
+#~ msgid "ERROR: Buffer is not initialized!\n"
+#~ msgstr "HIBA: inicializálatlan buffer!\n"
+
+#, c-format
+#~ msgid "Error opening file\n"
+#~ msgstr "Hiba fájl megnyitásakor\n"
+
+#, fuzzy
+#~ msgid "_Configuration"
+#~ msgstr "/_Beállítások"
+
+#, fuzzy
+#~ msgid "_Load configuration"
+#~ msgstr "Konfiguráció betöltés"
+
+#, fuzzy
+#~ msgid "_Save configuration"
+#~ msgstr "Konfiguráció mentése"
+
+#, fuzzy
+#~ msgid "_Delete configuration"
+#~ msgstr "Konfiguráció törlése"
+
+#, fuzzy, c-format
+#~ msgid "0 byte(s) sent!"
+#~ msgstr "\"%s\": %d bájt(ok) küldve!"
+
+#, fuzzy, c-format
+#~ msgid "Filename error\n"
+#~ msgstr "Fájlhiba!\n"
+
+#~ msgid ""
+#~ "The \"action\" field of a macro is the data to be sent on the port. Text "
+#~ "can be entered, but also special chars, like \\n, \\t, \\r, etc. You can "
+#~ "also enter hexadecimal data preceded by a '\\'. The hexadecimal data "
+#~ "should not begin with a letter (eg. use \\0FF and not \\FF)\n"
+#~ "Examples:\n"
+#~ "\t\"Hello\\n\" sends \"Hello\" followed by a Line Feed\n"
+#~ "\t\"Hello\\0A\" does the same thing but the LF is entered in hexadecimal"
+#~ msgstr ""
+#~ "A makró \"action\" mezője az adat, amit a portra küld. Beírható szöveg "
+#~ "is, vagy speciális karakterek, mint \\n, \\t, \\r,  stb. Hexadecimális "
+#~ "adat is szerepelhet, megelőzve '\\' karakterrel. A hexadecimális adat nem "
+#~ "kezdődhet betűvel (pl. \\0FF használatos \\FF helyett) \n"
+#~ "Példák: \n"
+#~ "\t\"Hello\\n\" \"Hello\" küldése, utána egy soremelés\n"
+#~ "\t\"Hello\\0A\" ugyanaz, csak a soremelés hexában van megadva."
+
+#, c-format
+#~ msgid "Cannot open configuration file `%s'.\n"
+#~ msgstr "Nem tölthető be a `%s' konfigurációs fájl.\n"
+
+#, c-format
+#~ msgid "Cannot create configuration file `%s'.\n"
+#~ msgstr "Nem hozható létre a `%s' konfigurációs fájl.\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "Syntax error\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Szintaktikai hiba\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "Unrecognized parameter\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Érvénytelen paraméter\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "Internal error\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Végzetes hiba\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "Invalid number\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Érvénytelen szám\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "Out of range\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Hibás értéktartomány\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "Cannot allocate memory.\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Nem sikerült memóriát foglalni.\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "It must be specified TRUE or FALSE.\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Meg kell adni, hogy TRUE vagy FALSE.\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "The section name is already used.\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Ez a név már foglalt.\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d)\n"
+#~ "There is no closing bracket.\n"
+#~ msgstr ""
+#~ "%s(%d)\n"
+#~ "Hiányzik a záró kapocs. .\n"
+
+#, c-format
+#~ msgid ""
+#~ "%s(%d): %s\n"
+#~ "Unexplained error\n"
+#~ msgstr ""
+#~ "%s(%d): %s\n"
+#~ "Rejtélyes hiba\n"
+
+#, fuzzy
+#~ msgid "Port:"
+#~ msgstr "Port:"
+
+#~ msgid "Configurations"
+#~ msgstr "Konfigurációk"
+
+#, fuzzy
+#~ msgid "Cannot overwrite section!"
+#~ msgstr "Nem sikerült felülírni a szekciót!"
+
+#, c-format
+#~ msgid "Configuration [%s] saved\n"
+#~ msgstr "Beállítások [%s] elmentve\n"
+
+#, fuzzy, c-format
+#~ msgid ""
+#~ "<b>Section [%s] already exists.</b>\n"
+#~ "\n"
+#~ "Do you want to overwrite it ?"
+#~ msgstr ""
+#~ "\n"
+#~ "A(z) [%s] szekció már létezik.\n"
+#~ "Felül kívánja írni?\n"
+
+#, c-format
+#~ msgid "Cannot find section %s\n"
+#~ msgstr "%s szekció nem található\n"
 
 #~ msgid "\t http://www.jls-info.com/julien/linux\n"
 #~ msgstr "\t http://www.jls-info.com/julien/linux\n"
@@ -781,14 +1637,8 @@ msgstr ""
 #~ msgid "Speed :"
 #~ msgstr "Sebesség:"
 
-#~ msgid "Font selection"
-#~ msgstr "Betűtípus választás"
-
 #~ msgid "Cannot read configuration file !\n"
 #~ msgstr "Konfigurációs fájl beolvasása nem sikerült!\n"
-
-#~ msgid "Warning !"
-#~ msgstr "Figyelmeztetés:"
 
 #~ msgid ""
 #~ "Unknown speed : %d bauds\n"
@@ -797,17 +1647,11 @@ msgstr ""
 #~ "Ismeretlen sebesség: %d baud\n"
 #~ "Visszaállítva az alapértelmezett sebesség: %d baud\n"
 
-#~ msgid "Terminal configuration"
-#~ msgstr "A program beállításai"
-
 #~ msgid "%v / %u Kb (%p %%)"
 #~ msgstr "%v / %u Kb (%p %%)"
 
 #~ msgid "%v / %u bytes (%p %%)"
 #~ msgstr "%v / %u bájt (%p %%)"
-
-#~ msgid "Cannot write file %s\n"
-#~ msgstr "Nem sikerült írni a(z) %s célfájlt\n"
 
 #~ msgid "Help on macros"
 #~ msgstr "Súgó a makrókhoz"
@@ -880,9 +1724,6 @@ msgstr ""
 
 #~ msgid "/Help/_About..."
 #~ msgstr "/Súgó/_Névjegy..."
-
-#~ msgid "About..."
-#~ msgstr "Névjegy..."
 
 #~ msgid ""
 #~ "\n"

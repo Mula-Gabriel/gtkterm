@@ -458,6 +458,12 @@ GtLinkState gt_link_get_state(GtkTermLink *link)
 	return link->state;
 }
 
+gboolean gt_link_is_serial_open(GtkTermLink *link)
+{
+	g_return_val_if_fail(GT_IS_LINK(link), FALSE);
+	return link->state == GT_LINK_OPEN && link->transport != NULL && link->params.type == TRANSPORT_SERIAL;
+}
+
 const gchar *gt_link_get_status_text(GtkTermLink *link)
 {
 	g_return_val_if_fail(GT_IS_LINK(link), NULL);

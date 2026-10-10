@@ -60,20 +60,21 @@ if command -v pacman >/dev/null 2>&1 && [ -z "$PM" ]; then PM="pacman"; fi
 if command -v apt-get >/dev/null 2>&1 && [ -z "$PM" ]; then PM="apt"; fi
 if command -v dnf >/dev/null 2>&1 && [ -z "$PM" ]; then PM="dnf"; fi
 
+# GTK 4 ≥ 4.14, VTE (gtk4) ≥ 0.76, GtkSourceView 5 ≥ 5.12 : Ubuntu 24.04 ou plus récent.
 case "$PM" in
 	pacman)
-		DEPS="gtk3 vte3 libgudev lua gtksourceview4 meson ninja gcc pkgconf git"
+		DEPS="gtk4 vte4 libgudev lua gtksourceview5 meson ninja gcc pkgconf git"
 		INSTALL="pacman -S --needed --noconfirm $DEPS" ;;
 	apt)
-		DEPS="libgtk-3-dev libvte-2.91-dev libgudev-1.0-dev liblua5.4-dev libgtksourceview-4-dev meson ninja-build gcc pkg-config git"
+		DEPS="libgtk-4-dev libvte-2.91-gtk4-dev libgudev-1.0-dev liblua5.4-dev libgtksourceview-5-dev meson ninja-build gcc pkg-config git"
 		INSTALL="apt-get update && apt-get install -y $DEPS" ;;
 	dnf)
-		DEPS="gtk3-devel vte291-devel libgudev-devel lua-devel gtksourceview4-devel meson ninja-build gcc pkgconf-pkg-config git"
+		DEPS="gtk4-devel vte291-gtk4-devel libgudev-devel lua-devel gtksourceview5-devel meson ninja-build gcc pkgconf-pkg-config git"
 		INSTALL="dnf install -y $DEPS" ;;
 	*)
 		echo "!!! Unsupported distribution." >&2
 		echo "!!! Install these libraries manually, then re-run:" >&2
-		echo "!!!   gtk+-3.0, vte-2.91, gudev-1.0, lua5.4, gtksourceview-4, meson, ninja, gcc, pkg-config, git" >&2
+		echo "!!!   gtk4 (>= 4.14), vte-2.91-gtk4 (>= 0.76), gudev-1.0, lua5.4, gtksourceview-5 (>= 5.12), meson, ninja, gcc, pkg-config, git" >&2
 		exit 3 ;;
 esac
 
@@ -92,9 +93,23 @@ fi
 ninja -C build
 
 # --- 5. install (root) -------------------------------------------------
+# Lanceur d'avant GTK 4 (gtkterm.desktop) : remplacé par eu.mulagabriel.gtkterm.desktop, retiré pour ne pas laisser deux entrées.
+# Jamais celui d'un paquet de la distribution (préfixe /usr), qui appartient à son gestionnaire.
+OLD_DESKTOP="$PREFIX/share/applications/gtkterm.desktop"
+owned_by_package() {
+	{ command -v dpkg >/dev/null 2>&1 && dpkg -S "$1" >/dev/null 2>&1; } ||
+	{ command -v rpm >/dev/null 2>&1 && rpm -qf "$1" >/dev/null 2>&1; } ||
+	{ command -v pacman >/dev/null 2>&1 && pacman -Qo "$1" >/dev/null 2>&1; }
+}
+RM_OLD=""
+if [ -e "$OLD_DESKTOP" ] && ! owned_by_package "$OLD_DESKTOP"; then
+	RM_OLD="$OLD_DESKTOP"
+fi
+
 echo ">>> Installing (will prompt for authorization)..."
 # --no-rebuild : root ne relance ni ninja ni git (sinon des fichiers de build/, dont src/git_revision.h, passeraient à root).
-pkexec "$(command -v meson)" install -C "$WORKDIR/build" --no-rebuild
+# Une seule autorisation : installation, puis retrait de l'ancien lanceur s'il y a lieu (arguments passés en liste, jamais interprétés).
+pkexec sh -c '"$1" install -C "$2" --no-rebuild && { [ -z "$3" ] || rm -f -- "$3"; }' sh "$(command -v meson)" "$WORKDIR/build" "$RM_OLD"
 
 echo ">>> Update complete."
 

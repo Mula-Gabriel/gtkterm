@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Dialogue « Terminal » (GTK 4) : police à chasse fixe, lignes de défilement, curseur bloc, couleurs du texte et du fond, Close.
+     Construit par src/ui/terminal_dialog.c ; couleurs de thème (aucune couleur codée en dur) ; noms de widgets lus par tests/gui. -->
+<interface domain="gtkterm">
+  <requires lib="gtk" version="4.14"/>
+  <object class="GtkAdjustment" id="scrollback_adjustment">
+    <property name="lower">100</property>
+    <property name="upper">99999</property>
+    <property name="value">10000</property>
+    <property name="step-increment">100</property>
+    <property name="page-increment">1000</property>
+  </object>
+  <object class="GtkWindow" id="terminal_dialog">
+    <property name="name">terminal-dialog</property>
+    <property name="title" translatable="yes">Terminal</property>
+    <property name="modal">true</property>
+    <property name="resizable">false</property>
+    <property name="destroy-with-parent">true</property>
+    <property name="default-widget">close_button</property>
+    <!-- Échap : gt_ui_close_on_escape() dans terminal_dialog.c (dialogs.c) -->
+    <child>
+      <object class="GtkBox">
+        <property name="orientation">vertical</property>
+        <property name="spacing">12</property>
+        <property name="margin-top">12</property>
+        <property name="margin-bottom">12</property>
+        <property name="margin-start">12</property>
+        <property name="margin-end">12</property>
+        <child>
+          <object class="GtkGrid">
+            <property name="row-spacing">6</property>
+            <property name="column-spacing">12</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="label" translatable="yes">Terminal _font</property>
+                <property name="use-underline">true</property>
+                <property name="mnemonic-widget">font_button</property>
+                <property name="xalign">1</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">0</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkFontDialogButton" id="font_button">
+                <property name="name">terminal-font</property>
+                <property name="level">font</property>
+                <property name="dialog">
+                  <object class="GtkFontDialog">
+                    <property name="title" translatable="yes">Terminal font</property>
+                    <property name="modal">true</property>
+                  </object>
+                </property>
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">0</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label" translatable="yes">_Scrollback lines</property>
+                <property name="use-underline">true</property>
+                <property name="mnemonic-widget">scrollback_spin</property>
+                <property name="xalign">1</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">1</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkSpinButton" id="scrollback_spin">
+                <property name="name">terminal-scrollback</property>
+                <property name="adjustment">scrollback_adjustment</property>
+                <property name="numeric">true</property>
+                <property name="digits">0</property>
+                <property name="width-chars">6</property>
+                <property name="halign">start</property>
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">1</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label" translatable="yes">_Block cursor</property>
+                <property name="use-underline">true</property>
+                <property name="mnemonic-widget">block_cursor_switch</property>
+                <property name="xalign">1</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">2</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkSwitch" id="block_cursor_switch">
+                <property name="name">terminal-block-cursor</property>
+                <property name="halign">start</property>
+                <property name="valign">center</property>
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">2</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label" translatable="yes">_Text color</property>
+                <property name="use-underline">true</property>
+                <property name="mnemonic-widget">fg_button</property>
+                <property name="xalign">1</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">3</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkColorDialogButton" id="fg_button">
+                <property name="name">terminal-fg</property>
+                <property name="halign">start</property>
+                <property name="dialog">
+                  <object class="GtkColorDialog">
+                    <property name="title" translatable="yes">Text color</property>
+                    <property name="modal">true</property>
+                    <property name="with-alpha">false</property>
+                  </object>
+                </property>
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">3</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label" translatable="yes">Back_ground color</property>
+                <property name="use-underline">true</property>
+                <property name="mnemonic-widget">bg_button</property>
+                <property name="xalign">1</property>
+                <layout>
+                  <property name="column">0</property>
+                  <property name="row">4</property>
+                </layout>
+              </object>
+            </child>
+            <child>
+              <object class="GtkColorDialogButton" id="bg_button">
+                <property name="name">terminal-bg</property>
+                <property name="halign">start</property>
+                <property name="dialog">
+                  <object class="GtkColorDialog">
+                    <property name="title" translatable="yes">Background color</property>
+                    <property name="modal">true</property>
+                    <property name="with-alpha">false</property>
+                  </object>
+                </property>
+                <layout>
+                  <property name="column">1</property>
+                  <property name="row">4</property>
+                </layout>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkButton" id="close_button">
+            <property name="name">terminal-close</property>
+            <property name="label" translatable="yes">_Close</property>
+            <property name="use-underline">true</property>
+            <property name="halign">end</property>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>

@@ -1,15 +1,10 @@
-gnome = import('gnome')
-
-# Glade UI files
-gresources = gnome.compile_resources('resource', 'gresource.xml', source_dir: '.')
-
-# Desktop file
+# Fichier de bureau : son nom est l'identifiant de l'application (eu.mulagabriel.gtkterm), par lequel Wayland associe la fenêtre au lanceur.
 desktop_config = configuration_data()
 desktop_config.set('VERSION', meson.project_version())
 
 desktop_file_configured = configure_file(
-	input: 'gtkterm.desktop.in',
-	output: 'gtkterm.desktop',
+	input: 'eu.mulagabriel.gtkterm.desktop.in',
+	output: 'eu.mulagabriel.gtkterm.desktop',
 	configuration: desktop_config,
 	install_dir: join_paths(
 		datadir,

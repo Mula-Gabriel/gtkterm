@@ -1287,8 +1287,9 @@ typedef struct {
     gboolean     ok;
 } MainMacroData;
 
-/* Résolution et envoi sur le thread principal, par le seul envoi de macro de l'interface (macros_send) : ordre respecté avec
- * gtkterm.send (M27). Sans argument Lua, les arguments enregistrés, comme le raccourci et le polling. */
+/* Résolution et envoi sur le thread principal, par l'envoi de macro de l'application sans message (macros_send_quiet : pas de
+ * « Macro … sent! » pour un script, spec Lua §1) : ordre respecté avec gtkterm.send (M27). Sans argument Lua, les arguments
+ * enregistrés, comme le raccourci et le polling. */
 static gboolean main_send_macro_cb(gpointer user_data)
 {
     MainMacroData *d = user_data;
@@ -1299,7 +1300,7 @@ static gboolean main_send_macro_cb(gpointer user_data)
     d->ok = FALSE;
     /* Arrêt demandé (« Stop » ou fermeture de GTKTerm, fenêtre peut-être détruite) : plus aucun envoi, même déjà demandé */
     if (d->found && !g_atomic_int_get(&stop_requested))
-        d->ok = macros_send(m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
+        d->ok = macros_send_quiet(m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
     return G_SOURCE_REMOVE;
 }
 
