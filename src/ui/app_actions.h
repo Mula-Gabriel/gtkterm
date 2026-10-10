@@ -1,23 +1,20 @@
-/* Actions app.* d'options, de vue, de liaison et d'édition (sous-projet 6a, §6.2) et leurs raccourcis.
- * Les actions à état sont des GPropertyAction sur GtTermOptions et sur la liaison : aucune copie d'état. */
+/* Actions d'onglet de l'interface (sous-projet 6a, §6.2 ; groupe de session en 6b, plan décision 4) et raccourcis des actions app.* d'onglet.
+ * Les actions de la page qui dépendent du terminal (clear-scrollback, copy, paste, select-all) vont dans le groupe d'actions de la session ;
+ * l'application les expose en app.* par des relais vers la session active (app.c). */
 #ifndef GT_UI_APP_ACTIONS_H_
 #define GT_UI_APP_ACTIONS_H_
 
 #include <gtk/gtk.h>
 
-#include "link.h"
-#include "term_options.h"
-
 G_BEGIN_DECLS
 
-/* startup, après la création de la liaison par défaut et des options : actions, raccourcis, suivi de la liaison */
-void gt_app_actions_install(GtkApplication *app, GtkTermLink *link, GtTermOptions *opts);
-/* activate, après la fenêtre principale : Copy/Paste/Select All/Clear scrollback visent ce terminal ; menu contextuel « terminal-context » */
-void gt_app_actions_attach_terminal(GtkApplication *app, GtkWidget *terminal_view);
-/* close-request : plus aucune action ne vise le terminal */
-void gt_app_actions_detach_terminal(void);
-/* shutdown : déconnecte la liaison, rend les références */
-void gt_app_actions_shutdown(void);
+/* startup : raccourcis des actions app.* d'onglet (relayées), une seule fois */
+void gt_app_actions_set_accels(GtkApplication *app);
+/* Page : clear-scrollback, copy (sensible selon la sélection de ce terminal), paste, select-all ajoutées à tab_actions ; menu contextuel
+ * « terminal-context » posé sur le VTE de terminal_view */
+void gt_app_actions_install(GActionMap *tab_actions, GtkWidget *terminal_view);
+/* Arrêt de la page : ces actions retirées de tab_actions, plus aucun lien vers le terminal. Idempotente ; sans installation : rien. */
+void gt_app_actions_uninstall(GActionMap *tab_actions);
 
 G_END_DECLS
 

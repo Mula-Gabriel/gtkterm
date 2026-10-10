@@ -1,4 +1,6 @@
-/* Panneau de script Lua (sous-projet 6a), GtkSourceView 5. Le moteur (script_engine.c) ne touche jamais GTK : ce module est sa seule frontière. */
+/* Panneau de script Lua (sous-projet 6a ; un par page en 6b), GtkSourceView 5. Le moteur (script_engine.c) ne touche jamais GTK : ce module est
+ * sa seule frontière. Chaque panneau sert le moteur de sa session ; son état est attaché à sa boîte (libéré avec elle) et chaque rappel le reçoit
+ * en paramètre ou le retrouve par la boîte (pointeur faible pour les rappels asynchrones). */
 #include <config.h>
 #include <string.h>
 #include <glib/gi18n.h>
@@ -10,9 +12,11 @@
 #include "dialogs.h"
 #include "script_engine.h"
 #include "script_panel.h"
+#include "session_view.h"
 #include "terminal_view.h"	/* gt_color_to_rgba */
 
 #define CONSOLE_MAX_LINES 10000
+#define SCRIPT_PANEL_KEY "gt-script-panel"	/* sur la boîte du panneau : ScriptPanel, libéré avec elle */
 #define SCHEME_ID "gtkterm-custom"
 
 enum { SC_BG, SC_FG, SC_COMMENT, SC_KEYWORD, SC_STRING, SC_NUMBER, SC_FUNCTION, SC_LINENO_FG, SC_LINENO_BG, SC_N };
@@ -28,19 +32,33 @@ typedef struct
 
 typedef struct
 {
-	GtkWidget *panel;	/* pointeur faible */
+	GtSession *session;	/* référence, rendue à la libération du panneau */
+	GtkWidget *panel;	/* la boîte « script-panel » (l'état lui est attaché) */
+	gboolean shut_down;	/* gt_script_panel_shutdown : moteur débranché, actions retirées */
 	GtkWidget *editor, *console, *run, *stop, *paned, *editor_scroll, *console_scroll, *layout_popover;
-	GtkWidget *colors_window;	/* pointeur faible, instance unique */
+	GtkWidget *colors_window;	/* pointeur faible, une par panneau */
 	GtkWidget *color_buttons[SC_N];
 	ScriptColors colors_base;	/* état montré par la fenêtre des couleurs (ouverture : colors ; après Reset : rien de choisi) */
 	GSimpleAction *layout_action;
+	GActionMap *actions;	/* groupe d'actions de la session (référence jusqu'à gt_script_panel_shutdown) */
 	GtkOrientation orientation;	/* VERTICAL = éditeur en haut (« topbottom ») */
 	gint pos_topbottom, pos_leftright, pending_pos;
 	gchar *script_path;
 	ScriptColors colors;
 } ScriptPanel;
 
-static ScriptPanel s;
+static void panel_save_state(ScriptPanel *sp);
+
+static ScriptPanel *panel_of(GtkWidget *panel)
+{
+	return panel != NULL ? g_object_get_data(G_OBJECT(panel), SCRIPT_PANEL_KEY) : NULL;
+}
+
+/* Moteur Lua de la session du panneau */
+static GtScriptEngine *panel_engine(ScriptPanel *sp)
+{
+	return gt_session_get_script_engine(sp->session);
+}
 
 static const char DEFAULT_SCRIPT[] =
 	"-- GTKTerm Lua script\n"
@@ -52,10 +70,13 @@ static const char DEFAULT_SCRIPT[] =
 
 /* ---- couleurs : logique pure ---- */
 
-static void term_colors(GdkRGBA *bg, GdkRGBA *fg)
+/* Couleurs du terminal du profil de la session du panneau */
+static void term_colors(ScriptPanel *sp, GdkRGBA *bg, GdkRGBA *fg)
 {
-	gt_color_to_rgba(&config.background, bg);	/* terminal_view.h ; schéma sans transparence */
-	gt_color_to_rgba(&config.foreground, fg);
+	GtProfile *profile = gt_session_get_profile(sp->session);
+
+	gt_color_to_rgba(&profile->background, bg);	/* terminal_view.h ; schéma sans transparence */
+	gt_color_to_rgba(&profile->foreground, fg);
 	bg->alpha = fg->alpha = 1.0f;
 }
 
@@ -227,14 +248,15 @@ static gchar *script_scheme_xml(const ScriptColors *sc)
 	return xml;
 }
 
-/* Règle 10 : dossier propre à GTKTerm, ajouté une fois en tête du chemin de recherche */
-static void apply_scheme(void)
+/* Règle 10 : dossier propre à GTKTerm, ajouté une fois en tête du chemin de recherche. Un seul fichier de schéma : le panneau qui l'écrit
+ * l'applique aussitôt à ses tampons, qui gardent leur objet schéma (une relecture ultérieure ne touche pas les autres panneaux). */
+static void apply_scheme(ScriptPanel *sp)
 {
 	static gboolean path_added = FALSE;
 	GtkSourceStyleSchemeManager *sm = gtk_source_style_scheme_manager_get_default();
 	gchar *dir = g_build_filename(g_get_user_data_dir(), "gtkterm", "styles", NULL);
 	gchar *file = g_build_filename(dir, SCHEME_ID ".xml", NULL);
-	gchar *xml = script_scheme_xml(&s.colors);
+	gchar *xml = script_scheme_xml(&sp->colors);
 
 	if(!path_added)
 	{
@@ -247,10 +269,10 @@ static void apply_scheme(void)
 
 		gtk_source_style_scheme_manager_force_rescan(sm);
 		scheme = gtk_source_style_scheme_manager_get_scheme(sm, SCHEME_ID);
-		if(scheme != NULL && s.editor != NULL)
-			gtk_source_buffer_set_style_scheme(GTK_SOURCE_BUFFER(gtk_text_view_get_buffer(GTK_TEXT_VIEW(s.editor))), scheme);
-		if(scheme != NULL && s.console != NULL)
-			gtk_source_buffer_set_style_scheme(GTK_SOURCE_BUFFER(gtk_text_view_get_buffer(GTK_TEXT_VIEW(s.console))), scheme);
+		if(scheme != NULL && sp->editor != NULL)
+			gtk_source_buffer_set_style_scheme(GTK_SOURCE_BUFFER(gtk_text_view_get_buffer(GTK_TEXT_VIEW(sp->editor))), scheme);
+		if(scheme != NULL && sp->console != NULL)
+			gtk_source_buffer_set_style_scheme(GTK_SOURCE_BUFFER(gtk_text_view_get_buffer(GTK_TEXT_VIEW(sp->console))), scheme);
 	}
 	g_free(xml);
 	g_free(file);
@@ -261,13 +283,14 @@ static void apply_scheme(void)
 
 static void console_append(const char *text, gpointer user_data)
 {
+	ScriptPanel *sp = user_data;
 	GtkTextBuffer *buf;
 	GtkTextIter end;
 	gint lines;
 
-	if(s.console == NULL)
+	if(sp->console == NULL)
 		return;
-	buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(s.console));
+	buf = gtk_text_view_get_buffer(GTK_TEXT_VIEW(sp->console));
 	gtk_text_buffer_get_end_iter(buf, &end);
 	gtk_text_buffer_insert(buf, &end, text, -1);
 	lines = gtk_text_buffer_get_line_count(buf);
@@ -279,54 +302,89 @@ static void console_append(const char *text, gpointer user_data)
 		gtk_text_buffer_get_iter_at_line(buf, &cut, lines - CONSOLE_MAX_LINES);
 		gtk_text_buffer_delete(buf, &start, &cut);
 	}
-	gtk_text_view_scroll_mark_onscreen(GTK_TEXT_VIEW(s.console), gtk_text_buffer_get_mark(buf, "console-end"));
+	gtk_text_view_scroll_mark_onscreen(GTK_TEXT_VIEW(sp->console), gtk_text_buffer_get_mark(buf, "console-end"));
 }
 
 static void on_script_done(GtScriptEnd end, gpointer user_data)
 {
-	if(s.panel == NULL)
+	ScriptPanel *sp = user_data;
+
+	if(sp->run == NULL)
 		return;
-	gtk_widget_set_sensitive(s.run, TRUE);
-	gtk_widget_set_sensitive(s.stop, FALSE);
+	gtk_widget_set_sensitive(sp->run, TRUE);
+	gtk_widget_set_sensitive(sp->stop, FALSE);
 	switch(end)
 	{
 		case GT_SCRIPT_END_STOPPED:
-			console_append(_("[Script stopped]\n"), NULL);
+			console_append(_("[Script stopped]\n"), sp);
 			break;
 		case GT_SCRIPT_END_ERROR:
-			console_append(_("[Script finished with an error]\n"), NULL);
+			console_append(_("[Script finished with an error]\n"), sp);
 			break;
 		default:
-			console_append(_("[Script finished]\n"), NULL);
+			console_append(_("[Script finished]\n"), sp);
 			break;
 	}
 }
 
 /* ---- barre d'outils (règles 4 et 5) ---- */
 
-static GtkTextBuffer *editor_buffer(void)
+static GtkTextBuffer *editor_buffer(ScriptPanel *sp)
 {
-	return gtk_text_view_get_buffer(GTK_TEXT_VIEW(s.editor));
+	return gtk_text_view_get_buffer(GTK_TEXT_VIEW(sp->editor));
 }
 
 static void on_run_clicked(GtkButton *b, gpointer user_data)
 {
-	GtkTextBuffer *buf = editor_buffer();
+	ScriptPanel *sp = user_data;
+	GtkTextBuffer *buf;
 	GtkTextIter start, end;
 	gchar *text;
 
+	if(sp->shut_down)
+		return;
+	buf = editor_buffer(sp);
 	gtk_text_buffer_get_bounds(buf, &start, &end);
 	text = gtk_text_buffer_get_text(buf, &start, &end, FALSE);
-	gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(s.console)), "", -1);	/* la marque console-end survit */
-	gtk_widget_set_sensitive(s.run, FALSE);
-	gtk_widget_set_sensitive(s.stop, TRUE);
-	script_engine_run(text);
+	gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(sp->console)), "", -1);	/* la marque console-end survit */
+	gtk_widget_set_sensitive(sp->run, FALSE);
+	gtk_widget_set_sensitive(sp->stop, TRUE);
+	gt_script_engine_run(panel_engine(sp), text);
 	g_free(text);
 }
 
 static void on_stop_clicked(GtkButton *b, gpointer user_data)
 {
-	script_engine_stop();
+	ScriptPanel *sp = user_data;
+
+	if(!sp->shut_down)
+		gt_script_engine_stop(panel_engine(sp));
+}
+
+/* Rappels des sélecteurs de fichiers (asynchrones) : panneau retrouvé par pointeur faible ; NULL s'il est libéré ou arrêté */
+static GWeakRef *panel_weak_new(ScriptPanel *sp)
+{
+	GWeakRef *ref = g_new0(GWeakRef, 1);
+
+	g_weak_ref_init(ref, sp->panel);
+	return ref;
+}
+
+/* Rend la boîte (référence à rendre) et son état, ou NULL ; libère ref */
+static GtkWidget *panel_weak_take(GWeakRef *ref, ScriptPanel **out)
+{
+	GtkWidget *panel = g_weak_ref_get(ref);
+	ScriptPanel *sp = panel_of(panel);
+
+	g_weak_ref_clear(ref);
+	g_free(ref);
+	if(sp == NULL || sp->shut_down || sp->editor == NULL)	/* editor NULL : boîte détruite (on_panel_destroy) */
+	{
+		g_clear_object(&panel);
+		sp = NULL;
+	}
+	*out = sp;
+	return panel;
 }
 
 static void show_error(const char *what, const GError *err)
@@ -339,17 +397,23 @@ static void show_error(const char *what, const GError *err)
 
 static void on_open_chosen(GFile *file, gpointer user_data)
 {
+	ScriptPanel *sp;
+	GtkWidget *panel = panel_weak_take(user_data, &sp);
 	gchar *contents = NULL;
 	gsize len = 0;
 	GError *err = NULL;
 	gchar *path;
 
-	if(s.panel == NULL || file == NULL)
+	if(panel == NULL || file == NULL)
+	{
+		g_clear_object(&panel);
 		return;
+	}
 	if(!g_file_load_contents(file, NULL, &contents, &len, NULL, &err))
 	{
 		show_error(_("Cannot read file"), err);
 		g_clear_error(&err);
+		g_object_unref(panel);
 		return;
 	}
 	if(!g_utf8_validate(contents, (gssize)len, NULL))
@@ -359,24 +423,33 @@ static void on_open_chosen(GFile *file, gpointer user_data)
 		show_error(_("Cannot read file"), e2);
 		g_error_free(e2);
 		g_free(contents);
+		g_object_unref(panel);
 		return;
 	}
-	gtk_text_buffer_set_text(editor_buffer(), contents, (gint)len);
+	gtk_text_buffer_set_text(editor_buffer(sp), contents, (gint)len);
 	g_free(contents);
 	path = g_file_get_path(file);
 	if(path != NULL)
 	{
-		g_free(s.script_path);
-		s.script_path = path;
+		g_free(sp->script_path);
+		sp->script_path = path;
 	}
-	gt_script_panel_save_state();
+	panel_save_state(sp);
+	g_object_unref(panel);
 }
 
 static void on_open_clicked(GtkButton *b, gpointer user_data)
 {
-	GListStore *filters = g_list_store_new(GTK_TYPE_FILE_FILTER);
-	GtkFileFilter *f = gtk_file_filter_new();
-	GFile *initial = s.script_path != NULL ? g_file_new_for_path(s.script_path) : NULL;
+	ScriptPanel *sp = user_data;
+	GListStore *filters;
+	GtkFileFilter *f;
+	GFile *initial;
+
+	if(sp->shut_down)	/* page arrêtée : plus de sélecteur */
+		return;
+	filters = g_list_store_new(GTK_TYPE_FILE_FILTER);
+	f = gtk_file_filter_new();
+	initial = sp->script_path != NULL ? g_file_new_for_path(sp->script_path) : NULL;
 
 	gtk_file_filter_set_name(f, _("Lua scripts (*.lua)"));
 	gtk_file_filter_add_pattern(f, "*.lua");
@@ -387,32 +460,35 @@ static void on_open_clicked(GtkButton *b, gpointer user_data)
 	gtk_file_filter_add_pattern(f, "*");
 	g_list_store_append(filters, f);
 	g_object_unref(f);
-	gt_ui_open_file(gt_app_get_main_window(), _("Open Lua Script"), initial, G_LIST_MODEL(filters), on_open_chosen, NULL);
+	gt_ui_open_file(gt_app_get_main_window(), _("Open Lua Script"), initial, G_LIST_MODEL(filters), on_open_chosen, panel_weak_new(sp));
 	g_object_unref(filters);
 	g_clear_object(&initial);
 }
 
 static void on_save_chosen(GFile *file, gpointer user_data)
 {
+	ScriptPanel *sp;
+	GtkWidget *panel = panel_weak_take(user_data, &sp);
 	GtkTextBuffer *buf;
 	GtkTextIter start, end;
 	gchar *text, *path;
 	GError *err = NULL;
 
-	if(s.panel == NULL || file == NULL)
-		return;
-	path = g_file_get_path(file);
+	path = panel != NULL && file != NULL ? g_file_get_path(file) : NULL;
 	if(path == NULL)
+	{
+		g_clear_object(&panel);
 		return;
-	buf = editor_buffer();
+	}
+	buf = editor_buffer(sp);
 	gtk_text_buffer_get_bounds(buf, &start, &end);
 	text = gtk_text_buffer_get_text(buf, &start, &end, FALSE);
 	if(g_file_set_contents(path, text, -1, &err))
 	{
-		g_free(s.script_path);
-		s.script_path = path;
+		g_free(sp->script_path);
+		sp->script_path = path;
 		path = NULL;
-		gt_script_panel_save_state();
+		panel_save_state(sp);
 	}
 	else
 	{
@@ -421,34 +497,38 @@ static void on_save_chosen(GFile *file, gpointer user_data)
 	}
 	g_free(text);
 	g_free(path);
+	g_object_unref(panel);
 }
 
 static void on_save_clicked(GtkButton *b, gpointer user_data)
 {
+	ScriptPanel *sp = user_data;
 	GFile *folder = NULL;
 	gchar *name = NULL;
 
-	if(s.script_path != NULL)
+	if(sp->shut_down)	/* page arrêtée : plus de sélecteur */
+		return;
+	if(sp->script_path != NULL)
 	{
-		GFile *f = g_file_new_for_path(s.script_path);
+		GFile *f = g_file_new_for_path(sp->script_path);
 
 		folder = g_file_get_parent(f);
 		name = g_file_get_basename(f);
 		g_object_unref(f);
 	}
-	gt_ui_save_file(gt_app_get_main_window(), _("Save Lua Script"), folder, name != NULL ? name : "script.lua", on_save_chosen, NULL);
+	gt_ui_save_file(gt_app_get_main_window(), _("Save Lua Script"), folder, name != NULL ? name : "script.lua", on_save_chosen, panel_weak_new(sp));
 	g_clear_object(&folder);
 	g_free(name);
 }
 
-static void colors_window_open(void);
+static void colors_window_open(ScriptPanel *sp);
 
 static void on_colors_clicked(GtkButton *b, gpointer user_data)
 {
-	colors_window_open();
+	colors_window_open(user_data);
 }
 
-static GtkWidget *tool_button(const char *icon, const char *label, const char *name, GCallback cb)
+static GtkWidget *tool_button(ScriptPanel *sp, const char *icon, const char *label, const char *name, GCallback cb)
 {
 	GtkWidget *b = gtk_button_new();
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
@@ -459,37 +539,40 @@ static GtkWidget *tool_button(const char *icon, const char *label, const char *n
 	gtk_button_set_has_frame(GTK_BUTTON(b), FALSE);
 	gtk_widget_set_name(b, name);
 	gtk_accessible_update_property(GTK_ACCESSIBLE(b), GTK_ACCESSIBLE_PROPERTY_LABEL, label, -1);
-	g_signal_connect(b, "clicked", cb, NULL);
+	g_signal_connect(b, "clicked", cb, sp);
 	return b;
 }
 
 /* ---- disposition (règle 6) ---- */
 
-static gint *pos_slot(GtkOrientation o)
+static gint *pos_slot(ScriptPanel *sp, GtkOrientation o)
 {
-	return o == GTK_ORIENTATION_VERTICAL ? &s.pos_topbottom : &s.pos_leftright;
+	return o == GTK_ORIENTATION_VERTICAL ? &sp->pos_topbottom : &sp->pos_leftright;
 }
 
 static void on_max_position(GObject *paned, GParamSpec *pspec, gpointer user_data)
 {
+	ScriptPanel *sp = user_data;
 	gint max;
 
-	if(s.pending_pos <= 0)
+	if(sp->pending_pos <= 0)
 		return;
 	g_object_get(paned, "max-position", &max, NULL);
 	if(max <= 0)
 		return;
-	gtk_paned_set_position(GTK_PANED(paned), MIN(s.pending_pos, max));
-	s.pending_pos = 0;
+	gtk_paned_set_position(GTK_PANED(paned), MIN(sp->pending_pos, max));
+	sp->pending_pos = 0;
 }
 
+/* user_data : la boîte du panneau (rappel débranché à sa finalisation, g_signal_connect_object) */
 static void on_layout_change_state(GSimpleAction *a, GVariant *value, gpointer user_data)
 {
+	ScriptPanel *sp = panel_of(user_data);
 	const gchar *v = g_variant_get_string(value, NULL);
 	GtkOrientation o;
 	gint pos, max;
 
-	if(s.panel == NULL)
+	if(sp == NULL || sp->shut_down || sp->paned == NULL)
 		return;
 	if(g_strcmp0(v, "topbottom") == 0)
 		o = GTK_ORIENTATION_VERTICAL;
@@ -497,67 +580,68 @@ static void on_layout_change_state(GSimpleAction *a, GVariant *value, gpointer u
 		o = GTK_ORIENTATION_HORIZONTAL;
 	else
 		return;
-	if(o == s.orientation)
+	if(o == sp->orientation)
 	{
 		g_simple_action_set_state(a, value);
 		return;
 	}
-	pos = gtk_paned_get_position(GTK_PANED(s.paned));
-	if(pos > 0 && s.pending_pos <= 0)
-		*pos_slot(s.orientation) = pos;
-	s.orientation = o;
-	gtk_orientable_set_orientation(GTK_ORIENTABLE(s.paned), o);
-	pos = *pos_slot(o);
-	g_object_get(s.paned, "max-position", &max, NULL);
+	pos = gtk_paned_get_position(GTK_PANED(sp->paned));
+	if(pos > 0 && sp->pending_pos <= 0)
+		*pos_slot(sp, sp->orientation) = pos;
+	sp->orientation = o;
+	gtk_orientable_set_orientation(GTK_ORIENTABLE(sp->paned), o);
+	pos = *pos_slot(sp, o);
+	g_object_get(sp->paned, "max-position", &max, NULL);
 	if(pos > 0)
 	{
 		if(max > 0)
 		{
-			gtk_paned_set_position(GTK_PANED(s.paned), MIN(pos, max));
-			s.pending_pos = 0;
+			gtk_paned_set_position(GTK_PANED(sp->paned), MIN(pos, max));
+			sp->pending_pos = 0;
 		}
 		else
-			s.pending_pos = pos;
+			sp->pending_pos = pos;
 	}
 	else
-		s.pending_pos = 0;
+		sp->pending_pos = 0;
 	g_simple_action_set_state(a, value);
-	gt_script_panel_save_state();
+	panel_save_state(sp);
 }
 
 static void on_secondary_click(GtkGestureClick *g, gint n_press, gdouble x, gdouble y, gpointer user_data)
 {
+	ScriptPanel *sp = user_data;
 	GtkWidget *src = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(g));
 	graphene_point_t in = GRAPHENE_POINT_INIT((float)x, (float)y), out;
 	GdkRectangle r;
 
-	if(s.panel == NULL)
+	if(sp->shut_down || sp->layout_popover == NULL)
 		return;
-	if(src == s.paned)
+	if(src == sp->paned)
 	{
 		GtkWidget *hit = gtk_widget_pick(src, x, y, GTK_PICK_DEFAULT);
 
-		if(hit != NULL && (hit == s.editor_scroll || hit == s.console_scroll || gtk_widget_is_ancestor(hit, s.editor_scroll) ||
-		                   gtk_widget_is_ancestor(hit, s.console_scroll)))
+		if(hit != NULL && (hit == sp->editor_scroll || hit == sp->console_scroll || gtk_widget_is_ancestor(hit, sp->editor_scroll) ||
+		                   gtk_widget_is_ancestor(hit, sp->console_scroll)))
 			return;
 	}
-	if(!gtk_widget_compute_point(src, s.panel, &in, &out))
+	if(!gtk_widget_compute_point(src, sp->panel, &in, &out))
 		return;
 	r.x = (int)out.x;
 	r.y = (int)out.y;
 	r.width = r.height = 1;
-	gtk_popover_set_pointing_to(GTK_POPOVER(s.layout_popover), &r);
-	gtk_popover_popup(GTK_POPOVER(s.layout_popover));
+	gtk_popover_set_pointing_to(GTK_POPOVER(sp->layout_popover), &r);
+	gtk_popover_popup(GTK_POPOVER(sp->layout_popover));
 	gtk_gesture_set_state(GTK_GESTURE(g), GTK_EVENT_SEQUENCE_CLAIMED);
 }
 
-static void add_secondary_click(GtkWidget *w)
+static void add_secondary_click(ScriptPanel *sp, GtkWidget *w)
 {
 	GtkGesture *g = gtk_gesture_click_new();
 
 	gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(g), GDK_BUTTON_SECONDARY);
 	gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(g), GTK_PHASE_BUBBLE);
-	g_signal_connect(g, "pressed", G_CALLBACK(on_secondary_click), NULL);
+	g_signal_connect(g, "pressed", G_CALLBACK(on_secondary_click), sp);
 	gtk_widget_add_controller(w, GTK_EVENT_CONTROLLER(g));
 }
 
@@ -583,64 +667,93 @@ static GtkWidget *layout_popover_new(void)
 
 /* ---- fenêtre des couleurs (règle 9) ---- */
 
-static void colors_buttons_set(const ScriptColors *sc)
+static void colors_buttons_set(ScriptPanel *sp, const ScriptColors *sc)
 {
 	for(int i = 0; i < SC_N; i++)
-		if(s.color_buttons[i] != NULL)
-			gtk_color_dialog_button_set_rgba(GTK_COLOR_DIALOG_BUTTON(s.color_buttons[i]), &sc->c[i]);
+		if(sp->color_buttons[i] != NULL)
+			gtk_color_dialog_button_set_rgba(GTK_COLOR_DIALOG_BUTTON(sp->color_buttons[i]), &sc->c[i]);
 }
 
+/* Rappels de la fenêtre des couleurs : user_data = état du panneau ; la fenêtre est détruite à l'arrêt et à la destruction du panneau */
 static void on_colors_reset(GtkButton *b, gpointer user_data)
 {
+	ScriptPanel *sp = user_data;
 	GdkRGBA bg, fg;
 
-	memset(&s.colors_base, 0, sizeof s.colors_base);
-	term_colors(&bg, &fg);
-	script_colors_resolve(&s.colors_base, &bg, &fg);
-	colors_buttons_set(&s.colors_base);
+	memset(&sp->colors_base, 0, sizeof sp->colors_base);
+	term_colors(sp, &bg, &fg);
+	script_colors_resolve(&sp->colors_base, &bg, &fg);
+	colors_buttons_set(sp, &sp->colors_base);
 }
 
 static void on_colors_cancel(GtkButton *b, gpointer user_data)
 {
-	gtk_window_destroy(GTK_WINDOW(user_data));
+	ScriptPanel *sp = user_data;
+
+	if(sp->colors_window != NULL)
+		gtk_window_destroy(GTK_WINDOW(sp->colors_window));
+}
+
+/* [colors] commun (gt_app_foreach_view) : chaque panneau prend les couleurs choisies du panneau qui vient d'appliquer (user_data : ses
+ * ScriptColors) ; ses autres couleurs suivent le terminal de sa propre session (gt_script_panel_refresh_colors) */
+static void adopt_view_colors(gpointer view, gpointer user_data)
+{
+	const ScriptColors *chosen = user_data;
+	GtkWidget *panel = gt_session_view_get_slot(view, "script-panel");
+	ScriptPanel *sp = panel_of(panel);
+
+	if(sp == NULL || sp->shut_down || &sp->colors == chosen)
+		return;
+	for(int i = 0; i < SC_N; i++)
+	{
+		sp->colors.custom[i] = chosen->custom[i];
+		if(chosen->custom[i])
+			sp->colors.c[i] = chosen->c[i];
+	}
+	gt_script_panel_refresh_colors(panel);
 }
 
 static void on_colors_apply(GtkButton *b, gpointer user_data)
 {
+	ScriptPanel *sp = user_data;
 	GdkRGBA bg, fg, values[SC_N];
 
 	for(int i = 0; i < SC_N; i++)
 	{
-		if(s.color_buttons[i] == NULL)
+		if(sp->color_buttons[i] == NULL)
 			return;
-		values[i] = *gtk_color_dialog_button_get_rgba(GTK_COLOR_DIALOG_BUTTON(s.color_buttons[i]));
+		values[i] = *gtk_color_dialog_button_get_rgba(GTK_COLOR_DIALOG_BUTTON(sp->color_buttons[i]));
 		values[i].alpha = 1.0f;
 	}
-	term_colors(&bg, &fg);
-	script_colors_apply_edits(&s.colors, &s.colors_base, values, &bg, &fg);
-	apply_scheme();
-	gt_script_panel_save_state();
-	gtk_window_destroy(GTK_WINDOW(user_data));
+	term_colors(sp, &bg, &fg);
+	script_colors_apply_edits(&sp->colors, &sp->colors_base, values, &bg, &fg);
+	apply_scheme(sp);
+	panel_save_state(sp);	/* [colors] écrit dans le magasin (et enregistré) */
+	gt_app_foreach_view(adopt_view_colors, &sp->colors);	/* [colors] commun : les panneaux des autres pages suivent */
+	if(sp->colors_window != NULL)
+		gtk_window_destroy(GTK_WINDOW(sp->colors_window));
 }
 
 static void on_colors_window_destroy(GtkWidget *w, gpointer user_data)
 {
+	ScriptPanel *sp = user_data;
+
 	for(int i = 0; i < SC_N; i++)
-		s.color_buttons[i] = NULL;
+		sp->color_buttons[i] = NULL;
 }
 
-static void colors_window_open(void)
+static void colors_window_open(ScriptPanel *sp)
 {
 	GtkWidget *win, *grid, *row, *reset, *cancel, *apply;
 
-	if(s.panel == NULL)
+	if(sp->shut_down)
 		return;
-	if(s.colors_window != NULL)
+	if(sp->colors_window != NULL)
 	{
-		gtk_window_present(GTK_WINDOW(s.colors_window));
+		gtk_window_present(GTK_WINDOW(sp->colors_window));
 		return;
 	}
-	s.colors_base = s.colors;
+	sp->colors_base = sp->colors;
 	win = gtk_window_new();
 	gtk_widget_set_name(win, "script-colors-window");
 	gtk_window_set_title(GTK_WINDOW(win), _("Script Editor Colors"));
@@ -648,9 +761,9 @@ static void colors_window_open(void)
 	gtk_window_set_modal(GTK_WINDOW(win), TRUE);
 	gtk_window_set_destroy_with_parent(GTK_WINDOW(win), TRUE);
 	gtk_window_set_resizable(GTK_WINDOW(win), FALSE);
-	s.colors_window = win;
-	g_object_add_weak_pointer(G_OBJECT(win), (gpointer *)&s.colors_window);
-	g_signal_connect(win, "destroy", G_CALLBACK(on_colors_window_destroy), NULL);
+	sp->colors_window = win;
+	g_object_add_weak_pointer(G_OBJECT(win), (gpointer *)&sp->colors_window);
+	g_signal_connect(win, "destroy", G_CALLBACK(on_colors_window_destroy), sp);
 
 	grid = gtk_grid_new();
 	gtk_widget_set_margin_top(grid, 16);
@@ -668,25 +781,25 @@ static void colors_window_open(void)
 		gtk_widget_set_halign(label, GTK_ALIGN_START);
 		gtk_color_dialog_set_with_alpha(d, FALSE);
 		gtk_color_dialog_set_title(d, _(sc_labels[i]));
-		s.color_buttons[i] = gtk_color_dialog_button_new(d);
-		gtk_widget_set_name(s.color_buttons[i], name);
+		sp->color_buttons[i] = gtk_color_dialog_button_new(d);
+		gtk_widget_set_name(sp->color_buttons[i], name);
 		g_free(name);
-		gtk_color_dialog_button_set_rgba(GTK_COLOR_DIALOG_BUTTON(s.color_buttons[i]), &s.colors.c[i]);
+		gtk_color_dialog_button_set_rgba(GTK_COLOR_DIALOG_BUTTON(sp->color_buttons[i]), &sp->colors.c[i]);
 		gtk_grid_attach(GTK_GRID(grid), label, 0, i, 1, 1);
-		gtk_grid_attach(GTK_GRID(grid), s.color_buttons[i], 1, i, 1, 1);
+		gtk_grid_attach(GTK_GRID(grid), sp->color_buttons[i], 1, i, 1, 1);
 	}
 	row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
 	gtk_widget_set_halign(row, GTK_ALIGN_END);
 	gtk_widget_set_margin_top(row, 8);
 	reset = gtk_button_new_with_mnemonic(_("_Reset"));
 	gtk_widget_set_name(reset, "script-colors-reset");
-	g_signal_connect(reset, "clicked", G_CALLBACK(on_colors_reset), NULL);
+	g_signal_connect(reset, "clicked", G_CALLBACK(on_colors_reset), sp);
 	cancel = gtk_button_new_with_mnemonic(_("_Cancel"));
 	gtk_widget_set_name(cancel, "script-colors-cancel");
-	g_signal_connect(cancel, "clicked", G_CALLBACK(on_colors_cancel), win);
+	g_signal_connect(cancel, "clicked", G_CALLBACK(on_colors_cancel), sp);
 	apply = gtk_button_new_with_mnemonic(_("_Apply"));
 	gtk_widget_set_name(apply, "script-colors-apply");
-	g_signal_connect(apply, "clicked", G_CALLBACK(on_colors_apply), win);
+	g_signal_connect(apply, "clicked", G_CALLBACK(on_colors_apply), sp);
 	gtk_box_append(GTK_BOX(row), reset);
 	gtk_box_append(GTK_BOX(row), cancel);
 	gtk_box_append(GTK_BOX(row), apply);
@@ -698,41 +811,84 @@ static void colors_window_open(void)
 
 /* ---- état ---- */
 
-static void layout_load(GKeyFile *kf)
+static void layout_load(ScriptPanel *sp, GKeyFile *kf)
 {
 	gchar *o = g_key_file_get_string(kf, "layout", "orientation", NULL);
 	gint v;
 
-	s.orientation = g_strcmp0(o, "leftright") == 0 ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL;
+	sp->orientation = g_strcmp0(o, "leftright") == 0 ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL;
 	g_free(o);
 	v = g_key_file_get_integer(kf, "layout", "pos_topbottom", NULL);
-	s.pos_topbottom = v > 0 ? v : 0;
+	sp->pos_topbottom = v > 0 ? v : 0;
 	v = g_key_file_get_integer(kf, "layout", "pos_leftright", NULL);
-	s.pos_leftright = v > 0 ? v : 0;
-	g_free(s.script_path);
-	s.script_path = g_key_file_get_string(kf, "session", "script_path", NULL);
-	if(s.script_path != NULL && *s.script_path == '\0')
-		g_clear_pointer(&s.script_path, g_free);
+	sp->pos_leftright = v > 0 ? v : 0;
+	g_free(sp->script_path);
+	sp->script_path = g_key_file_get_string(kf, "session", "script_path", NULL);
+	if(sp->script_path != NULL && *sp->script_path == '\0')
+		g_clear_pointer(&sp->script_path, g_free);
 }
 
+/* Nouvel onglet : disposition du panneau from (orientation, positions des deux dispositions) ; aucun fichier de script (éditeur au modèle) */
+static void layout_copy(ScriptPanel *sp, ScriptPanel *from)
+{
+	gint pos = from->paned != NULL ? gtk_paned_get_position(GTK_PANED(from->paned)) : 0;
+
+	sp->orientation = from->orientation;
+	sp->pos_topbottom = from->pos_topbottom;
+	sp->pos_leftright = from->pos_leftright;
+	if(pos > 0 && from->pending_pos <= 0)	/* position affichée de from (sinon : celle qu'il attend encore) */
+		*pos_slot(sp, sp->orientation) = pos;
+	g_clear_pointer(&sp->script_path, g_free);
+}
+
+/* Moteur débranché du panneau (journal et fin) */
+static void engine_detach(ScriptPanel *sp)
+{
+	GtScriptEngine *engine = panel_engine(sp);
+
+	if(engine != NULL)
+	{
+		gt_script_engine_set_log_func(engine, NULL, NULL);
+		gt_script_engine_set_done_func(engine, NULL, NULL);
+	}
+}
+
+/* Destruction de la boîte : GtkBox a déjà libéré ses enfants (popover compris) ; plus aucun pointeur vers eux, moteur débranché */
 static void on_panel_destroy(GtkWidget *panel, gpointer user_data)
 {
-	script_engine_set_log_func(NULL, NULL);
-	script_engine_set_done_func(NULL, NULL);
-	if(s.layout_popover != NULL)
+	ScriptPanel *sp = user_data;
+
+	if(!sp->shut_down)
+		engine_detach(sp);
+	if(sp->colors_window != NULL)
+		gtk_window_destroy(GTK_WINDOW(sp->colors_window));	/* ses rappels tiennent sp */
+	if(sp->layout_popover != NULL)
 	{
-		g_object_remove_weak_pointer(G_OBJECT(s.layout_popover), (gpointer *)&s.layout_popover);
-		gtk_widget_unparent(s.layout_popover);
+		g_object_remove_weak_pointer(G_OBJECT(sp->layout_popover), (gpointer *)&sp->layout_popover);
+		gtk_widget_unparent(sp->layout_popover);
 	}
-	s.layout_popover = NULL;
-	s.editor = s.console = s.run = s.stop = s.paned = s.editor_scroll = s.console_scroll = NULL;
-	s.layout_action = NULL;
-	s.panel = NULL;
-	g_clear_pointer(&s.script_path, g_free);	/* l'état a déjà été enregistré par close-request */
+	sp->layout_popover = NULL;
+	sp->editor = sp->console = sp->run = sp->stop = sp->paned = sp->editor_scroll = sp->console_scroll = NULL;
+	sp->layout_action = NULL;
 }
 
-GtkWidget *gt_script_panel_new(GtkApplication *app)
+/* Libération avec la boîte (finalisation) */
+static void script_panel_free(gpointer data)
 {
+	ScriptPanel *sp = data;
+
+	if(sp->colors_window != NULL)
+		g_object_remove_weak_pointer(G_OBJECT(sp->colors_window), (gpointer *)&sp->colors_window);
+	g_clear_object(&sp->actions);
+	g_free(sp->script_path);
+	g_object_unref(sp->session);
+	g_free(sp);
+}
+
+GtkWidget *gt_script_panel_new(GtkApplication *app, GtSession *s, GActionMap *tab_actions, GtkWidget *layout_from)
+{
+	ScriptPanel *sp, *from = panel_of(layout_from);
+	GPropertyAction *show;
 	static gboolean source_init = FALSE;
 	GKeyFile *kf = gt_config_store_get_key_file(config_get_store());
 	GdkRGBA bg, fg;
@@ -742,34 +898,39 @@ GtkWidget *gt_script_panel_new(GtkApplication *app)
 	GtkTextIter end;
 	gchar *contents = NULL;
 
-	g_return_val_if_fail(s.panel == NULL, s.panel);
+	g_return_val_if_fail(GT_IS_SESSION(s), NULL);
 	if(!source_init)
 	{
 		gtk_source_init();
 		source_init = TRUE;
 	}
-	term_colors(&bg, &fg);
-	script_colors_load(&s.colors, kf, &bg, &fg);
-	layout_load(kf);
+	sp = g_new0(ScriptPanel, 1);
+	sp->session = g_object_ref(s);
+	term_colors(sp, &bg, &fg);
+	script_colors_load(&sp->colors, kf, &bg, &fg);	/* [colors] : commun à toutes les pages */
+	if(from != NULL)
+		layout_copy(sp, from);
+	else
+		layout_load(sp, kf);	/* première page : [layout] et [session] */
 
-	s.panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_set_name(s.panel, "script-panel");
-	g_object_add_weak_pointer(G_OBJECT(s.panel), (gpointer *)&s.panel);
+	sp->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+	gtk_widget_set_name(sp->panel, "script-panel");
+	g_object_set_data_full(G_OBJECT(sp->panel), SCRIPT_PANEL_KEY, sp, script_panel_free);
 
 	toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
 	gtk_widget_add_css_class(toolbar, "toolbar");
-	gtk_box_append(GTK_BOX(toolbar), tool_button("document-open", _("Open"), "script-open", G_CALLBACK(on_open_clicked)));
-	gtk_box_append(GTK_BOX(toolbar), tool_button("document-save", _("Save"), "script-save", G_CALLBACK(on_save_clicked)));
+	gtk_box_append(GTK_BOX(toolbar), tool_button(sp, "document-open", _("Open"), "script-open", G_CALLBACK(on_open_clicked)));
+	gtk_box_append(GTK_BOX(toolbar), tool_button(sp, "document-save", _("Save"), "script-save", G_CALLBACK(on_save_clicked)));
 	gtk_box_append(GTK_BOX(toolbar), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
-	s.run = tool_button("media-playback-start", _("Run"), "script-run", G_CALLBACK(on_run_clicked));
-	s.stop = tool_button("media-playback-stop", _("Stop"), "script-stop", G_CALLBACK(on_stop_clicked));
-	gtk_widget_set_sensitive(s.stop, FALSE);
-	gtk_box_append(GTK_BOX(toolbar), s.run);
-	gtk_box_append(GTK_BOX(toolbar), s.stop);
+	sp->run = tool_button(sp, "media-playback-start", _("Run"), "script-run", G_CALLBACK(on_run_clicked));
+	sp->stop = tool_button(sp, "media-playback-stop", _("Stop"), "script-stop", G_CALLBACK(on_stop_clicked));
+	gtk_widget_set_sensitive(sp->stop, FALSE);
+	gtk_box_append(GTK_BOX(toolbar), sp->run);
+	gtk_box_append(GTK_BOX(toolbar), sp->stop);
 	gtk_box_append(GTK_BOX(toolbar), gtk_separator_new(GTK_ORIENTATION_VERTICAL));
-	gtk_box_append(GTK_BOX(toolbar), tool_button("preferences-color", _("Colors..."), "script-colors", G_CALLBACK(on_colors_clicked)));
-	add_secondary_click(toolbar);
-	gtk_box_append(GTK_BOX(s.panel), toolbar);
+	gtk_box_append(GTK_BOX(toolbar), tool_button(sp, "preferences-color", _("Colors..."), "script-colors", G_CALLBACK(on_colors_clicked)));
+	add_secondary_click(sp, toolbar);
+	gtk_box_append(GTK_BOX(sp->panel), toolbar);
 
 	/* Éditeur */
 	ebuf = gtk_source_buffer_new(NULL);
@@ -778,120 +939,144 @@ GtkWidget *gt_script_panel_new(GtkApplication *app)
 		gtk_source_buffer_set_language(ebuf, lua);
 	gtk_source_buffer_set_highlight_syntax(ebuf, TRUE);
 	gtk_source_buffer_set_highlight_matching_brackets(ebuf, TRUE);
-	s.editor = gtk_source_view_new_with_buffer(ebuf);
+	sp->editor = gtk_source_view_new_with_buffer(ebuf);
 	g_object_unref(ebuf);
-	gtk_widget_set_name(s.editor, "script-editor");
-	gtk_text_view_set_monospace(GTK_TEXT_VIEW(s.editor), TRUE);
-	gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(s.editor), GTK_WRAP_NONE);
-	gtk_source_view_set_show_line_numbers(GTK_SOURCE_VIEW(s.editor), TRUE);
-	gtk_source_view_set_auto_indent(GTK_SOURCE_VIEW(s.editor), TRUE);
-	gtk_source_view_set_indent_on_tab(GTK_SOURCE_VIEW(s.editor), TRUE);
-	gtk_source_view_set_indent_width(GTK_SOURCE_VIEW(s.editor), 4);
-	gtk_source_view_set_tab_width(GTK_SOURCE_VIEW(s.editor), 4);
-	if(s.script_path != NULL && g_file_get_contents(s.script_path, &contents, NULL, NULL) && g_utf8_validate(contents, -1, NULL))
+	gtk_widget_set_name(sp->editor, "script-editor");
+	gtk_text_view_set_monospace(GTK_TEXT_VIEW(sp->editor), TRUE);
+	gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(sp->editor), GTK_WRAP_NONE);
+	gtk_source_view_set_show_line_numbers(GTK_SOURCE_VIEW(sp->editor), TRUE);
+	gtk_source_view_set_auto_indent(GTK_SOURCE_VIEW(sp->editor), TRUE);
+	gtk_source_view_set_indent_on_tab(GTK_SOURCE_VIEW(sp->editor), TRUE);
+	gtk_source_view_set_indent_width(GTK_SOURCE_VIEW(sp->editor), 4);
+	gtk_source_view_set_tab_width(GTK_SOURCE_VIEW(sp->editor), 4);
+	if(sp->script_path != NULL && g_file_get_contents(sp->script_path, &contents, NULL, NULL) && g_utf8_validate(contents, -1, NULL))
 		gtk_text_buffer_set_text(GTK_TEXT_BUFFER(ebuf), contents, -1);
 	else
 	{
-		g_clear_pointer(&s.script_path, g_free);
+		g_clear_pointer(&sp->script_path, g_free);
 		gtk_text_buffer_set_text(GTK_TEXT_BUFFER(ebuf), DEFAULT_SCRIPT, -1);
 	}
 	g_free(contents);
 	gtk_text_buffer_set_modified(GTK_TEXT_BUFFER(ebuf), FALSE);
 	scroll = gtk_scrolled_window_new();
-	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), s.editor);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), sp->editor);
 	gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), 150);
-	s.editor_scroll = scroll;
+	sp->editor_scroll = scroll;
 
 	/* Console */
 	cbuf = gtk_source_buffer_new(NULL);
 	gtk_source_buffer_set_highlight_syntax(cbuf, FALSE);
-	s.console = gtk_source_view_new_with_buffer(cbuf);
-	gtk_widget_set_name(s.console, "script-console");
-	gtk_text_view_set_monospace(GTK_TEXT_VIEW(s.console), TRUE);
-	gtk_text_view_set_editable(GTK_TEXT_VIEW(s.console), FALSE);
-	gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(s.console), FALSE);
-	gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(s.console), GTK_WRAP_WORD_CHAR);
+	sp->console = gtk_source_view_new_with_buffer(cbuf);
+	gtk_widget_set_name(sp->console, "script-console");
+	gtk_text_view_set_monospace(GTK_TEXT_VIEW(sp->console), TRUE);
+	gtk_text_view_set_editable(GTK_TEXT_VIEW(sp->console), FALSE);
+	gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(sp->console), FALSE);
+	gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(sp->console), GTK_WRAP_WORD_CHAR);
 	gtk_text_buffer_get_end_iter(GTK_TEXT_BUFFER(cbuf), &end);
 	gtk_text_buffer_create_mark(GTK_TEXT_BUFFER(cbuf), "console-end", &end, FALSE);
 	g_object_unref(cbuf);
 	scroll = gtk_scrolled_window_new();
-	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), s.console);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), sp->console);
 	gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), 80);
-	s.console_scroll = scroll;
+	sp->console_scroll = scroll;
 
-	s.paned = gtk_paned_new(s.orientation);
-	gtk_widget_set_name(s.paned, "script-paned");
-	gtk_paned_set_start_child(GTK_PANED(s.paned), s.editor_scroll);
-	gtk_paned_set_resize_start_child(GTK_PANED(s.paned), TRUE);
-	gtk_paned_set_shrink_start_child(GTK_PANED(s.paned), TRUE);
-	gtk_paned_set_end_child(GTK_PANED(s.paned), s.console_scroll);
-	gtk_paned_set_resize_end_child(GTK_PANED(s.paned), FALSE);
-	gtk_paned_set_shrink_end_child(GTK_PANED(s.paned), TRUE);
-	gtk_widget_set_vexpand(s.paned, TRUE);
-	s.pending_pos = *pos_slot(s.orientation);
-	g_signal_connect(s.paned, "notify::max-position", G_CALLBACK(on_max_position), NULL);
-	add_secondary_click(s.paned);
-	gtk_box_append(GTK_BOX(s.panel), s.paned);
+	sp->paned = gtk_paned_new(sp->orientation);
+	gtk_widget_set_name(sp->paned, "script-paned");
+	gtk_paned_set_start_child(GTK_PANED(sp->paned), sp->editor_scroll);
+	gtk_paned_set_resize_start_child(GTK_PANED(sp->paned), TRUE);
+	gtk_paned_set_shrink_start_child(GTK_PANED(sp->paned), TRUE);
+	gtk_paned_set_end_child(GTK_PANED(sp->paned), sp->console_scroll);
+	gtk_paned_set_resize_end_child(GTK_PANED(sp->paned), FALSE);
+	gtk_paned_set_shrink_end_child(GTK_PANED(sp->paned), TRUE);
+	gtk_widget_set_vexpand(sp->paned, TRUE);
+	sp->pending_pos = *pos_slot(sp, sp->orientation);
+	g_signal_connect(sp->paned, "notify::max-position", G_CALLBACK(on_max_position), sp);
+	add_secondary_click(sp, sp->paned);
+	gtk_box_append(GTK_BOX(sp->panel), sp->paned);
 
-	s.layout_popover = layout_popover_new();
-	gtk_widget_set_parent(s.layout_popover, s.panel);
-	g_object_add_weak_pointer(G_OBJECT(s.layout_popover), (gpointer *)&s.layout_popover);	/* GtkBox détruit ses enfants avant « destroy » */
-	g_signal_connect(s.panel, "destroy", G_CALLBACK(on_panel_destroy), NULL);
+	sp->layout_popover = layout_popover_new();
+	gtk_widget_set_parent(sp->layout_popover, sp->panel);
+	g_object_add_weak_pointer(G_OBJECT(sp->layout_popover), (gpointer *)&sp->layout_popover);	/* GtkBox détruit ses enfants avant « destroy » */
+	g_signal_connect(sp->panel, "destroy", G_CALLBACK(on_panel_destroy), sp);
 
-	s.layout_action = g_simple_action_new_stateful("script-layout", G_VARIANT_TYPE_STRING,
-	                                               g_variant_new_string(s.orientation == GTK_ORIENTATION_VERTICAL ? "topbottom" : "leftright"));
-	g_signal_connect(s.layout_action, "change-state", G_CALLBACK(on_layout_change_state), NULL);
-	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(s.layout_action));
-	g_object_unref(s.layout_action);
+	sp->layout_action = g_simple_action_new_stateful("script-layout", G_VARIANT_TYPE_STRING,
+	                                               g_variant_new_string(sp->orientation == GTK_ORIENTATION_VERTICAL ? "topbottom" : "leftright"));
+	g_signal_connect_object(sp->layout_action, "change-state", G_CALLBACK(on_layout_change_state), sp->panel, 0);
+	sp->actions = g_object_ref(tab_actions);
+	g_action_map_add_action(tab_actions, G_ACTION(sp->layout_action));
+	g_object_unref(sp->layout_action);
+	show = g_property_action_new("show-script-panel", sp->panel, "visible");
+	g_action_map_add_action(tab_actions, G_ACTION(show));
+	g_object_unref(show);
 
 	script_engine_setup();
-	script_engine_set_log_func(console_append, NULL);
-	script_engine_set_done_func(on_script_done, NULL);
-	apply_scheme();
-	return s.panel;
+	gt_script_engine_set_log_func(panel_engine(sp), console_append, sp);
+	gt_script_engine_set_done_func(panel_engine(sp), on_script_done, sp);
+	apply_scheme(sp);
+	return sp->panel;
 }
 
-void gt_script_panel_refresh_colors(void)
+void gt_script_panel_shutdown(GtkWidget *panel)
 {
+	ScriptPanel *sp = panel_of(panel);
+
+	if(sp == NULL || sp->shut_down)
+		return;
+	sp->shut_down = TRUE;
+	engine_detach(sp);	/* le moteur lui-même est arrêté par gt_session_shutdown */
+	if(sp->colors_window != NULL)
+		gtk_window_destroy(GTK_WINDOW(sp->colors_window));
+	/* La GPropertyAction garde le panneau en vie : retirée (après l'enregistrement de l'état par close-request) */
+	g_action_map_remove_action(sp->actions, "show-script-panel");
+	g_action_map_remove_action(sp->actions, "script-layout");
+	sp->layout_action = NULL;
+	g_clear_object(&sp->actions);
+}
+
+void gt_script_panel_refresh_colors(GtkWidget *panel)
+{
+	ScriptPanel *sp = panel_of(panel);
 	GdkRGBA bg, fg;
 
-	if(s.panel == NULL)
+	if(sp == NULL || sp->shut_down)
 		return;
-	term_colors(&bg, &fg);
-	script_colors_resolve(&s.colors, &bg, &fg);
-	apply_scheme();
+	term_colors(sp, &bg, &fg);
+	script_colors_resolve(&sp->colors, &bg, &fg);
+	apply_scheme(sp);
 }
 
-void gt_script_panel_store_state(GKeyFile *kf)
+void gt_script_panel_store_state(GtkWidget *panel, GKeyFile *kf)
 {
+	ScriptPanel *sp = panel_of(panel);
 	gint pos;
 
-	if(s.panel == NULL)
+	if(sp == NULL || sp->paned == NULL)
 		return;
-	pos = gtk_paned_get_position(GTK_PANED(s.paned));
-	if(pos > 0 && s.pending_pos <= 0)	/* panneau jamais affiché : la position lue n'a pas de sens, on garde celle du fichier */
-		*pos_slot(s.orientation) = pos;
-	script_colors_store(&s.colors, kf);
-	g_key_file_set_string(kf, "layout", "orientation", s.orientation == GTK_ORIENTATION_VERTICAL ? "topbottom" : "leftright");
-	if(s.pos_topbottom > 0)
-		g_key_file_set_integer(kf, "layout", "pos_topbottom", s.pos_topbottom);
-	if(s.pos_leftright > 0)
-		g_key_file_set_integer(kf, "layout", "pos_leftright", s.pos_leftright);
-	if(s.script_path != NULL)
-		g_key_file_set_string(kf, "session", "script_path", s.script_path);
-	else
-		g_key_file_remove_key(kf, "session", "script_path", NULL);
+	pos = gtk_paned_get_position(GTK_PANED(sp->paned));
+	if(pos > 0 && sp->pending_pos <= 0)	/* panneau jamais affiché : la position lue n'a pas de sens, on garde celle du fichier */
+		*pos_slot(sp, sp->orientation) = pos;
+	script_colors_store(&sp->colors, kf);
+	g_key_file_set_string(kf, "layout", "orientation", sp->orientation == GTK_ORIENTATION_VERTICAL ? "topbottom" : "leftright");
+	if(sp->pos_topbottom > 0)
+		g_key_file_set_integer(kf, "layout", "pos_topbottom", sp->pos_topbottom);
+	if(sp->pos_leftright > 0)
+		g_key_file_set_integer(kf, "layout", "pos_leftright", sp->pos_leftright);
+	/* [session] script_path (règle des onglets, 6b) : un panneau qui a un chemin l'écrit ; un panneau qui n'en a pas ne retire jamais la clé,
+	 * sinon quitter avec un nouvel onglet actif (éditeur au modèle, sans fichier) effacerait le script enregistré par la première page */
+	if(sp->script_path != NULL)
+		g_key_file_set_string(kf, "session", "script_path", sp->script_path);
 }
 
-void gt_script_panel_save_state(void)
+/* [colors], [layout], [session] de ce panneau ; relit le magasin avant ; rien d'écrit en lecture seule */
+static void panel_save_state(ScriptPanel *sp)
 {
 	GtConfigStore *store;
 
-	if(s.panel == NULL)
+	if(sp->panel == NULL)
 		return;
 	config_reload_store();	/* relire avant d'écrire : une autre instance a pu enregistrer depuis */
 	store = config_get_store();
-	gt_script_panel_store_state(gt_config_store_get_key_file(store));
+	gt_script_panel_store_state(sp->panel, gt_config_store_get_key_file(store));
 	if(!gt_config_store_is_read_only(store))
 		config_save_store(FALSE);
 }

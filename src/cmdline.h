@@ -18,6 +18,7 @@
 #include <glib.h>
 
 #include "profile.h"
+#include "session.h"
 
 /* Résultat pour main() : sortir tout de suite (--help : 0 ; option inconnue, valeur manquante ou invalide : 1) ou démarrer */
 typedef struct
@@ -27,9 +28,9 @@ typedef struct
 	gchar *send_file;	/* option -f, à libérer (gt_cmdline_clear) */
 } GtCmdline;
 
-/* Analyse ; erreur ou aide : exit_now, rien d'autre n'est fait (ni configuration lue ni fichier créé). Sinon charge le profil (default,
- * puis celui de -c), applique les autres options, quel que soit leur ordre, puis Verify_configuration. */
-void read_command_line(int argc, char **argv, GtCmdline *out);
+/* Analyse ; erreur ou aide : exit_now, rien d'autre n'est fait (ni configuration lue ni fichier créé). Sinon charge dans s le profil
+ * (default, puis celui de -c), applique les autres options au profil de s, quel que soit leur ordre, puis Verify_configuration(s). */
+void read_command_line(GtSession *s, int argc, char **argv, GtCmdline *out);
 void gt_cmdline_clear(GtCmdline *c);
 
 /* ---- Analyse pure, sans configuration (tests) ---- */

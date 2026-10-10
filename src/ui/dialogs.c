@@ -7,6 +7,7 @@
 #include "macro_editor.h"
 #include "macro_panel.h"
 #include "macro_shortcuts.h"
+#include "session_view.h"
 #include "status_bar.h"
 
 /* ---------- Boîte modale construite par GTKTerm (messages et confirmations) ----------
@@ -376,22 +377,49 @@ static void hook_message(GtAppMessageKind kind, const gchar *text)
 	gt_ui_message(NULL, kind, text);
 }
 
-/* Profil chargé par app_config_load_profile (menu Load configuration) : profil réappliqué à l'interface et port rouvert. Au démarrage, la
- * fenêtre n'existe pas encore et « activate » applique le profil elle-même. */
-static void hook_profile_applied(void)
+/* Profil chargé dans session par app_config_load_profile (menu Load configuration) : profil de cette session réappliqué (options, terminal,
+ * couleurs) et son port rouvert. Au démarrage, la page n'existe pas encore et « activate » applique le profil elle-même ; une session
+ * (ou sa page) arrêtée n'est plus touchée. */
+static void hook_profile_applied(GtSession *session)
 {
-	if(gt_app_get_main_window() == NULL)
+	GtkWidget *view = gt_session_view_lookup(session);
+
+	if(view == NULL || gt_session_is_shut_down(session))
 		return;
-	gt_app_apply_profile();
-	gt_app_open_port();
+	gt_session_apply_profile(session);	/* un seul « changed » des options : un seul redessin du terminal */
+	gt_session_view_apply_profile(view);
+	gt_session_open_port(session);
 }
 
-/* Jeu de macros remplacé ou modifié : raccourcis et panneau reconstruits (avant la fenêtre principale : rien) */
-static void ui_macros_changed(void)
+/* Message temporaire dans la barre d'état de la page de session ; rien sans page ou si elle est arrêtée */
+static void hook_status_flash(GtSession *session, const gchar *text, guint ms)
 {
-	gt_macro_editor_macros_changed();	/* jeu remplacé pendant l'édition : fenêtre fermée sans enregistrer */
-	gt_macro_shortcuts_rebuild();
-	gt_macro_panel_rebuild();
+	GtkWidget *view = gt_session_view_lookup(session);
+
+	if(view != NULL)
+		gt_status_bar_flash(gt_session_view_get_slot(view, "status-bar"), text, ms);
+}
+
+/* Jeu de macros de session remplacé ou modifié : raccourcis et panneau de sa page reconstruits (sans page ou page arrêtée, par exemple avant
+ * la fenêtre principale : rien) ; son éditeur ouvert sur l'ancien jeu est fermé sans enregistrer */
+static void ui_macros_changed(GtSession *session)
+{
+	GtkWidget *view = gt_session_view_lookup(session);
+
+	gt_macro_editor_macros_changed(session);
+	if(view == NULL)
+		return;
+	gt_macro_shortcuts_rebuild(view);
+	gt_macro_panel_rebuild(gt_session_view_get_slot(view, "macro-panel"));
+}
+
+/* Polling d'une macro de session démarré ou arrêté : panneau de sa page (rien sans page ou page arrêtée) */
+static void hook_polling_changed(GtSession *session, guint id, gboolean running)
+{
+	GtkWidget *view = gt_session_view_lookup(session);
+
+	if(view != NULL)
+		gt_macro_panel_polling_changed(gt_session_view_get_slot(view, "macro-panel"), id, running);
 }
 
 void gt_ui_install_app_hooks(void)
@@ -400,9 +428,9 @@ void gt_ui_install_app_hooks(void)
 	{
 		.message = hook_message,
 		.profile_applied = hook_profile_applied,
-		.status_flash = gt_status_bar_app_flash,
+		.status_flash = hook_status_flash,
 		.macros_changed = ui_macros_changed,
-		.macro_polling_changed = gt_macro_panel_polling_changed,
+		.macro_polling_changed = hook_polling_changed,
 	};
 
 	gt_app_ui_set(&ui);

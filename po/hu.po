@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 0.99.4\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 04:16+0200\n"
+"POT-Creation-Date: 2026-10-10 22:47+0200\n"
 "PO-Revision-Date: 2005-03-09 21:17+0100\n"
 "Last-Translator: Bus Jozsef <busj@mailbox.hu>\n"
 "Language-Team: hu <hu@li.org>\n"
@@ -19,20 +19,20 @@ msgstr ""
 "X-Poedit-Country: HUNGARY\n"
 "X-Poedit-SourceCharset: iso-8859-2\n"
 
-#: src/app_config.c:176
+#: src/app_config.c:175
 #, c-format
 msgid "No section \"%s\" in configuration file\n"
 msgstr "A konfigurációs file-ban nincs \"%s\"  szekció\n"
 
 #. Le message de lecture contient déjà le chemin du fichier
-#: src/app_config.c:234
+#: src/app_config.c:233
 #, c-format
 msgid ""
 "Cannot read configuration file: %s\n"
 "The default configuration is used and nothing will be written to this file."
 msgstr ""
 
-#: src/app_config.c:248
+#: src/app_config.c:247
 #, c-format
 msgid ""
 "Configuration file (%s) with\n"
@@ -41,7 +41,7 @@ msgstr ""
 "A (%s) [alapértelmezett] konfigurációs\n"
 "fájl létrehozva.\n"
 
-#: src/app_config.c:303
+#: src/app_config.c:307
 #, fuzzy
 msgid "Cannot delete section!"
 msgstr "Szekció nem törölhető!"
@@ -231,7 +231,7 @@ msgstr "Fájl olvasása sikertelen: %s: %s\n"
 msgid "Cannot read file %s: not a regular file"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/file_sender.c:284 src/ui/file_actions.c:144
+#: src/file_sender.c:284 src/ui/file_actions.c:202
 #, fuzzy
 msgid "Error sending file"
 msgstr "Hiba fájl megnyitásakor\n"
@@ -240,36 +240,36 @@ msgstr "Hiba fájl megnyitásakor\n"
 msgid "File transfer cancelled"
 msgstr ""
 
-#: src/link.c:102
+#: src/link.c:101
 #, c-format
 msgid "tcp://%s:%s (server, no client)"
 msgstr ""
 
-#: src/link.c:103
+#: src/link.c:102
 #, c-format
 msgid "tcp://%s:%s (server)"
 msgstr ""
 
-#: src/link.c:112 src/link.c:601 src/transport.c:466
+#: src/link.c:111 src/link.c:588 src/transport.c:466
 msgid "No open port"
 msgstr "Nincs nyitott port"
 
-#: src/link.c:119
+#: src/link.c:118
 #, c-format
 msgid "%s — connecting…"
 msgstr ""
 
-#: src/link.c:122
+#: src/link.c:121
 #, c-format
 msgid "%s — lost"
 msgstr ""
 
-#: src/link.c:125
+#: src/link.c:124
 #, c-format
 msgid "%s — reconnecting…"
 msgstr ""
 
-#: src/link.c:324
+#: src/link.c:323
 msgid "device removed"
 msgstr ""
 
@@ -291,7 +291,7 @@ msgid ""
 "backup %s already exists with a different content"
 msgstr ""
 
-#: src/macros.c:100
+#: src/macros.c:138
 #, c-format
 msgid "Macro \"%s\" sent!"
 msgstr "Makró \"%s\" elküldve!"
@@ -300,12 +300,12 @@ msgstr "Makró \"%s\" elküldve!"
 #. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
 #. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
 #. et l'utilisateur sait que ses macros n'ont pas été lues.
-#: src/macros.c:194 src/macros.c:209
+#: src/macros.c:231 src/macros.c:246
 #, fuzzy, c-format
 msgid "Cannot load macros file: %s"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/macros.c:246
+#: src/macros.c:283
 #, fuzzy, c-format
 msgid "Cannot save macros file: %s"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
@@ -402,35 +402,40 @@ msgstr "Fájl olvasása sikertelen: %s: %s\n"
 msgid "Failed to log data to %s: %s"
 msgstr ""
 
-#: src/script_engine.c:159
+#: src/script_engine.c:180
 #, c-format
 msgid "[%zu bytes of log output dropped]"
 msgstr ""
 
-#: src/script_engine.c:355
+#: src/script_engine.c:384
 #, c-format
 msgid "Port %d: receive buffer full, oldest data dropped"
 msgstr ""
 
 #. Même message que le transport (même traduction), sans fin de ligne
-#: src/script_engine.c:603 src/transport.c:326
+#: src/script_engine.c:633 src/transport.c:326
 #, fuzzy, c-format
 msgid "Cannot resolve %s: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/script_engine.c:1570
+#: src/script_engine.c:1641
 #, c-format
 msgid "Script exited with status %lld"
 msgstr ""
 
-#: src/script_engine.c:1578
+#: src/script_engine.c:1649
 #, c-format
 msgid "Lua error: %s"
 msgstr ""
 
-#: src/script_engine.c:1675
+#: src/script_engine.c:1763
 msgid "Script already running."
 msgstr ""
+
+#: src/session.c:113
+#, fuzzy
+msgid "Break signal sent!"
+msgstr "Break signál küldve!"
 
 #: src/transport.c:171
 msgid "end of stream"
@@ -521,63 +526,72 @@ msgstr ""
 msgid "About GTKTerm"
 msgstr ""
 
-#: src/ui/app_actions.c:116
-#, fuzzy
-msgid "Break signal sent!"
-msgstr "Break signál küldve!"
+#: src/ui/app.c:441
+msgid "Close this tab?"
+msgstr ""
 
-#: src/ui/dialogs.c:139
+#: src/ui/app.c:441
+msgid "A script is running or a file is being sent in this tab."
+msgstr ""
+
+#: src/ui/app.c:441 src/ui/menus.ui:14 src/ui/tab_label.c:57
+#: src/ui/tab_label.c:58
+#, fuzzy
+msgid "Close tab"
+msgstr "Nincs nyitott port"
+
+#: src/ui/dialogs.c:140
 #, fuzzy
 msgid "Information"
 msgstr "Konfiguráció"
 
-#: src/ui/dialogs.c:141
+#: src/ui/dialogs.c:142
 #, fuzzy
 msgid "Warning"
 msgstr "Figyelmeztetés:"
 
-#: src/ui/dialogs.c:143
+#: src/ui/dialogs.c:144
 msgid "Error"
 msgstr ""
 
-#: src/ui/dialogs.c:164 src/ui/port_dialog.c:488 src/ui/profile_dialogs.c:305
+#: src/ui/dialogs.c:165 src/ui/port_dialog.c:543 src/ui/profile_dialogs.c:343
 msgid "_OK"
 msgstr ""
 
-#: src/ui/dialogs.c:251 src/ui/file_send_window.c:47 src/ui/port_dialog.c:485
-#: src/ui/profile_dialogs.c:302 src/ui/script_panel.c:684
+#: src/ui/dialogs.c:252 src/ui/file_send_window.c:47 src/ui/port_dialog.c:540
+#: src/ui/profile_dialogs.c:340 src/ui/script_panel.c:797
 #, fuzzy
 msgid "_Cancel"
 msgstr "Mégsem"
 
-#: src/ui/file_actions.c:58
+#: src/ui/file_actions.c:97
 msgid "Only local files are supported"
 msgstr ""
 
-#: src/ui/file_actions.c:144
+#: src/ui/file_actions.c:202
 msgid "The port is not open"
 msgstr ""
 
-#: src/ui/file_actions.c:181
+#: src/ui/file_actions.c:242
 msgid "Send RAW File"
 msgstr ""
 
-#: src/ui/file_actions.c:224
+#: src/ui/file_actions.c:288
 msgid "Save RAW File"
 msgstr ""
 
-#: src/ui/file_actions.c:229
+#: src/ui/file_actions.c:295
 #, fuzzy
 msgid "Save ASCII File"
 msgstr "/Fájl/Raw fájl _mentése"
 
-#: src/ui/file_actions.c:276
+#: src/ui/file_actions.c:347
 #, fuzzy
 msgid "Log file selection"
 msgstr "Tallózás"
 
 #. « Failed to log data to <chemin>: … » (rx_logger.c) : affiché tel quel
-#: src/ui/file_actions.c:337
+#: src/ui/file_actions.c:415
 msgid "Failed to log data"
 msgstr ""
 
@@ -586,21 +600,21 @@ msgstr ""
 msgid "%s: transfer in progress..."
 msgstr "%s: átvitel folyamatban..."
 
-#: src/ui/hex_send_bar.c:49
+#: src/ui/hex_send_bar.c:55
 msgid "Hexadecimal data to send (separator: ';' or space): "
 msgstr "Hexadecimális adat küldés (elválasztó: ';' vagy szóköz):"
 
-#: src/ui/hex_send_bar.c:85
+#: src/ui/hex_send_bar.c:91
 #, c-format
 msgid "Invalid hexadecimal byte \"%s\", nothing sent"
 msgstr ""
 
-#: src/ui/hex_send_bar.c:93
+#: src/ui/hex_send_bar.c:99
 #, fuzzy, c-format
 msgid "%d byte(s) sent!"
 msgstr "\"%s\": %d bájt(ok) küldve!"
 
-#: src/ui/macro_editor.c:44
+#: src/ui/macro_editor.c:47
 msgid ""
 "Action: the data sent on the port. Plain text, plus the escapes \\r "
 "(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
@@ -632,157 +646,159 @@ msgid ""
 "same; \"SPEED %d\\r\" asks for a number."
 msgstr ""
 
-#: src/ui/macro_editor.c:156 src/ui/macro_panel.c:288 src/ui/port_dialog.c:22
-#: src/ui/port_dialog.c:28
+#: src/ui/macro_editor.c:178 src/ui/macro_panel.c:311 src/ui/port_dialog.c:24
+#: src/ui/port_dialog.c:30
 msgid "None"
 msgstr ""
 
-#: src/ui/macro_editor.c:287
+#: src/ui/macro_editor.c:317
 msgid "Select a macro first."
 msgstr ""
 
-#: src/ui/macro_editor.c:293
+#: src/ui/macro_editor.c:323
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr ""
 
-#: src/ui/macro_editor.c:317
+#: src/ui/macro_editor.c:347
 msgid "(no label)"
 msgstr ""
 
-#: src/ui/macro_editor.c:323
+#: src/ui/macro_editor.c:353
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
 "Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:325
+#: src/ui/macro_editor.c:355
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
 "cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:348
+#: src/ui/macro_editor.c:379
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:454
+#: src/ui/macro_editor.c:522
 msgid "Label"
 msgstr ""
 
-#: src/ui/macro_editor.c:455
+#: src/ui/macro_editor.c:523
 msgid "Shortcut"
 msgstr "Gyorsbillentyű"
 
-#: src/ui/macro_editor.c:456
+#: src/ui/macro_editor.c:524
 msgid "Action"
 msgstr ""
 
-#: src/ui/macro_editor.c:457
+#: src/ui/macro_editor.c:525
 msgid "Tab"
 msgstr ""
 
-#: src/ui/macro_editor.c:458
+#: src/ui/macro_editor.c:526
 msgid "_Add"
 msgstr "_Hozzáadás"
 
-#: src/ui/macro_editor.c:459 src/ui/profile_dialogs.c:305
+#: src/ui/macro_editor.c:527 src/ui/profile_dialogs.c:343
 msgid "_Delete"
 msgstr "_Törlés"
 
-#: src/ui/macro_editor.c:460
+#: src/ui/macro_editor.c:528
 msgid "_Capture Shortcut"
 msgstr "Billentyűparancsok"
 
-#: src/ui/macro_editor.c:461
+#: src/ui/macro_editor.c:529
 #, fuzzy
 msgid "Delete Shortcut"
 msgstr "Gyorsbillentyű"
 
-#: src/ui/macro_editor.c:462 src/ui/macro_editor.c:474
+#: src/ui/macro_editor.c:530 src/ui/macro_editor.c:542
 msgid "Move _Up"
 msgstr ""
 
-#: src/ui/macro_editor.c:463 src/ui/macro_editor.c:475
+#: src/ui/macro_editor.c:531 src/ui/macro_editor.c:543
 msgid "Move _Down"
 msgstr ""
 
-#: src/ui/macro_editor.c:469
+#: src/ui/macro_editor.c:537
 msgid "List"
 msgstr ""
 
-#: src/ui/macro_editor.c:470
+#: src/ui/macro_editor.c:538
 msgid "Display"
 msgstr ""
 
-#: src/ui/macro_editor.c:471
+#: src/ui/macro_editor.c:539
 msgid "Value"
 msgstr ""
 
-#: src/ui/macro_editor.c:472
+#: src/ui/macro_editor.c:540
 msgid "_Add Entry"
 msgstr ""
 
-#: src/ui/macro_editor.c:473
+#: src/ui/macro_editor.c:541
 #, fuzzy
 msgid "_Delete Entry"
 msgstr "_Törlés"
 
-#: src/ui/macro_editor.c:503
-msgid "Configure Macros"
-msgstr "A makrók beállítása"
+#. Titre au nom court de l'onglet (fixé à l'ouverture)
+#: src/ui/macro_editor.c:580
+#, c-format
+msgid "Configure Macros — %s"
+msgstr "A makrók beállítása — %s"
 
-#: src/ui/macro_editor.c:524 src/ui/menus.ui:119
+#: src/ui/macro_editor.c:604 src/ui/menus.ui:129
 msgid "Macros"
 msgstr ""
 
-#: src/ui/macro_editor.c:525
+#: src/ui/macro_editor.c:605
 msgid "Lists"
 msgstr ""
 
-#: src/ui/macro_editor.c:535 src/ui/menus.ui:233
+#: src/ui/macro_editor.c:615 src/ui/menus.ui:243
 #, fuzzy
 msgid "Help"
 msgstr "/_Súgó"
 
-#: src/ui/macro_editor.c:536
+#: src/ui/macro_editor.c:616
 msgid "Cancel"
 msgstr "Mégsem"
 
-#: src/ui/macro_editor.c:537
+#: src/ui/macro_editor.c:617
 msgid "OK"
 msgstr ""
 
-#: src/ui/macro_panel.c:54
+#: src/ui/macro_panel.c:67
 msgid "General"
 msgstr ""
 
-#: src/ui/macro_panel.c:288
+#: src/ui/macro_panel.c:311
 #, c-format
 msgid ""
 "Shortcut: %s\n"
 "Action: %s"
 msgstr ""
 
-#: src/ui/macro_panel.c:509
+#: src/ui/macro_panel.c:545
 msgid ""
 "No macros defined\n"
 "with labels"
 msgstr ""
 
-#: src/ui/macro_panel.c:565
+#: src/ui/macro_panel.c:601
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 
-#: src/ui/macro_panel.c:715
+#: src/ui/macro_panel.c:763
 msgid "Period (ms)"
 msgstr ""
 
-#: src/ui/macro_panel.c:723
+#: src/ui/macro_panel.c:771
 msgid "Polling Mode"
 msgstr ""
 
@@ -791,286 +807,290 @@ msgstr ""
 msgid "File"
 msgstr "/_Fájl"
 
-#: src/ui/menus.ui:10
+#: src/ui/menus.ui:10 src/ui/port_dialog.c:499
+msgid "New tab"
+msgstr ""
+
+#: src/ui/menus.ui:20
 #, fuzzy
 msgid "Clear screen"
 msgstr "/Fájl/Képernyő törlése"
 
-#: src/ui/menus.ui:14
+#: src/ui/menus.ui:24
 #, fuzzy
 msgid "Clear scrollback"
 msgstr "/Fájl/Képernyő törlése"
 
-#: src/ui/menus.ui:20
+#: src/ui/menus.ui:30
 #, fuzzy
 msgid "Send RAW file"
 msgstr "/Fájl/Raw fájl _küldése"
 
-#: src/ui/menus.ui:24
+#: src/ui/menus.ui:34
 #, fuzzy
 msgid "Save RAW file"
 msgstr "/Fájl/Raw fájl _mentése"
 
-#: src/ui/menus.ui:28
+#: src/ui/menus.ui:38
 #, fuzzy
 msgid "Save ASCII file"
 msgstr "/Fájl/Raw fájl _mentése"
 
-#: src/ui/menus.ui:34
+#: src/ui/menus.ui:44
 msgid "Quit"
 msgstr ""
 
-#: src/ui/menus.ui:40
+#: src/ui/menus.ui:50
 msgid "Edit"
 msgstr ""
 
-#: src/ui/menus.ui:43 src/ui/menus.ui:249
+#: src/ui/menus.ui:53 src/ui/menus.ui:259
 msgid "Copy"
 msgstr ""
 
-#: src/ui/menus.ui:47 src/ui/menus.ui:253
+#: src/ui/menus.ui:57 src/ui/menus.ui:263
 msgid "Paste"
 msgstr ""
 
-#: src/ui/menus.ui:51 src/ui/menus.ui:257
+#: src/ui/menus.ui:61 src/ui/menus.ui:267
 msgid "Find"
 msgstr ""
 
-#: src/ui/menus.ui:57 src/ui/menus.ui:263
+#: src/ui/menus.ui:67 src/ui/menus.ui:273
 msgid "Select All"
 msgstr ""
 
-#: src/ui/menus.ui:63
+#: src/ui/menus.ui:73
 msgid "Log"
 msgstr ""
 
-#: src/ui/menus.ui:66
+#: src/ui/menus.ui:76
 msgid "To file..."
 msgstr ""
 
-#: src/ui/menus.ui:70
+#: src/ui/menus.ui:80
 msgid "Pause"
 msgstr ""
 
-#: src/ui/menus.ui:74 src/ui/script_panel.c:765
+#: src/ui/menus.ui:84 src/ui/script_panel.c:926
 #, fuzzy
 msgid "Stop"
 msgstr "Stoppbitek:"
 
-#: src/ui/menus.ui:78
+#: src/ui/menus.ui:88
 msgid "Clear"
 msgstr ""
 
-#: src/ui/menus.ui:84
+#: src/ui/menus.ui:94
 msgid "Configuration"
 msgstr "Konfiguráció"
 
-#: src/ui/menus.ui:87
+#: src/ui/menus.ui:97
 #, fuzzy
 msgid "Port"
 msgstr "Port:"
 
-#: src/ui/menus.ui:91
+#: src/ui/menus.ui:101
 #, fuzzy
 msgid "Main window"
 msgstr "/Beállítások/_Főablak"
 
-#: src/ui/menus.ui:97
+#: src/ui/menus.ui:107
 msgid "Local echo"
 msgstr ""
 
-#: src/ui/menus.ui:101
+#: src/ui/menus.ui:111
 msgid "Autoreconnect"
 msgstr ""
 
-#: src/ui/menus.ui:105
+#: src/ui/menus.ui:115
 msgid "CR LF auto"
 msgstr ""
 
-#: src/ui/menus.ui:109
+#: src/ui/menus.ui:119
 #, fuzzy
 msgid "ESC clear screen"
 msgstr "/Fájl/Képernyő törlése"
 
-#: src/ui/menus.ui:113
+#: src/ui/menus.ui:123
 msgid "Timestamp"
 msgstr ""
 
-#: src/ui/menus.ui:123
+#: src/ui/menus.ui:133
 msgid "Load macros file..."
 msgstr ""
 
-#: src/ui/menus.ui:127 src/ui/profile_dialogs.c:400
+#: src/ui/menus.ui:137 src/ui/profile_dialogs.c:474
 #, fuzzy
 msgid "Save macros file"
 msgstr "/Fájl/Raw fájl _mentése"
 
-#: src/ui/menus.ui:133 src/ui/profile_dialogs.c:246
+#: src/ui/menus.ui:143 src/ui/profile_dialogs.c:279
 msgid "Load configuration"
 msgstr "Konfiguráció betöltés"
 
-#: src/ui/menus.ui:137 src/ui/profile_dialogs.c:246
+#: src/ui/menus.ui:147 src/ui/profile_dialogs.c:279
 msgid "Save configuration"
 msgstr "Konfiguráció mentése"
 
-#: src/ui/menus.ui:141 src/ui/profile_dialogs.c:246
+#: src/ui/menus.ui:151 src/ui/profile_dialogs.c:279
 msgid "Delete configuration"
 msgstr "Konfiguráció törlése"
 
-#: src/ui/menus.ui:147
+#: src/ui/menus.ui:157
 #, fuzzy
 msgid "Control signals"
 msgstr "/_Ellenörző jelek"
 
-#: src/ui/menus.ui:150
+#: src/ui/menus.ui:160
 msgid "Send break"
 msgstr ""
 
-#: src/ui/menus.ui:154
+#: src/ui/menus.ui:164
 #, fuzzy
 msgid "Open Port"
 msgstr "Nincs nyitott port"
 
-#: src/ui/menus.ui:158
+#: src/ui/menus.ui:168
 #, fuzzy
 msgid "Close Port"
 msgstr "Nincs nyitott port"
 
-#: src/ui/menus.ui:162
+#: src/ui/menus.ui:172
 msgid "Toggle DTR"
 msgstr ""
 
-#: src/ui/menus.ui:166
+#: src/ui/menus.ui:176
 msgid "Toggle RTS"
 msgstr ""
 
-#: src/ui/menus.ui:172
+#: src/ui/menus.ui:182
 #, fuzzy
 msgid "View"
 msgstr "/_Nézet"
 
-#: src/ui/menus.ui:175
+#: src/ui/menus.ui:185
 #, fuzzy
 msgid "ASCII"
 msgstr "/Nézet/_ASCII"
 
-#: src/ui/menus.ui:180
+#: src/ui/menus.ui:190
 #, fuzzy
 msgid "Hexadecimal"
 msgstr "/Nézet/_Hexadecimális"
 
-#: src/ui/menus.ui:185
+#: src/ui/menus.ui:195
 #, fuzzy
 msgid "Hexadecimal chars"
 msgstr "/Nézet/Hexadecimális _karakter"
 
-#: src/ui/menus.ui:213
+#: src/ui/menus.ui:223
 #, fuzzy
 msgid "Show index"
 msgstr "/Nézet/_Index megjelenítése"
 
-#: src/ui/menus.ui:219
+#: src/ui/menus.ui:229
 #, fuzzy
 msgid "Send hexadecimal data"
 msgstr "/Nézet/Hexadecimális adat _küldés"
 
-#: src/ui/menus.ui:223
+#: src/ui/menus.ui:233
 msgid "Macro panel"
 msgstr ""
 
-#: src/ui/menus.ui:227
+#: src/ui/menus.ui:237
 msgid "Script panel"
 msgstr ""
 
-#: src/ui/menus.ui:236
+#: src/ui/menus.ui:246
 msgid "Check for updates…"
 msgstr ""
 
-#: src/ui/menus.ui:240
+#: src/ui/menus.ui:250
 #, fuzzy
 msgid "About"
 msgstr "Névjegy..."
 
-#: src/ui/port_dialog.c:20
+#: src/ui/port_dialog.c:22
 #, fuzzy
 msgid "Serial"
 msgstr "Soros port"
 
-#: src/ui/port_dialog.c:20
+#: src/ui/port_dialog.c:22
 msgid "TCP Client"
 msgstr ""
 
-#: src/ui/port_dialog.c:20
+#: src/ui/port_dialog.c:22
 msgid "TCP Server"
 msgstr ""
 
-#: src/ui/port_dialog.c:22
+#: src/ui/port_dialog.c:24
 msgid "Odd"
 msgstr ""
 
-#: src/ui/port_dialog.c:22
+#: src/ui/port_dialog.c:24
 msgid "Even"
 msgstr ""
 
-#: src/ui/port_dialog.c:28
+#: src/ui/port_dialog.c:30
 msgid "RTS/CTS"
 msgstr ""
 
-#: src/ui/port_dialog.c:28
+#: src/ui/port_dialog.c:30
 msgid "Xon/Xoff"
 msgstr ""
 
-#: src/ui/port_dialog.c:28
+#: src/ui/port_dialog.c:30
 msgid "RS-485 half-duplex (RTS)"
 msgstr ""
 
-#: src/ui/port_dialog.c:312
+#: src/ui/port_dialog.c:356
 msgid "_Host:"
 msgstr ""
 
-#: src/ui/port_dialog.c:314 src/ui/port_dialog.c:344
+#: src/ui/port_dialog.c:358 src/ui/port_dialog.c:388
 #, fuzzy
 msgid "_Port:"
 msgstr "Port:"
 
-#: src/ui/port_dialog.c:316
+#: src/ui/port_dialog.c:360
 msgid "TCP"
 msgstr ""
 
-#: src/ui/port_dialog.c:329
+#: src/ui/port_dialog.c:373
 #, fuzzy
 msgid "Detected serial ports"
 msgstr "Soros port"
 
-#: src/ui/port_dialog.c:334
+#: src/ui/port_dialog.c:378
 msgid "Standard baud rates"
 msgstr ""
 
-#: src/ui/port_dialog.c:346
+#: src/ui/port_dialog.c:390
 msgid "_Baud Rate:"
 msgstr ""
 
-#: src/ui/port_dialog.c:348
+#: src/ui/port_dialog.c:392
 #, fuzzy
 msgid "P_arity:"
 msgstr "Paritás:"
 
-#: src/ui/port_dialog.c:350
+#: src/ui/port_dialog.c:394
 #, fuzzy
 msgid "B_its:"
 msgstr "Bitek:"
 
-#: src/ui/port_dialog.c:352
+#: src/ui/port_dialog.c:396
 #, fuzzy
 msgid "_Stopbits:"
 msgstr "Stoppbitek:"
 
-#: src/ui/port_dialog.c:354
+#: src/ui/port_dialog.c:398
 #, fuzzy
 msgid "_Flow control:"
 msgstr "Folyamatvezérlés:"
 
-#: src/ui/port_dialog.c:359
+#: src/ui/port_dialog.c:403
 #, fuzzy, c-format
 msgid ""
 "No serial devices found. Searched the following device path patterns:\n"
@@ -1083,231 +1103,231 @@ msgstr ""
 "/dev/ttyUSB*\n"
 "/dev/usb/tts/*\n"
 
-#: src/ui/port_dialog.c:371
+#: src/ui/port_dialog.c:415
 msgid "Serial port"
 msgstr "Soros port"
 
-#: src/ui/port_dialog.c:376
+#: src/ui/port_dialog.c:420
 #, fuzzy
 msgid "_Advanced Configuration Options"
 msgstr "Konfigurációk"
 
-#: src/ui/port_dialog.c:383
+#: src/ui/port_dialog.c:427
 #, fuzzy
 msgid "End of line _delay (milliseconds):"
 msgstr "Sorvég késleltetés (tizedmásodperc):"
 
-#: src/ui/port_dialog.c:385
+#: src/ui/port_dialog.c:429
 #, fuzzy
 msgid "_Wait for this special character before passing to next line:"
 msgstr "Speciális karakterre várakozás az következő sor elött:"
 
-#: src/ui/port_dialog.c:392
+#: src/ui/port_dialog.c:436
 msgid "ASCII file transfer"
 msgstr "ASCII fájl átvitel"
 
-#: src/ui/port_dialog.c:396
+#: src/ui/port_dialog.c:440
 msgid "Time with RTS 'on' _before transmit (milliseconds):"
 msgstr ""
 
-#: src/ui/port_dialog.c:398
+#: src/ui/port_dialog.c:442
 msgid "Time with RTS 'on' a_fter transmit (milliseconds):"
 msgstr ""
 
-#: src/ui/port_dialog.c:400
+#: src/ui/port_dialog.c:444
 msgid "RS-485 half-duplex parameters (RTS signal used to send)"
 msgstr ""
 
-#: src/ui/port_dialog.c:446
+#: src/ui/port_dialog.c:499
 #, fuzzy
 msgid "Port configuration"
 msgstr "Konfiguráció betöltés"
 
-#: src/ui/port_dialog.c:465
+#: src/ui/port_dialog.c:520
 msgid "_Type:"
 msgstr ""
 
-#: src/ui/port_dialog.c:467
+#: src/ui/port_dialog.c:522
 #, fuzzy
 msgid "Transport"
 msgstr "Soros port"
 
-#: src/ui/profile_dialogs.c:127
+#: src/ui/profile_dialogs.c:153
 #, fuzzy
 msgid "Cannot delete this configuration."
 msgstr "Szekció nem törölhető!"
 
-#: src/ui/profile_dialogs.c:147 src/ui/profile_dialogs.c:160
+#: src/ui/profile_dialogs.c:179 src/ui/profile_dialogs.c:192
 #, fuzzy
 msgid "Select a configuration."
 msgstr "Konfiguráció törlése"
 
-#: src/ui/profile_dialogs.c:152
+#: src/ui/profile_dialogs.c:184
 #, fuzzy
 msgid "Cannot load this configuration."
 msgstr "Konfigurációs fájl beolvasása nem sikerült!"
 
-#: src/ui/profile_dialogs.c:163
+#: src/ui/profile_dialogs.c:195
 #, fuzzy, c-format
 msgid "Delete the configuration \"%s\"?"
 msgstr "Konfiguráció törlése"
 
-#: src/ui/profile_dialogs.c:164
+#: src/ui/profile_dialogs.c:196
 msgid "This cannot be undone."
 msgstr ""
 
-#: src/ui/profile_dialogs.c:164
+#: src/ui/profile_dialogs.c:196
 #, fuzzy
 msgid "Delete"
 msgstr "_Törlés"
 
-#: src/ui/profile_dialogs.c:175
+#: src/ui/profile_dialogs.c:207
 #, c-format
 msgid "A configuration named \"%s\" already exists."
 msgstr ""
 
-#: src/ui/profile_dialogs.c:176
+#: src/ui/profile_dialogs.c:208
 msgid "Do you want to overwrite it?"
 msgstr ""
 
-#: src/ui/profile_dialogs.c:176
+#: src/ui/profile_dialogs.c:208
 msgid "Overwrite"
 msgstr ""
 
-#: src/ui/profile_dialogs.c:221
+#: src/ui/profile_dialogs.c:254
 #, fuzzy
 msgid "No saved configuration."
 msgstr "Konfiguráció betöltés"
 
-#: src/ui/profile_dialogs.c:275
+#: src/ui/profile_dialogs.c:313
 #, fuzzy
 msgid "Configuration _name:"
 msgstr "Konfiguráció név:"
 
-#: src/ui/profile_dialogs.c:392
+#: src/ui/profile_dialogs.c:462
 msgid "Load macros file"
 msgstr ""
 
-#: src/ui/script_panel.c:20
+#: src/ui/script_panel.c:24
 msgid "Editor background"
 msgstr ""
 
-#: src/ui/script_panel.c:20
+#: src/ui/script_panel.c:24
 msgid "Default text"
 msgstr ""
 
-#: src/ui/script_panel.c:20
+#: src/ui/script_panel.c:24
 msgid "Comments"
 msgstr ""
 
-#: src/ui/script_panel.c:20
+#: src/ui/script_panel.c:24
 msgid "Keywords"
 msgstr ""
 
-#: src/ui/script_panel.c:20
+#: src/ui/script_panel.c:24
 msgid "Strings"
 msgstr ""
 
-#: src/ui/script_panel.c:20
+#: src/ui/script_panel.c:24
 msgid "Numbers"
 msgstr ""
 
-#: src/ui/script_panel.c:21
+#: src/ui/script_panel.c:25
 #, fuzzy
 msgid "Functions"
 msgstr "Betűtípus választás"
 
-#: src/ui/script_panel.c:21
+#: src/ui/script_panel.c:25
 msgid "Line numbers"
 msgstr ""
 
-#: src/ui/script_panel.c:21
+#: src/ui/script_panel.c:25
 msgid "Line numbers background"
 msgstr ""
 
-#: src/ui/script_panel.c:294
+#: src/ui/script_panel.c:319
 msgid "[Script stopped]\n"
 msgstr ""
 
-#: src/ui/script_panel.c:297
+#: src/ui/script_panel.c:322
 msgid "[Script finished with an error]\n"
 msgstr ""
 
-#: src/ui/script_panel.c:300
+#: src/ui/script_panel.c:325
 msgid "[Script finished]\n"
 msgstr ""
 
-#: src/ui/script_panel.c:351 src/ui/script_panel.c:359
+#: src/ui/script_panel.c:414 src/ui/script_panel.c:423
 #, fuzzy
 msgid "Cannot read file"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/ui/script_panel.c:381
+#: src/ui/script_panel.c:454
 msgid "Lua scripts (*.lua)"
 msgstr ""
 
-#: src/ui/script_panel.c:386
+#: src/ui/script_panel.c:459
 msgid "All files"
 msgstr ""
 
-#: src/ui/script_panel.c:390
+#: src/ui/script_panel.c:463
 msgid "Open Lua Script"
 msgstr ""
 
-#: src/ui/script_panel.c:419
+#: src/ui/script_panel.c:495
 #, fuzzy
 msgid "Cannot write file"
 msgstr "Nem sikerült írni a(z) %s célfájlt\n"
 
-#: src/ui/script_panel.c:439
+#: src/ui/script_panel.c:519
 msgid "Save Lua Script"
 msgstr ""
 
-#: src/ui/script_panel.c:567
+#: src/ui/script_panel.c:651
 msgid "Editor on top"
 msgstr ""
 
-#: src/ui/script_panel.c:573
+#: src/ui/script_panel.c:657
 msgid "Editor on the left"
 msgstr ""
 
-#: src/ui/script_panel.c:646
+#: src/ui/script_panel.c:759
 msgid "Script Editor Colors"
 msgstr ""
 
-#: src/ui/script_panel.c:681
+#: src/ui/script_panel.c:794
 msgid "_Reset"
 msgstr ""
 
-#: src/ui/script_panel.c:687
+#: src/ui/script_panel.c:800
 msgid "_Apply"
 msgstr ""
 
-#: src/ui/script_panel.c:761
+#: src/ui/script_panel.c:922
 msgid "Open"
 msgstr ""
 
-#: src/ui/script_panel.c:762
+#: src/ui/script_panel.c:923
 msgid "Save"
 msgstr ""
 
-#: src/ui/script_panel.c:764
+#: src/ui/script_panel.c:925
 msgid "Run"
 msgstr ""
 
-#: src/ui/script_panel.c:770
+#: src/ui/script_panel.c:931
 msgid "Colors..."
 msgstr ""
 
-#: src/ui/search_bar.c:77
+#: src/ui/search_bar.c:75
 msgid "Previous match"
 msgstr ""
 
-#: src/ui/search_bar.c:82
+#: src/ui/search_bar.c:80
 msgid "Next match"
 msgstr ""
 
-#: src/ui/search_bar.c:151
+#: src/ui/search_bar.c:148
 msgid "Invalid regular expression"
 msgstr ""
 

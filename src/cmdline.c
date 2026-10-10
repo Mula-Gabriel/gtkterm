@@ -272,7 +272,7 @@ void gt_cmdline_options_clear(GtCmdlineOptions *o)
 	o->help = FALSE;
 }
 
-void read_command_line(int argc, char **argv, GtCmdline *out)
+void read_command_line(GtSession *s, int argc, char **argv, GtCmdline *out)
 {
 	GtCmdlineOptions o;
 	GError *error = NULL;
@@ -297,12 +297,12 @@ void read_command_line(int argc, char **argv, GtCmdline *out)
 	}
 
 	/* need a working configuration file ! */
-	Check_configuration_file();
+	Check_configuration_file(s);
 	/* Le profil d'abord, les options ensuite : elles le complètent quel que soit leur ordre (--disable-port-lock survit au profil) */
 	if(o.config_name != NULL)
-		Load_configuration_from_file(o.config_name);
-	gt_cmdline_apply(&o, &config);
-	Verify_configuration();
+		Load_configuration_from_file(s, o.config_name);
+	gt_cmdline_apply(&o, gt_session_get_profile(s));
+	Verify_configuration(s);
 	out->send_file = g_steal_pointer(&o.send_file);
 	gt_cmdline_options_clear(&o);
 }

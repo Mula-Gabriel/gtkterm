@@ -19,6 +19,7 @@ typedef struct
 	GtkWidget *box;		/* « hex-bar » (non possédée) */
 	GtkWidget *entry;	/* « hex-entry » */
 	GtkTermLink *link;	/* référence */
+	GtSession *session;	/* pointeur faible : destinataire des messages (crochet status_flash) */
 	GtHexHistory *history;
 } HexSendBar;
 
@@ -29,15 +30,20 @@ static void on_activate(GtkEntry *entry, HexSendBar *hb);
 static gboolean on_key_pressed(GtkEventControllerKey *c, guint keyval, guint keycode, GdkModifierType state, HexSendBar *hb);
 	/* GDK_KEY_Up / KP_Up : gt_hex_history_previous, texte posé si non NULL, curseur en fin (gtk_editable_set_position(-1)), TRUE ;
 	 * GDK_KEY_Down / KP_Down : gt_hex_history_next, texte posé, curseur en fin, TRUE ; autre touche : FALSE */
-static void on_destroy(GtkWidget *box, HexSendBar *hb);	/* gt_hex_history_free, g_object_unref(link), libère */
+static void on_destroy(GtkWidget *box, HexSendBar *hb);	/* gt_hex_history_free, g_object_unref(link), pointeur faible retiré, libère */
 
-GtkWidget *gt_hex_send_bar_new(GtkTermLink *link)
+GtkWidget *gt_hex_send_bar_new(GtkTermLink *link, GtSession *session)
 {
-	HexSendBar *hb = g_new0(HexSendBar, 1);
+	HexSendBar *hb;
 	GtkWidget *label;
 	GtkEventController *keys;
 
+	g_return_val_if_fail(GT_IS_LINK(link) && GT_IS_SESSION(session), NULL);
+	hb = g_new0(HexSendBar, 1);
+
 	hb->link = g_object_ref(link);
+	hb->session = session;
+	g_object_add_weak_pointer(G_OBJECT(session), (gpointer *)&hb->session);
 	hb->history = gt_hex_history_new(GT_HEX_SEND_HISTORY_MAX);
 	hb->box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
 	gtk_widget_set_name(hb->box, "hex-bar");
@@ -64,11 +70,11 @@ GtkWidget *gt_hex_send_bar_new(GtkTermLink *link)
 	return hb->box;
 }
 
-void gt_hex_send_bar_install_action(GtkApplication *app, GtkWidget *bar)
+void gt_hex_send_bar_install_action(GActionMap *tab_actions, GtkWidget *bar)
 {
 	GPropertyAction *action = g_property_action_new("show-hex-bar", bar, "visible");
 
-	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(action));
+	g_action_map_add_action(tab_actions, G_ACTION(action));
 	g_object_unref(action);
 }
 
@@ -82,7 +88,7 @@ static void on_activate(GtkEntry *entry, HexSendBar *hb)
 
 	if(data == NULL)
 	{
-		gt_app_status_flash(3000, _("Invalid hexadecimal byte \"%s\", nothing sent"), err->message);
+		gt_app_status_flash(hb->session, 3000, _("Invalid hexadecimal byte \"%s\", nothing sent"), err->message);
 		g_error_free(err);
 		return;
 	}
@@ -90,7 +96,7 @@ static void on_activate(GtkEntry *entry, HexSendBar *hb)
 	if(len > 0)
 		n = gt_link_send(hb->link, g_bytes_get_data(data, NULL), len, GT_SEND_HEX);
 	g_bytes_unref(data);
-	gt_app_status_flash(2000, _("%d byte(s) sent!"), MAX(n, 0));
+	gt_app_status_flash(hb->session, 2000, _("%d byte(s) sent!"), MAX(n, 0));
 	gt_hex_history_add(hb->history, text);	/* avant l'effacement : le texte appartient à l'entrée */
 	gtk_editable_set_text(GTK_EDITABLE(entry), "");
 }
@@ -117,5 +123,7 @@ static void on_destroy(GtkWidget *box, HexSendBar *hb)
 {
 	gt_hex_history_free(hb->history);
 	g_object_unref(hb->link);
+	if(hb->session != NULL)
+		g_object_remove_weak_pointer(G_OBJECT(hb->session), (gpointer *)&hb->session);
 	g_free(hb);
 }

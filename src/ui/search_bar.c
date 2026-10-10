@@ -35,8 +35,6 @@ typedef struct
 	VteRegex *regex;	/* expression du texte courant, NULL : à compiler */
 } SearchBar;
 
-static GtkWidget *main_search_bar = NULL;	/* pointeur faible : cible de app.find */
-
 static void search(SearchBar *sb, FindDirection dir);	/* compile si besoin ; erreur → show_error ; sinon set_regex + find_next/previous */
 static void show_error(SearchBar *sb, const gchar *message);	/* NULL : cache search-error et retire la classe « error » de l'entrée */
 static void on_changed(GtkEditable *editable, SearchBar *sb);	/* oublie l'expression, show_error(NULL), boutons sensibles si texte non vide */
@@ -48,7 +46,7 @@ static gboolean on_key_pressed(GtkEventControllerKey *c, guint keyval, guint key
 static void on_mode_changed(GObject *bar, GParamSpec *pspec, SearchBar *sb);
 	/* ouvert : focus sur l'entrée ; fermé : vte_terminal_search_set_regex(vte, NULL, 0), vte_terminal_unselect_all, show_error(NULL), focus au VTE */
 static void on_destroy(GtkWidget *bar, SearchBar *sb);	/* vte_regex_unref, retire les pointeurs faibles, libère */
-static void on_find(GSimpleAction *action, GVariant *param, gpointer user_data);	/* gt_search_bar_toggle(main_search_bar) si non NULL */
+static void on_find(GSimpleAction *action, GVariant *param, gpointer bar);	/* gt_search_bar_toggle(bar) */
 
 GtkWidget *gt_search_bar_new(VteTerminal *vte)
 {
@@ -114,15 +112,14 @@ void gt_search_bar_toggle(GtkWidget *bar)
 	gtk_search_bar_set_search_mode(sbar, !gtk_search_bar_get_search_mode(sbar));
 }
 
-void gt_search_bar_install_action(GtkApplication *app, GtkWidget *bar)
+void gt_search_bar_install_action(GActionMap *tab_actions, GtkWidget *bar)
 {
-	static const GActionEntry entry = { "find", on_find, NULL, NULL, NULL, { 0 } };
-	static const gchar *const accels[] = { "<Control><Shift>f", NULL };
+	GSimpleAction *action = g_simple_action_new("find", NULL);
 
-	main_search_bar = bar;
-	g_object_add_weak_pointer(G_OBJECT(bar), (gpointer *)&main_search_bar);
-	g_action_map_add_action_entries(G_ACTION_MAP(app), &entry, 1, NULL);
-	gtk_application_set_accels_for_action(app, "app.find", accels);
+	/* Rappel lié à la barre : déconnecté à sa finalisation (l'action ne la garde pas en vie) ; raccourci : gt_app_actions_set_accels */
+	g_signal_connect_object(action, "activate", G_CALLBACK(on_find), bar, 0);
+	g_action_map_add_action(tab_actions, G_ACTION(action));
+	g_object_unref(action);
 }
 
 static void show_error(SearchBar *sb, const gchar *message)
@@ -223,8 +220,7 @@ static void on_destroy(GtkWidget *bar, SearchBar *sb)
 	g_free(sb);
 }
 
-static void on_find(GSimpleAction *action, GVariant *param, gpointer user_data)
+static void on_find(GSimpleAction *action, GVariant *param, gpointer bar)
 {
-	if(main_search_bar != NULL)
-		gt_search_bar_toggle(main_search_bar);
+	gt_search_bar_toggle(bar);
 }

@@ -40,9 +40,6 @@ GType gt_link_state_get_type(void);
 G_DECLARE_FINAL_TYPE(GtkTermLink, gt_link, GT, LINK, GObject)
 
 GtkTermLink *gt_link_new(void);
-/* Liaison du port principal, utilisée par les consommateurs (macros, Lua, fichiers) ; non possédée. */
-void         gt_link_set_default(GtkTermLink *link);
-GtkTermLink *gt_link_get_default(void);
 
 /* Ouverture demandée par l'utilisateur : ferme d'abord la connexion courante. Échec : open-failed, puis FALSE ;
  * avec auto-reconnect (série, client TCP), la liaison passe ensuite en RECONNECTING au lieu de rester CLOSED. */
