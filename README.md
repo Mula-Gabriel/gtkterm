@@ -92,19 +92,19 @@
 
 12. Lua Script Panel
 - A built-in Lua 5.4 script editor and output console, shown/hidden via the View menu
-- Syntax highlighting powered by GtkSourceView 4 (Lua keywords, strings, numbers, comments, functions)
-- Toolbar buttons: **Open**, **Save**, **Run**, **Stop**, **Couleurs…**
+- Syntax highlighting powered by GtkSourceView 5 (Lua keywords, strings, numbers, comments, functions)
+- Toolbar buttons: **Open**, **Save**, **Run**, **Stop**, **Colors…**
 - **Run** executes the script in a background thread; **Stop** interrupts it at the next `gtkterm.sleep()` or `gtkterm.wait_for()` call
 - The last opened script file is saved and reloaded automatically at startup
 - **Layout** — right-click anywhere on the divider or toolbar to toggle between:
   - *Horizontal* — editor on top, console on bottom
   - *Vertical* — editor on the left, console on the right
 - The chosen layout and both divider positions are persisted independently across sessions
-- **Colors** — the "Couleurs…" button opens a dialog to customise:
+- **Colors** — the "Colors…" button opens a dialog to customise:
   - Editor background and default text color
   - Syntax colors: comments, keywords, strings, numbers, functions
   - Line-number bar foreground and background
-  - Colors default to a dark or light palette derived from the terminal's configured background; changes are saved to `~/.config/gtkterm_script_colors.ini`
+  - Colors default to a dark or light palette derived from the terminal's configured background; changes are saved in the `[colors]` group of `.gtktermrc`
 
 ### Lua Scripting API
 
@@ -149,7 +149,7 @@ gtkterm.send_macro("Reset")    -- send macro by label
 <p align="center">
     <img src="docs/images/Capture6.png" width="60%"/>
 </p>
-# GTKTerm: A GTK+ Serial Port Terminal
+# GTKTerm: A GTK Serial Port Terminal
 <img src="data/gtkterm_256x256.png" align="right" width="20%"/>
 
 
@@ -173,7 +173,6 @@ Key Combination | Effect
 `<ctrl><shift>K` | Clear Scrollback
 `<ctrl><shift>A` | Select All
 `<ctrl><shift>B` | Send Break
-`<ctrl>B` | Send break
 F5 | Open Port
 F6 | Close Port
 F7 | Toggle DTR
@@ -197,12 +196,13 @@ You may find it useful to send these signals in your own firmware flashing scrip
 
 ## Installation
 GTKTerm has a few dependencies-
-* Gtk+3.0 (version 3.12 or higher)
-* vte (version 0.40 or higher)
-* intltool (version 0.40.0 or higher)
-* libgudev (version 229 or higher)
+* GTK 4 (`gtk4`, version 4.14 or higher)
+* VTE for GTK 4 (`vte-2.91-gtk4`, version 0.76 or higher)
+* libgudev (`gudev-1.0`, version 230 or higher)
 * Lua 5.4 (`lua5.4`) — scripting engine
-* GtkSourceView 4 (`gtksourceview-4`) — script editor syntax highlighting
+* GtkSourceView 5 (`gtksourceview-5`, version 5.12 or higher) — script editor syntax highlighting
+
+On Ubuntu 24.04 or later: `sudo apt install libgtk-4-dev libvte-2.91-gtk4-dev libgudev-1.0-dev liblua5.4-dev libgtksourceview-5-dev meson ninja-build`.
 
 Once these dependencies are installed, most people should simply run:
 
@@ -215,6 +215,10 @@ To install GTKTerm system-wide, run (after building as your user):
 	gtk-update-icon-cache
 
 `--no-rebuild` keeps root from rebuilding (and from leaving root-owned files in `build/`).
+
+Upgrading from a GTK 3 build of GTKTerm: the launcher is now `eu.mulagabriel.gtkterm.desktop`; remove the old one once,
+`sudo rm <prefix>/share/applications/gtkterm.desktop` (the in-app updater does it for you). A manual `sudo meson install` over a GTK 3 installation
+leaves that old `gtkterm.desktop` launcher in place, so remove it by hand.
 
 If you wish to install GTKTerm someplace other than the default directory, e.g. in `/usr`, use:
 

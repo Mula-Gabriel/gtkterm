@@ -245,6 +245,9 @@ test_send_macro_arguments(void)
 	octets = stub_sent();
 	g_assert_cmpmem(octets->data, octets->len, "V42V7V42", 8);
 	g_assert_true(stub_send_thread() == thread_principal);
+	/* Envoi sans message (spec Lua §1) : jamais macros_send, qui annoncerait « Macro … sent! » */
+	g_assert_cmpint(stub_count("macros_send_quiet"), ==, 3);
+	g_assert_cmpint(stub_count("macros_send"), ==, 0);
 }
 
 /* ---- M26 : wait_for binaire ------------------------------------------- */

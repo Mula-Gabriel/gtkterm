@@ -1,13 +1,46 @@
-/* Tests d'intégration de macros.c : envoi unique par identifiant, raccourcis, fichier, ordonnanceur (bouchons d'interface ;
- * GTK lié sans gtk_init ni fenêtre, sauf les cas de raccourcis qui ont besoin d'un affichage). */
+/* Tests d'intégration de macros.c (couche application, sans GTK) : envoi unique par identifiant, fichier, ordonnanceur ; effets d'interface relevés par la
+ * table GtAppUi du test (raccourcis et fenêtre d'édition : suite graphique, test_raccourcis_macros.py et test_macros_edition.py). */
 
-#include <gtk/gtk.h>
+#include <glib.h>
 #include <string.h>
 
-#include "interface.h"
+#include "app_ui.h"
 #include "macros.h"
 #include "stubs.h"
 #include "test_util.h"
+
+/* Crochets GtAppUi : chaque appel est noté dans le journal des bouchons (stub_count, stub_last) */
+static void
+enr_message(GtAppMessageKind kind, const gchar *text)
+{
+	stub_record("message", text);
+}
+
+static void
+enr_status_flash(const gchar *text, guint ms)
+{
+	stub_record("status_flash", text);
+}
+
+static void
+enr_macros_changed(void)
+{
+	stub_record("macros_changed", NULL);
+}
+
+static void
+enr_polling(guint id, gboolean running)
+{
+	stub_record("macro_polling_changed", running ? "1" : "0");
+}
+
+static const GtAppUi table_enregistrement =
+{
+	.message = enr_message,
+	.status_flash = enr_status_flash,
+	.macros_changed = enr_macros_changed,
+	.macro_polling_changed = enr_polling,
+};
 
 static guint id_vitesse, id_sans_libelle, id_pourcent, id_separateur;
 
@@ -92,8 +125,8 @@ test_sans_libelle(void)
 	macros_send(id_sans_libelle, NULL, -1);
 	s = envoye();
 	g_assert_cmpstr(s, ==, "SANS_LIBELLE");
-	g_assert_cmpint(stub_count("Put_temp_message"), ==, 1);
-	g_assert_nonnull(strstr(stub_last("Put_temp_message"), "<Control>F6"));
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	g_assert_nonnull(strstr(stub_last("status_flash"), "<Control>F6"));
 	g_free(s);
 	desinstaller();
 }
@@ -106,7 +139,7 @@ test_inconnue_ou_separateur(void)
 	g_assert_false(macros_send(9999999, NULL, -1));
 	g_assert_false(macros_send(id_separateur, NULL, -1));
 	g_assert_cmpuint(stub_sent()->len, ==, 0);
-	g_assert_cmpint(stub_count("Put_temp_message"), ==, 0);
+	g_assert_cmpint(stub_count("status_flash"), ==, 0);
 	desinstaller();
 }
 
@@ -121,122 +154,31 @@ test_ecriture_en_echec(void)
 	g_assert_cmpuint(stub_sent()->len, ==, 0);
 	g_assert_cmpint(stub_count("gt_link_send"), ==, 1);
 	/* M3 : aucun octet ecrit, pas de message « envoyee » (le « - lost » de la barre d'etat reste visible) */
-	g_assert_cmpint(stub_count("Put_temp_message"), ==, 0);
+	g_assert_cmpint(stub_count("status_flash"), ==, 0);
 	stub_link_set_write_fails(FALSE);
 	desinstaller();
 }
 
+/* Spec Lua §1 : macros_send annonce l'envoi (status_flash), macros_send_quiet (moteur Lua) n'annonce rien ; même envoi */
 static void
-test_raccourci_connecte_une_seule_fois(void)
+test_envoi_silencieux(void)
 {
-	guint touche, n = 0;
-	GdkModifierType modificateurs;
-
-	/* gtk_accel_group_connect interroge GDK : une connexion d'affichage (sans fenetre) est necessaire. */
-	if(!gtk_init_check(NULL, NULL))
-	{
-		g_test_skip("pas d'affichage graphique");
-		return;
-	}
-	shortcuts = gtk_accel_group_new();
-	installer_macros();
-	macros_changed();
-	macros_changed();
-	gtk_accelerator_parse("<Control>F6", &touche, &modificateurs);
-	g_assert_cmpuint(touche, !=, 0);
-	gtk_accel_group_query(shortcuts, touche, modificateurs, &n);
-	g_assert_cmpuint(n, ==, 1);
-	desinstaller();
-	gtk_accel_group_query(shortcuts, touche, modificateurs, &n);
-	g_assert_cmpuint(n, ==, 0);
-	g_clear_object(&shortcuts);
-}
-
-/* M43 : l'accelerateur d'une macro envoyable se declare traite ; un separateur laisse passer la touche. */
-static void
-test_raccourci_declare_traite(void)
-{
-	guint touche;
-	GdkModifierType modificateurs;
-	GtkWidget *fenetre;
 	gchar *s;
 
-	if(!gtk_init_check(NULL, NULL))
-	{
-		g_test_skip("pas d'affichage graphique");
-		return;
-	}
-	shortcuts = gtk_accel_group_new();
 	installer_macros();
 	stub_reset();
-	fenetre = gtk_window_new(GTK_WINDOW_TOPLEVEL);	/* jamais affichee */
-	gtk_window_add_accel_group(GTK_WINDOW(fenetre), shortcuts);
-	gtk_accelerator_parse("<Control>F5", &touche, &modificateurs);
-	g_assert_true(gtk_accel_groups_activate(G_OBJECT(fenetre), touche, modificateurs));
+	g_assert_true(macros_send_quiet(id_vitesse, NULL, -1));
 	s = envoye();
 	g_assert_cmpstr(s, ==, "V42\r");
 	g_free(s);
-	gtk_accelerator_parse("<Control>F7", &touche, &modificateurs);
-	g_assert_false(gtk_accel_groups_activate(G_OBJECT(fenetre), touche, modificateurs));
-	/* Spec 6.2 : port ferme (ecriture en echec), la touche d'une macro envoyable reste traitee et n'atteint pas le terminal */
-	stub_reset();
-	stub_link_set_write_fails(TRUE);
-	gtk_accelerator_parse("<Control>F5", &touche, &modificateurs);
-	g_assert_true(gtk_accel_groups_activate(G_OBJECT(fenetre), touche, modificateurs));
-	g_assert_cmpint(stub_count("gt_link_send"), ==, 1);
-	g_assert_cmpuint(stub_sent()->len, ==, 0);
-	stub_link_set_write_fails(FALSE);
+	g_assert_cmpint(stub_last_origin(), ==, GT_SEND_MACRO);
+	g_assert_cmpint(stub_count("status_flash"), ==, 0);
+	g_assert_false(macros_send_quiet(id_separateur, NULL, -1));
+	g_assert_false(macros_send_quiet(9999999, NULL, -1));
+	g_assert_true(macros_send(id_vitesse, NULL, -1));
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	g_assert_nonnull(strstr(stub_last("status_flash"), "Vitesse"));
 	desinstaller();
-	gtk_widget_destroy(fenetre);
-	g_clear_object(&shortcuts);
-}
-
-/* Fenetres de premier niveau visibles : seule la fenetre d'edition en ouvre une ici (titre traduit : non compare) */
-static gint
-fenetres_edition(void)
-{
-	GList *liste = gtk_window_list_toplevels();
-	gint n = 0;
-
-	for(GList *l = liste; l != NULL; l = l->next)
-		if(gtk_window_get_window_type(l->data) == GTK_WINDOW_TOPLEVEL && gtk_widget_get_visible(l->data))
-			n++;
-	g_list_free(liste);
-	return n;
-}
-
-/* Fenetre d'edition ouverte pendant un changement de jeu : fermee sans enregistrer (ses lignes decrivent l'ancien jeu) */
-static void
-test_fenetre_edition_fermee_au_changement_de_jeu(void)
-{
-	gchar *dir, *path;
-
-	if(!gtk_init_check(NULL, NULL))
-	{
-		g_test_skip("pas d'affichage graphique");
-		return;
-	}
-	dir = g_dir_make_tmp("gtkterm-macros-XXXXXX", NULL);
-	path = g_build_filename(dir, "m.ini", NULL);
-	g_assert_true(macros_load_file(path, FALSE));		/* fichier absent : jeu vide, chemin retenu */
-	installer_macros();
-	stub_reset();
-	Config_macros(NULL, NULL);
-	g_assert_cmpint(fenetres_edition(), ==, 1);
-	Config_macros(NULL, NULL);				/* deja ouverte : ramenee au premier plan, pas de seconde fenetre */
-	g_assert_cmpint(fenetres_edition(), ==, 1);
-	desinstaller();
-	g_assert_cmpint(fenetres_edition(), ==, 0);
-	g_assert_cmpint(stub_count("config_remember_macros_file"), ==, 0);
-	g_assert_false(g_file_test(path, G_FILE_TEST_EXISTS));
-	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 0);
-	Config_macros(NULL, NULL);				/* window remis a NULL : une nouvelle fenetre s'ouvre */
-	g_assert_cmpint(fenetres_edition(), ==, 1);
-	desinstaller();
-	g_assert_cmpint(fenetres_edition(), ==, 0);
-	test_rmdir(dir);
-	g_free(path);
-	g_free(dir);
 }
 
 /* F1 : %#Nom n'est une liste que si elle existe ; ancien format lu avec ses listes avant ses macros. */
@@ -262,7 +204,7 @@ test_chargement_ancien_format_listes(void)
 	g_assert_cmpstr(gt_macro_set_get(set, 1)->args[0], ==, "9600");
 	g_assert_cmpstr(gt_macro_set_get(set, 1)->args[1], ==, "5");
 	g_assert_cmpstr(macros_file_get_path(), ==, path);
-	g_assert_cmpint(stub_count("rebuild_macro_buttons"), >=, 1);
+	g_assert_cmpint(stub_count("macros_changed"), >=, 1);
 	macros_send(gt_macro_set_get(set, 0)->id, NULL, -1);
 	s = envoye();
 	g_assert_cmpstr(s, ==, "SPD 115200\r");
@@ -284,7 +226,7 @@ test_chargement_fichier_absent(void)
 	g_assert_true(macros_load_file(path, TRUE));
 	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 0);
 	g_assert_cmpstr(macros_file_get_path(), ==, path);
-	g_assert_cmpint(stub_count("show_message"), ==, 0);
+	g_assert_cmpint(stub_count("message"), ==, 0);
 	test_rmdir(dir);
 	g_free(path);
 	g_free(dir);
@@ -302,7 +244,7 @@ test_chargement_corrompu_garde_le_jeu(void)
 	stub_reset();
 	g_assert_false(macros_load_file(corrompu, TRUE));
 	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 4);
-	g_assert_cmpint(stub_count("show_message"), ==, 1);
+	g_assert_cmpint(stub_count("message"), ==, 1);
 	g_assert_cmpstr(macros_file_get_path(), ==, bon);
 	desinstaller();
 	test_rmdir(dir);
@@ -321,7 +263,7 @@ test_enregistrement_echec_une_seule_boite(void)
 	stub_reset();
 	g_assert_false(macros_save_file(path, TRUE));
 	g_assert_false(macros_save_file(path, TRUE));
-	g_assert_cmpint(stub_count("show_message"), ==, 1);
+	g_assert_cmpint(stub_count("message"), ==, 1);
 	desinstaller();
 	test_rmdir(dir);
 	g_free(path);
@@ -339,10 +281,10 @@ test_enregistrement_explicite_reaffiche(void)
 	stub_reset();
 	g_assert_false(macros_save_file(path, TRUE));
 	g_assert_false(macros_save_file(path, TRUE));
-	g_assert_cmpint(stub_count("show_message"), ==, 1);
+	g_assert_cmpint(stub_count("message"), ==, 1);
 	macros_forget_save_error();
 	g_assert_false(macros_save_file(path, TRUE));
-	g_assert_cmpint(stub_count("show_message"), ==, 2);
+	g_assert_cmpint(stub_count("message"), ==, 2);
 	desinstaller();
 	test_rmdir(dir);
 	g_free(path);
@@ -374,10 +316,10 @@ test_chargement_profil_abime(void)
 	g_test_assert_expected_messages();
 	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 0);
 	g_assert_cmpstr(macros_file_get_path(), ==, path);
-	g_assert_cmpint(stub_count("show_message"), ==, 0);	/* jamais de boucle imbriquee pendant le chargement du profil */
+	g_assert_cmpint(stub_count("message"), ==, 0);	/* jamais de boucle imbriquee pendant le chargement du profil */
 	iterer_boucle();
-	g_assert_cmpint(stub_count("show_message"), ==, 1);
-	g_assert_nonnull(strstr(stub_last("show_message"), "m.ini"));
+	g_assert_cmpint(stub_count("message"), ==, 1);
+	g_assert_nonnull(strstr(stub_last("message"), "m.ini"));
 	g_assert_true(macros_save_file(NULL, TRUE));
 	g_assert_cmpstr(macros_file_get_path(), ==, path);
 	g_assert_true(g_file_get_contents(copie, &texte, NULL, NULL));
@@ -423,13 +365,14 @@ test_polling_arrete_au_chargement(void)
 	g_assert_cmpuint(stub_sent()->len, ==, 4);			/* envoi immédiat « V42\r » */
 	desinstaller();
 	g_assert_cmpuint(gt_macro_poller_running_count(macros_get_poller()), ==, 0);
-	g_assert_cmpint(stub_count("macro_panel_polling_changed"), ==, 2);
+	g_assert_cmpint(stub_count("macro_polling_changed"), ==, 2);
 }
 
 int
 main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
+	gt_app_ui_set(&table_enregistrement);
 	macros_init();
 	g_test_add_func("/macros_send/arguments-enregistres", test_arguments_enregistres);
 	g_test_add_func("/macros_send/arguments-fournis", test_arguments_fournis);
@@ -437,9 +380,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_send/sans-libelle", test_sans_libelle);
 	g_test_add_func("/macros_send/inconnue-ou-separateur", test_inconnue_ou_separateur);
 	g_test_add_func("/macros_send/ecriture-en-echec", test_ecriture_en_echec);
-	g_test_add_func("/macros_send/raccourci-connecte-une-seule-fois", test_raccourci_connecte_une_seule_fois);
-	g_test_add_func("/macros_send/raccourci-declare-traite", test_raccourci_declare_traite);
-	g_test_add_func("/macros_send/fenetre-edition-fermee-au-changement-de-jeu", test_fenetre_edition_fermee_au_changement_de_jeu);
+	g_test_add_func("/macros_send/envoi-silencieux", test_envoi_silencieux);
 	g_test_add_func("/macros_send/chargement-ancien-format-listes", test_chargement_ancien_format_listes);
 	g_test_add_func("/macros_send/chargement-fichier-absent", test_chargement_fichier_absent);
 	g_test_add_func("/macros_send/chargement-corrompu-garde-le-jeu", test_chargement_corrompu_garde_le_jeu);

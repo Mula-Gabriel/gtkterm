@@ -804,6 +804,59 @@ test_tcp_serveur(void)
 	liberer(link, &o);
 }
 
+/* ---- Série ouverte ------------------------------------------------------ */
+
+static void
+compter_notify(GObject *objet, GParamSpec *pspec, gpointer data)
+{
+	(*(gint *)data)++;
+}
+
+/* gt_link_is_serial_open : vrai seulement pour une liaison série ouverte. Passer d'un serveur TCP ouvert (client présent) à une liaison série
+ * ouverte ne change pas « state » (OPEN → OPEN) : l'interface l'apprend par notify::status-text, qu'elle écoute avec notify::state. */
+static void
+test_serie_ouverte(void)
+{
+	Observateur o;
+	Port p = PORT_INIT;
+	GtkTermLink *link = nouvelle_liaison(&o);
+	TransportParams tp;
+	guint16 port = port_libre();
+	gint notifications = 0;
+	int client;
+
+	g_assert_false(gt_link_is_serial_open(link));
+	port_brancher(&p);
+	ouvrir_serie(link, &p);
+	g_assert_true(gt_link_is_serial_open(link));
+	gt_link_close(link);
+	g_assert_false(gt_link_is_serial_open(link));
+
+	params_tcp(&tp, TRANSPORT_TCP_SERVER, port);
+	g_assert_true(gt_link_open(link, &tp, NULL));
+	g_assert_false(gt_link_is_serial_open(link));	/* LISTENING */
+	client = connecter(port);
+	g_assert_true(attendre_etat(link, GT_LINK_OPEN, 2000));
+	g_assert_false(gt_link_is_serial_open(link));	/* OPEN, mais TCP */
+
+	g_signal_connect(link, "notify::state", G_CALLBACK(compter_notify), &notifications);
+	g_signal_connect(link, "notify::status-text", G_CALLBACK(compter_notify), &notifications);
+	ouvrir_serie(link, &p);
+	g_assert_cmpint(gt_link_get_state(link), ==, GT_LINK_OPEN);
+	g_assert_true(gt_link_is_serial_open(link));
+	g_assert_cmpint(notifications, >, 0);
+	g_signal_handlers_disconnect_by_func(link, compter_notify, &notifications);
+
+	port_debrancher(&p);
+	g_assert_true(attendre_etat(link, GT_LINK_LOST, 2000));
+	g_assert_false(gt_link_is_serial_open(link));
+
+	close(client);
+	transport_params_clear(&tp);
+	liberer(link, &o);
+	port_detruire(&p);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -828,5 +881,6 @@ main(int argc, char **argv)
 	g_test_add_func("/link/tcp-client-refus-puis-serveur", test_tcp_client_refus_puis_serveur);
 	g_test_add_func("/link/fermeture-pendant-connexion", test_fermeture_pendant_connexion);
 	g_test_add_func("/link/tcp-serveur", test_tcp_serveur);
+	g_test_add_func("/link/serie-ouverte", test_serie_ouverte);
 	return g_test_run();
 }

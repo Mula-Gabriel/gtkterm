@@ -187,6 +187,79 @@ test_noms_des_enums(void)
 	g_assert_false(gt_transport_from_string("udp", &tr));
 }
 
+/* Spec §3.2-13 : nom rogné, 1 à 64 caractères (pas octets), tout caractère imprimable sauf « [ » et « ] » */
+static void
+test_nom_valide(void)
+{
+	GError *err = NULL;
+	gchar *n = NULL;
+	gchar *long64 = g_strnfill(64, 'a');
+	gchar *entoure = g_strconcat("  ", long64, "  ", NULL);
+	GString *e64 = g_string_new(NULL);
+
+	g_assert_true(gt_profile_name_validate("atelier é", &n, &err));
+	g_assert_no_error(err);
+	g_assert_cmpstr(n, ==, "atelier é");
+	g_free(n);
+	g_assert_true(gt_profile_name_validate("  \tbanc 2 \n", &n, NULL));
+	g_assert_cmpstr(n, ==, "banc 2");
+	g_free(n);
+	g_assert_true(gt_profile_name_validate(long64, NULL, NULL));		/* la limite est incluse */
+	g_assert_true(gt_profile_name_validate(entoure, &n, NULL));		/* rogné avant de compter */
+	g_assert_cmpstr(n, ==, long64);
+	g_free(n);
+	for(gint i = 0; i < 64; i++)
+		g_string_append(e64, "é");					/* 64 caractères, 128 octets */
+	g_assert_true(gt_profile_name_validate(e64->str, NULL, NULL));
+	g_assert_true(gt_profile_name_validate("windows", NULL, NULL));
+	g_assert_true(gt_profile_name_validate("Default", NULL, NULL));
+	g_assert_true(gt_profile_name_validate("a=b;c#d", NULL, NULL));
+	g_string_free(e64, TRUE);
+	g_free(entoure);
+	g_free(long64);
+}
+
+static void
+verifier_refus(const gchar *nom, GtProfileError code)
+{
+	GError *err = NULL;
+	gchar *n = (gchar *)"inchange";
+
+	g_assert_false(gt_profile_name_validate(nom, &n, &err));
+	g_assert_error(err, GT_PROFILE_ERROR, (gint)code);
+	g_assert_cmpstr(err->message, !=, "");
+	g_assert_null(n);
+	g_clear_error(&err);
+	g_assert_false(gt_profile_name_validate(nom, NULL, NULL));
+}
+
+static void
+test_nom_refuse(void)
+{
+	gchar *long65 = g_strnfill(65, 'a');
+	GString *e65 = g_string_new(NULL);
+
+	for(gint i = 0; i < 65; i++)
+		g_string_append(e65, "é");
+	verifier_refus("", GT_PROFILE_ERROR_NAME_EMPTY);
+	verifier_refus("   \t ", GT_PROFILE_ERROR_NAME_EMPTY);
+	verifier_refus(NULL, GT_PROFILE_ERROR_NAME_EMPTY);
+	verifier_refus(long65, GT_PROFILE_ERROR_NAME_TOO_LONG);
+	verifier_refus(e65->str, GT_PROFILE_ERROR_NAME_TOO_LONG);
+	verifier_refus("a[b", GT_PROFILE_ERROR_NAME_INVALID_CHAR);
+	verifier_refus("a]b", GT_PROFILE_ERROR_NAME_INVALID_CHAR);
+	verifier_refus("a\001b", GT_PROFILE_ERROR_NAME_INVALID_CHAR);
+	verifier_refus("a\tb", GT_PROFILE_ERROR_NAME_INVALID_CHAR);
+	verifier_refus("a\177", GT_PROFILE_ERROR_NAME_INVALID_CHAR);
+	verifier_refus("\xff\xfe", GT_PROFILE_ERROR_NAME_INVALID_CHAR);	/* UTF-8 invalide */
+	verifier_refus("Window", GT_PROFILE_ERROR_NAME_RESERVED);
+	verifier_refus("COLORS", GT_PROFILE_ERROR_NAME_RESERVED);
+	verifier_refus("layout", GT_PROFILE_ERROR_NAME_RESERVED);
+	verifier_refus(" session ", GT_PROFILE_ERROR_NAME_RESERVED);
+	g_string_free(e65, TRUE);
+	g_free(long65);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -198,5 +271,7 @@ main(int argc, char **argv)
 	g_test_add_func("/profile/validation-debit-non-standard", test_validation_debit_non_standard);
 	g_test_add_func("/profile/conversion-transport", test_conversion_transport);
 	g_test_add_func("/profile/noms-des-enums", test_noms_des_enums);
+	g_test_add_func("/profile/nom-valide", test_nom_valide);
+	g_test_add_func("/profile/nom-refuse", test_nom_refuse);
 	return g_test_run();
 }

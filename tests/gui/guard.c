@@ -1,6 +1,7 @@
-/* Garde-fou LD_PRELOAD de la suite graphique : refuse l'ouverture des vrais ports série et de la configuration réelle de
-   l'utilisateur (domicile réel transmis par GTKTERM_GUARD_REAL_HOME). Corrige aussi un défaut du clavier de GDK broadway
-   (voir gdk_keymap_translate_keyboard_state en fin de fichier). */
+/* Garde-fou LD_PRELOAD de la suite graphique GTK 4 : refuse l'ouverture des vrais ports série et de la configuration réelle de
+   l'utilisateur (domicile réel transmis par GTKTERM_GUARD_REAL_HOME). Copie du guard.c de l'ancienne suite GTK 3, sans le correctif clavier de GDK
+   broadway GTK 3 : inutile en GTK 4 (essai du 2026-10-09 : « b » ne déclenche plus Ctrl+B) et impossible (gdk_keymap_* n'est pas
+   exportée par libgtk-4). */
 /* Meson définit _FILE_OFFSET_BITS=64 : open, openat et fopen deviendraient des alias de leurs variantes 64 bits, que l'on
    enveloppe aussi ici. On compile donc sans, pour définir chaque symbole une seule fois. */
 #undef _FILE_OFFSET_BITS
@@ -14,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 static int starts_with(const char *p, const char *prefix)
@@ -90,20 +92,24 @@ FILE *fopen64(const char *p, const char *m)
 	return r(p, m);
 }
 
-/* Clavier de GDK broadway (GTK 3) : gdk_keymap_translate_keyboard_state() n'y écrit jamais *consumed_modifiers. GtkKeyHash
-   (gtk_window_activate_key) lit alors une valeur indéterminée de la pile ; quand elle contient le bit Contrôle, la touche « b »
-   seule déclenche Ctrl+B (Send break) et Ctrl+F5 se confond avec F5 (Open Port). Les backends X11 et Wayland écrivent toujours
-   cette valeur : on part de 0 (aucun modificateur consommé), ce que broadway laisse tel quel. Sans GTK, jamais appelée. */
-typedef int (*translate_keyboard_state_fn)(void *, unsigned int, unsigned int, int, unsigned int *, int *, int *, unsigned int *);
-
-int gdk_keymap_translate_keyboard_state(void *keymap, unsigned int hardware_keycode, unsigned int state, int group, unsigned int *keyval,
-                                        int *effective_group, int *level, unsigned int *consumed_modifiers)
+/* TIOCMGET simulé : si GTKTERM_GUARD_FAKE_MODEM est posée (bits TIOCM_*, décimal ou 0x…), la lecture des lignes modem d'un terminal (pty)
+   renvoie ces bits au lieu de ENOTTY ; sans la variable, ou hors terminal, comportement normal. */
+int ioctl(int fd, unsigned long req, ...)
 {
-	static translate_keyboard_state_fn r;
+	static int (*r)(int, unsigned long, ...);
+	const char *fake = getenv("GTKTERM_GUARD_FAKE_MODEM");
+	va_list a;
+	void *arg;
 
 	if(!r)
-		r = (translate_keyboard_state_fn)dlsym(RTLD_NEXT, "gdk_keymap_translate_keyboard_state");
-	if(consumed_modifiers != NULL)
-		*consumed_modifiers = 0;
-	return r(keymap, hardware_keycode, state, group, keyval, effective_group, level, consumed_modifiers);
+		r = dlsym(RTLD_NEXT, "ioctl");
+	va_start(a, req);
+	arg = va_arg(a, void *);
+	va_end(a);
+	if(req == TIOCMGET && fake != NULL && fake[0] != '\0' && arg != NULL && isatty(fd))
+	{
+		*(int *)arg = (int)strtol(fake, NULL, 0);
+		return 0;
+	}
+	return r(fd, req, arg);
 }

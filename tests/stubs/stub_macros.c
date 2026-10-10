@@ -1,7 +1,9 @@
-/* Bouchon de l'état des macros (macros.c) pour test_script_engine : jeu fourni par le test, fil appelant mémorisé. */
+/* Bouchon de l'état des macros (macros.c) pour test_script_engine : jeu fourni par le test, fil appelant mémorisé, appels notés
+ * dans le journal (« macros_send », « macros_send_quiet »). */
 
 #include "link.h"
 #include "stub_macros.h"
+#include "stubs.h"
 
 static GtMacroSet *jeu = NULL;
 static GThread *thread_acces = NULL;
@@ -29,8 +31,8 @@ macros_get_set(void)
 }
 
 /* Même contrat que macros.c : macro inconnue ou non envoyable → FALSE ; n_args < 0 → arguments enregistrés */
-gboolean
-macros_send(guint id, const gchar *const *args, gint n_args)
+static gboolean
+envoyer(guint id, const gchar *const *args, gint n_args)
 {
 	const GtMacro *m = gt_macro_set_find(macros_get_set(), id);
 	GBytes *bytes;
@@ -46,4 +48,18 @@ macros_send(guint id, const gchar *const *args, gint n_args)
 		written = gt_link_send(gt_link_get_default(), data, len, GT_SEND_MACRO);
 	g_bytes_unref(bytes);
 	return len == 0 || (written >= 0 && (gsize)written == len);
+}
+
+gboolean
+macros_send(guint id, const gchar *const *args, gint n_args)
+{
+	stub_record("macros_send", NULL);
+	return envoyer(id, args, n_args);
+}
+
+gboolean
+macros_send_quiet(guint id, const gchar *const *args, gint n_args)
+{
+	stub_record("macros_send_quiet", NULL);
+	return envoyer(id, args, n_args);
 }
