@@ -1,16 +1,17 @@
 # Tests unitaires : un exécutable GTest par module du cœur (src/ : gtkterm_core).
 # meson les construit aussi avec « ninja » (prérequis de « meson test ») ; -Dtests=false les écarte (voir meson_options.txt).
 
-# Dépendances supplémentaires par test ; les tâches suivantes complètent ce dictionnaire.
 # openpty() : dans la libc depuis glibc 2.34, dans libutil avant.
 util_dep = cc.find_library('util', required : false)
 
+# Dépendances supplémentaires par test.
 unit_tests = {
 	'test_macros_list' : [],
 	'test_macros_format' : [],
 	'test_macro_set' : [],
 	'test_macro_file' : [],
 	'test_macro_poller' : [],
+	'test_macro_view' : [],
 	'test_baudrates' : [util_dep],
 	'test_serial_termios' : [],
 	'test_config_file' : [],
@@ -22,6 +23,14 @@ unit_tests = {
 	'test_config_store' : [],
 	'test_rx_queue' : [],
 	'test_script_port' : [util_dep],
+	'test_term_options' : [gio_dep],
+	'test_hex_input' : [],
+	'test_capture' : [],
+	'test_file_sender' : [],
+	'test_rx_logger' : [],
+	'test_update_check' : [],
+	'test_serial_ports' : [util_dep],
+	'test_port_form' : [],
 }
 
 test_env = environment()
@@ -31,9 +40,9 @@ test_env.set('G_TEST_SRCDIR', meson.current_source_dir())
 test_env.set('G_TEST_BUILDDIR', meson.current_build_dir())
 # Catalogues .mo compilés par la construction (po/<langue>/gtkterm.mo) : test des messages traduits du thread Lua.
 test_env.set('GTKTERM_PO_DIR', meson.project_build_root() / 'po')
-# Jamais l'écran réel : sans cela, gtk_init_check (cas de raccourcis de test_macros_send) se connecterait au compositeur de la session,
-# même sans DISPLAY ni WAYLAND_DISPLAY (GDK se rabat sur $XDG_RUNTIME_DIR/wayland-0). Un backend inconnu fait échouer
-# gtk_init_check : ces cas sont alors sautés ; seule la suite graphique isolée (broadway privé) ouvre un affichage.
+# Jamais l'écran réel : aucun test de cette suite n'ouvre d'affichage (test_macro_accel lie GTK 4 sans gtk_init) ; si l'un venait à appeler
+# gtk_init, GDK se rabattrait sur $XDG_RUNTIME_DIR/wayland-0 (le compositeur de la session) même sans DISPLAY ni WAYLAND_DISPLAY. Un backend
+# inconnu le fait échouer à la place ; seule la suite graphique isolée (broadway privé) ouvre un affichage.
 # Variables vidées plutôt que retirées : environment().unset() n'existe qu'à partir de meson 1.4.
 test_env.set('DISPLAY', '')
 test_env.set('WAYLAND_DISPLAY', '')
@@ -45,9 +54,9 @@ foreach name, extra_deps : unit_tests
 	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env)
 endforeach
 
-# Tests d'intégration : vrais modules de src/ compilés avec des bouchons d'interface (tests/stubs/), sans fenêtre.
+# Tests d'intégration : vrais modules de la couche application (src/) compilés avec des bouchons (tests/stubs/) ou leur propre table
+# GtAppUi, sans GTK ni fenêtre.
 stub_journal = files('stubs/stub_journal.c')
-stub_ui = files('stubs/stub_ui.c')
 stub_link = files('stubs/stub_link.c')
 stubs_inc = include_directories('stubs')
 
@@ -63,13 +72,23 @@ integration_tests = {
 		'link_args' : ['-Wl,--wrap=ioctl', '-Wl,--wrap=getaddrinfo'],
 	},
 	'test_macros_send' : {
-		'sources' : files('../src/macros.c') + stub_journal + stub_ui + stub_link,
-		'deps' : [gtk_deps],
+		'sources' : files('../src/macros.c') + stub_journal + stub_link,
+		'deps' : [gobject_dep],
+		'link_args' : [],
+	},
+	'test_app_config' : {
+		'sources' : files('../src/app_config.c', 'stubs/stub_macros_file.c') + stub_journal + stub_link,
+		'deps' : [gobject_dep],
+		'link_args' : [],
+	},
+	'test_cmdline' : {
+		'sources' : files('../src/cmdline.c', '../src/app_config.c', 'stubs/stub_macros_file.c') + stub_journal + stub_link,
+		'deps' : [gobject_dep],
 		'link_args' : [],
 	},
 	'test_script_engine' : {
 		'sources' : files('../src/script_engine.c', 'stubs/stub_macros.c') + stub_journal + stub_link,
-		'deps' : [gtk_deps, lua_dep, util_dep],
+		'deps' : [gobject_dep, lua_dep, util_dep],
 		'link_args' : ['-Wl,--wrap=ioctl', '-Wl,--wrap=getaddrinfo'],
 	},
 }
@@ -84,10 +103,27 @@ foreach name, t : integration_tests
 	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env, timeout : 60)
 endforeach
 
+# Logique sans affichage de l'interface GTK 4 (éditeur de macros) : ni gtk_init ni fenêtre (GDK_BACKEND invalide de test_env). Mêmes drapeaux de version que
+# src/ui/ (ui_c_args, variable globale de src/ui/meson.build, lu avant tests/).
+ui_logic_tests = {
+	'test_macro_row' : {'sources' : files('../src/ui/macro_row.c'), 'deps' : [gio_dep]},
+	'test_macro_accel' : {'sources' : files('../src/ui/macro_accel.c'), 'deps' : [gtk4_dep]},
+}
+foreach name, t : ui_logic_tests
+	exe = executable(name, [name + '.c'] + t['sources'],
+		c_args : ui_c_args,
+		include_directories : include_directories('../src/ui'),
+		dependencies : [gtkterm_core_dep] + t['deps'])
+	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env)
+endforeach
+
 # Syntaxe de tous les exemples Lua de scripts/ au moment du test ; sauté (code 77) si luac est absent.
 test('lua-syntax', find_program('sh'), args : [files('lua-syntax.sh'), meson.project_source_root() / 'scripts'], suite : 'lint')
 
-subdir('gui')
+# Suite graphique GTK 4 : seulement si le crochet de test est construit (-Dtest_hooks, défaut true)
+if get_option('test_hooks')
+	subdir('gui')
+endif
 
 # La suite graphique ne tourne que sur demande : meson test -C build --suite gui
 add_test_setup('default', exclude_suites : ['gui'], is_default : true)

@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Barre de menus de la fenêtre principale (GMenuModel, chargée par main_window.c) et menu contextuel du terminal (app_actions.c). Chaque élément vise
+     une action app.* ; raccourcis : gtk_application_set_accels_for_action, pas d'attribut « accel » ; libellés sans mnémonique. -->
+<interface>
+  <menu id="menubar">
+    <submenu>
+      <attribute name="label" translatable="yes">File</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Clear screen</attribute>
+          <attribute name="action">app.clear-screen</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Clear scrollback</attribute>
+          <attribute name="action">app.clear-scrollback</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Send RAW file</attribute>
+          <attribute name="action">app.send-file</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save RAW file</attribute>
+          <attribute name="action">app.save-raw</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save ASCII file</attribute>
+          <attribute name="action">app.save-ascii</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Quit</attribute>
+          <attribute name="action">app.quit</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Edit</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Copy</attribute>
+          <attribute name="action">app.copy</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Paste</attribute>
+          <attribute name="action">app.paste</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Find</attribute>
+          <attribute name="action">app.find</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Select All</attribute>
+          <attribute name="action">app.select-all</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Log</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">To file...</attribute>
+          <attribute name="action">app.log-start</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Pause</attribute>
+          <attribute name="action">app.log-paused</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Stop</attribute>
+          <attribute name="action">app.log-stop</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Clear</attribute>
+          <attribute name="action">app.log-clear</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Configuration</attribute>
+      <section id="configuration-dialogs">
+        <item>
+          <attribute name="label" translatable="yes">Port</attribute>
+          <attribute name="action">app.port</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Main window</attribute>
+          <attribute name="action">app.terminal</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Local echo</attribute>
+          <attribute name="action">app.local-echo</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Autoreconnect</attribute>
+          <attribute name="action">app.auto-reconnect</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">CR LF auto</attribute>
+          <attribute name="action">app.crlf-auto</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">ESC clear screen</attribute>
+          <attribute name="action">app.esc-clear-screen</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Timestamp</attribute>
+          <attribute name="action">app.timestamp</attribute>
+        </item>
+      </section>
+      <section id="configuration-macros">
+        <item>
+          <attribute name="label" translatable="yes">Macros</attribute>
+          <attribute name="action">app.macros</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Load macros file...</attribute>
+          <attribute name="action">app.load-macros</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save macros file</attribute>
+          <attribute name="action">app.save-macros</attribute>
+        </item>
+      </section>
+      <section id="configuration-profiles">
+        <item>
+          <attribute name="label" translatable="yes">Load configuration</attribute>
+          <attribute name="action">app.load-profile</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save configuration</attribute>
+          <attribute name="action">app.save-profile</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Delete configuration</attribute>
+          <attribute name="action">app.delete-profile</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Control signals</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Send break</attribute>
+          <attribute name="action">app.send-break</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Open Port</attribute>
+          <attribute name="action">app.open-port</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Close Port</attribute>
+          <attribute name="action">app.close-port</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Toggle DTR</attribute>
+          <attribute name="action">app.toggle-dtr</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Toggle RTS</attribute>
+          <attribute name="action">app.toggle-rts</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">View</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">ASCII</attribute>
+          <attribute name="action">app.view-mode</attribute>
+          <attribute name="target">ascii</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Hexadecimal</attribute>
+          <attribute name="action">app.view-mode</attribute>
+          <attribute name="target">hex</attribute>
+        </item>
+        <submenu>
+          <attribute name="label" translatable="yes">Hexadecimal chars</attribute>
+          <item>
+            <attribute name="label">8</attribute>
+            <attribute name="action">app.hex-bytes</attribute>
+            <attribute name="target" type="u">8</attribute>
+          </item>
+          <item>
+            <attribute name="label">10</attribute>
+            <attribute name="action">app.hex-bytes</attribute>
+            <attribute name="target" type="u">10</attribute>
+          </item>
+          <item>
+            <attribute name="label">16</attribute>
+            <attribute name="action">app.hex-bytes</attribute>
+            <attribute name="target" type="u">16</attribute>
+          </item>
+          <item>
+            <attribute name="label">24</attribute>
+            <attribute name="action">app.hex-bytes</attribute>
+            <attribute name="target" type="u">24</attribute>
+          </item>
+          <item>
+            <attribute name="label">32</attribute>
+            <attribute name="action">app.hex-bytes</attribute>
+            <attribute name="target" type="u">32</attribute>
+          </item>
+        </submenu>
+        <item>
+          <attribute name="label" translatable="yes">Show index</attribute>
+          <attribute name="action">app.hex-index</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Send hexadecimal data</attribute>
+          <attribute name="action">app.show-hex-bar</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Macro panel</attribute>
+          <attribute name="action">app.show-macro-panel</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Script panel</attribute>
+          <attribute name="action">app.show-script-panel</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Help</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Check for updates…</attribute>
+          <attribute name="action">app.updates</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">About</attribute>
+          <attribute name="action">app.about</attribute>
+        </item>
+      </section>
+    </submenu>
+  </menu>
+  <menu id="terminal-context">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Copy</attribute>
+        <attribute name="action">app.copy</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Paste</attribute>
+        <attribute name="action">app.paste</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Find</attribute>
+        <attribute name="action">app.find</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Select All</attribute>
+        <attribute name="action">app.select-all</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>

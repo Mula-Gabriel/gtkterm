@@ -1,0 +1,9 @@
+#!/bin/sh
+# Faux xterm de la suite gui : journalise ses arguments dans $EM_FAKEGIT_LOG (« FAKEXTERM » puis chaque argument précédé d'une tabulation)
+# et n'exécute RIEN — surtout pas le script de mise à jour (pkexec, installation).
+{
+	printf 'FAKEXTERM'
+	for a in "$@"; do printf '\t%s' "$a"; done
+	printf '\n'
+} >> "${EM_FAKEGIT_LOG:-/dev/null}"
+exit 0

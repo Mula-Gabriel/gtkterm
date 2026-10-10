@@ -5,7 +5,7 @@ baudrates_h = custom_target(
 	    input : 'baudrates.sh',
 	    command : [prog_sh, '@INPUT@', '@OUTPUT@'])
 
-# Cœur sans GTK : compilé une fois, lié par l'exécutable et par les tests (tests/).
+# Cœur sans GTK (GLib, GObject, GIO) : compilé une fois, lié par l'exécutable et par les tests (tests/).
 core_sources = [
 	'baud.c',
 	'baudrates.c',
@@ -22,6 +22,8 @@ core_sources = [
 	'macro_file.h',
 	'macro_poller.c',
 	'macro_poller.h',
+	'macro_view.c',
+	'macro_view.h',
 	'serial_termios.c',
 	'serial_termios.h',
 	'config_file.c',
@@ -38,27 +40,45 @@ core_sources = [
 	'transport.h',
 	'profile.c',
 	'profile.h',
+	'serial_ports.c',
+	'serial_ports.h',
+	'port_form.c',
+	'port_form.h',
 	'config_store.c',
 	'config_store.h',
 	'rx_queue.c',
 	'rx_queue.h',
 	'script_port.c',
 	'script_port.h',
+	'term_options.c',
+	'term_options.h',
+	'hex_input.c',
+	'hex_input.h',
+	'capture.c',
+	'capture.h',
+	'file_sender.c',
+	'file_sender.h',
+	'rx_logger.c',
+	'rx_logger.h',
+	'update_check.c',
+	'update_check.h',
+	'app_ui.c',
+	'app_ui.h',
 ]
 
 gtkterm_core = static_library(
 	'gtkterm_core', core_sources,
-	dependencies : [glib_dep, config]
+	dependencies : [glib_dep, gobject_dep, gio_dep, config]
 )
 
 gtkterm_core_dep = declare_dependency(
 	link_with : gtkterm_core,
 	include_directories : include_directories('.'),
-	dependencies : [glib_dep, config]
+	dependencies : [glib_dep, gobject_dep, gio_dep, config]
 )
 
 # Révision git recalculée à chaque construction (le fichier n'est réécrit que si elle change).
-# safe.directory=* : l'installation (pkexec/sudo ninja install) relance ceci en root dans un dépôt
+# safe.directory=* : l'installation (pkexec meson install) peut relancer ceci en root dans un dépôt
 # appartenant à l'utilisateur ; sans cette option, git refuse et la révision deviendrait « unknown ».
 git_revision_h = vcs_tag(
 	command : ['git', '-c', 'safe.directory=*', 'rev-parse', 'HEAD'],
@@ -68,51 +88,28 @@ git_revision_h = vcs_tag(
 	replace_string : '@GIT_REVISION@'
 )
 
-sources = [
+# Couche application (GLib, gudev, Lua ; aucun en-tête GTK, vérifié par grep, spec §14-3) : bibliothèque statique liée par l'interface
+# GTK 4 (src/ui/). Compilée sans dépendance GTK : un en-tête GTK inclus par erreur casse la construction. Les tests d'intégration
+# (tests/meson.build) compilent les mêmes fichiers avec leurs bouchons.
+app_layer_sources = [
+	'app_config.c',
+	'app_config.h',
 	'cmdline.c',
 	'cmdline.h',
-	'files.c',
-	'files.h',
-	'gtkterm.c',
-	'interface.c',
-	'interface.h',
-	'logging.c',
-	'logging.h',
-	'macros.c',
-	'macros.h',
-	'terminal_display.c',
-	'terminal_display.h',
-	'macro_panel.c',
-	'macro_panel.h',
-	'search.c',
-	'search.h',
 	'link.c',
 	'link.h',
-	'term_config.c',
-	'term_config.h',
-	'update.c',
-	'update.h',
-	'user_signals.c',
-	'user_signals.h',
+	'macros.c',
+	'macros.h',
 	'script_engine.c',
 	'script_engine.h',
-	'script_panel.c',
-	'script_panel.h',
-	git_revision_h,
-	gresources
 ]
 
-gtkterm_exe = executable(
-	'gtkterm', sources,
-	export_dynamic : true,
-	dependencies : [
-		gtk_deps,
-		vte_deps,
-		config,
-		gudev_deps,
-		lua_dep,
-		gsv_dep,
-		gtkterm_core_dep
-	],
-	install : true
-)
+gtkterm_app = static_library('gtkterm_app', app_layer_sources,
+	dependencies : [gtkterm_core_dep, gudev_deps, lua_dep, config])
+
+gtkterm_app_dep = declare_dependency(
+	link_with : gtkterm_app,
+	dependencies : [gtkterm_core_dep, gudev_deps, lua_dep, config])
+
+# Interface GTK 4 : l'exécutable gtkterm (gtkterm_exe).
+subdir('ui')

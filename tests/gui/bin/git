@@ -1,6 +1,20 @@
 #!/bin/sh
-# Faux git : aucune connexion réseau. Journalise l'appel ; renvoie un SHA configurable après un délai.
-echo "FAKEGIT $*" >> "${EM_FAKEGIT_LOG:-/dev/null}"
-sleep "${EM_FAKEGIT_DELAY:-0}"
-if [ -n "$EM_FAKEGIT_SHA" ]; then printf '%s\tHEAD\n' "$EM_FAKEGIT_SHA"; exit 0; fi
+# Faux git de la suite gui : aucune connexion réseau, aucun dépôt touché.
+# Journalise chaque appel dans $EM_FAKEGIT_LOG : une ligne « FAKEGIT » suivie de chaque argument précédé d'une tabulation.
+# « ls-remote » : attend $EM_FAKEGIT_DIR/delay secondes (si ce fichier existe), puis répond « <sha>\tHEAD » avec le contenu de
+# $EM_FAKEGIT_DIR/sha ; sans ce fichier, échoue comme une URL injoignable (code 128). Toute autre commande (merge-base…) échoue (code 1).
+{
+	printf 'FAKEGIT'
+	for a in "$@"; do printf '\t%s' "$a"; done
+	printf '\n'
+} >> "${EM_FAKEGIT_LOG:-/dev/null}"
+ls_remote=0
+for a in "$@"; do
+	if [ "$a" = ls-remote ]; then ls_remote=1; fi
+done
+[ "$ls_remote" = 1 ] || exit 1
+d="${EM_FAKEGIT_DIR:-/nonexistent}"
+if [ -r "$d/delay" ]; then sleep "$(cat "$d/delay")"; fi
+if [ -r "$d/sha" ]; then printf '%s\tHEAD\n' "$(cat "$d/sha")"; exit 0; fi
+echo "fatal: repository not found (faux git)" >&2
 exit 128

@@ -122,6 +122,65 @@ gboolean gt_profile_validate(GtProfile *p, GPtrArray *warnings)
 	return warnings->len == before;
 }
 
+G_DEFINE_QUARK(gt-profile-error-quark, gt_profile_error)
+
+/* Groupes réservés du magasin (config_store.c) : un profil de ce nom serait confondu avec eux dans les messages et les listes */
+static const gchar * const reserved_names[] = { "window", "colors", "layout", "session", NULL };
+
+gboolean gt_profile_name_validate(const gchar *name, gchar **normalized, GError **error)
+{
+	gchar *trimmed;
+
+	if(normalized != NULL)
+		*normalized = NULL;
+	if(name == NULL)
+		name = "";
+	if(!g_utf8_validate(name, -1, NULL))
+	{
+		g_set_error_literal(error, GT_PROFILE_ERROR, GT_PROFILE_ERROR_NAME_INVALID_CHAR,
+		                    _("The configuration name cannot contain \"[\", \"]\" or control characters."));
+		return FALSE;
+	}
+	trimmed = g_strstrip(g_strdup(name));
+	if(trimmed[0] == '\0')
+	{
+		g_set_error_literal(error, GT_PROFILE_ERROR, GT_PROFILE_ERROR_NAME_EMPTY, _("The configuration name cannot be empty."));
+		g_free(trimmed);
+		return FALSE;
+	}
+	if(g_utf8_strlen(trimmed, -1) > GT_PROFILE_NAME_MAX)
+	{
+		g_set_error(error, GT_PROFILE_ERROR, GT_PROFILE_ERROR_NAME_TOO_LONG, _("The configuration name is too long (%d characters at most)."),
+		            GT_PROFILE_NAME_MAX);
+		g_free(trimmed);
+		return FALSE;
+	}
+	for(const gchar *c = trimmed; *c != '\0'; c = g_utf8_next_char(c))
+	{
+		gunichar u = g_utf8_get_char(c);
+
+		if(u == '[' || u == ']' || g_unichar_iscntrl(u))
+		{
+			g_set_error_literal(error, GT_PROFILE_ERROR, GT_PROFILE_ERROR_NAME_INVALID_CHAR,
+			                    _("The configuration name cannot contain \"[\", \"]\" or control characters."));
+			g_free(trimmed);
+			return FALSE;
+		}
+	}
+	for(gint i = 0; reserved_names[i] != NULL; i++)
+		if(g_ascii_strcasecmp(trimmed, reserved_names[i]) == 0)
+		{
+			g_set_error(error, GT_PROFILE_ERROR, GT_PROFILE_ERROR_NAME_RESERVED, _("\"%s\" is a reserved name."), trimmed);
+			g_free(trimmed);
+			return FALSE;
+		}
+	if(normalized != NULL)
+		*normalized = trimmed;
+	else
+		g_free(trimmed);
+	return TRUE;
+}
+
 void gt_profile_to_transport_params(const GtProfile *p, TransportParams *out)
 {
 	memset(out, 0, sizeof(*out));

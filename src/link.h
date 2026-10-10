@@ -9,8 +9,8 @@
  *   de l'envoi (lui-même parfois un gestionnaire de « received ») ; « notify::state » et « notify::status-text » peuvent
  *   l'être sous cette même surveillance (connexion établie, client TCP arrivé ou parti), au signalement différé d'une perte,
  *   sous le moniteur udev, la minuterie de reconnexion, ou dans gt_link_open / gt_link_close ;
- * - leurs gestionnaires ne doivent ni appeler gt_link_open / gt_link_close, ni lancer de boucle imbriquée (gtk_dialog_run,
- *   show_message…) : différer par g_idle_add ;
+ * - leurs gestionnaires ne doivent ni appeler gt_link_open / gt_link_close, ni lancer de boucle imbriquée (g_main_loop_run,
+ *   dialogue attendu de façon synchrone…) : différer par g_idle_add ;
  * - « open-failed » n'est émis que dans gt_link_open ou depuis une source d'inactivité (échec asynchrone d'un client TCP),
  *   jamais sous la surveillance : son gestionnaire peut ouvrir une boîte de dialogue. */
 #ifndef LINK_H_
@@ -56,6 +56,9 @@ void         gt_link_toggle_line(GtkTermLink *link, GtModemLine line);
 void         gt_link_send_break(GtkTermLink *link);
 gint         gt_link_get_fd(GtkTermLink *link);
 GtLinkState  gt_link_get_state(GtkTermLink *link);
+/* Vrai si la liaison est ouverte (GT_LINK_OPEN) sur un port série : Send break, DTR/RTS et voyants n'ont de sens que là.
+ * Un passage d'une liaison TCP ouverte à une liaison série ouverte laisse « state » à OPEN : relire sur notify::state ET notify::status-text. */
+gboolean     gt_link_is_serial_open(GtkTermLink *link);
 const gchar *gt_link_get_status_text(GtkTermLink *link);
 GtHistory   *gt_link_get_history(GtkTermLink *link);
 /* Vide l'historique et émet « history-cleared » (commande « Effacer l'écran », Échap). */

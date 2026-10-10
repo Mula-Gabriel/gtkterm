@@ -69,6 +69,50 @@ test_rmdir(const gchar *dir)
 	g_rmdir(dir);
 }
 
+/* Supprime un répertoire temporaire et tout son contenu (sous-dossiers compris, liens non suivis). */
+static inline void
+test_rmdir_recursive(const gchar *dir)
+{
+	GDir *d = g_dir_open(dir, 0, NULL);
+	const gchar *name;
+
+	if(d == NULL)
+		return;
+	while((name = g_dir_read_name(d)) != NULL)
+	{
+		gchar *path = g_build_filename(dir, name, NULL);
+
+		if(g_file_test(path, G_FILE_TEST_IS_DIR) && !g_file_test(path, G_FILE_TEST_IS_SYMLINK))
+			test_rmdir_recursive(path);
+		else
+			g_unlink(path);
+		g_free(path);
+	}
+	g_dir_close(d);
+	g_rmdir(dir);
+}
+
+/* HOME et dossiers XDG privés, sous une racine temporaire : jamais le vrai ~/.config. À appeler en tête de main(), avant tout appel
+ * GLib qui les met en cache (g_get_user_config_dir…). Renvoie la racine (à supprimer par test_rmdir_recursive, puis g_free). */
+static inline gchar *
+test_private_dirs(void)
+{
+	static const gchar * const vars[][2] = { { "HOME", "home" }, { "XDG_CONFIG_HOME", "config" }, { "XDG_CACHE_HOME", "cache" },
+	                                         { "XDG_DATA_HOME", "data" }, { "XDG_STATE_HOME", "state" } };
+	gchar *root = g_dir_make_tmp("gtkterm-test-XXXXXX", NULL);
+
+	g_assert_nonnull(root);
+	for(gsize i = 0; i < G_N_ELEMENTS(vars); i++)
+	{
+		gchar *path = g_build_filename(root, vars[i][1], NULL);
+
+		g_assert_cmpint(g_mkdir_with_parents(path, 0700), ==, 0);
+		g_setenv(vars[i][0], path, TRUE);
+		g_free(path);
+	}
+	return root;
+}
+
 /* Résolution de « localhost » rendue déterministe (tests des adresses essayées l'une après l'autre) : ::1 d'abord, puis 127.0.0.1,
  * quelle que soit la configuration de la machine. real : la vraie getaddrinfo (__real_getaddrinfo). Rend FALSE (rien fait) pour
  * tout autre nom. Les deux résultats sont chaînés : freeaddrinfo libère l'ensemble. */

@@ -1,5 +1,5 @@
 /* Rendu des vues ASCII et hexadécimale du terminal, écho compris, vers les octets à donner à VTE (sous-projet 2).
-   Pur : aucune dépendance GTK ; terminal_display.c se contente d'alimenter VTE avec la sortie. */
+   Pur : aucune dépendance GTK ; src/ui/terminal_view.c se contente d'alimenter VTE avec la sortie. */
 #ifndef VIEW_RENDER_H_
 #define VIEW_RENDER_H_
 

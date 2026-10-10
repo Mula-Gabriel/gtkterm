@@ -63,6 +63,21 @@ gboolean     gt_profile_validate(GtProfile *p, GPtrArray *warnings);
 /* À libérer avec transport_params_clear */
 void         gt_profile_to_transport_params(const GtProfile *p, TransportParams *out);
 
+/* Noms de profil (spec §3.2-13) */
+#define GT_PROFILE_NAME_MAX 64
+#define GT_PROFILE_ERROR (gt_profile_error_quark())
+typedef enum
+{
+	GT_PROFILE_ERROR_NAME_EMPTY,
+	GT_PROFILE_ERROR_NAME_TOO_LONG,
+	GT_PROFILE_ERROR_NAME_INVALID_CHAR,
+	GT_PROFILE_ERROR_NAME_RESERVED
+} GtProfileError;
+GQuark       gt_profile_error_quark(void);
+/* Rogne ; 1 à 64 caractères ; refuse « [ », « ] », les caractères de contrôle et les noms réservés (window, colors, layout, session, sans casse).
+ * Succès : *normalized (si non NULL) reçoit le nom rogné (g_free). Échec : GError GT_PROFILE_ERROR (message traduit), *normalized = NULL. */
+gboolean     gt_profile_name_validate(const gchar *name, gchar **normalized, GError **error);
+
 /* Noms écrits dans .gtktermrc ; lecture sans tenir compte de la casse, out inchangé si le nom est inconnu */
 const gchar *gt_parity_to_string(GtParity v);
 gboolean     gt_parity_from_string(const gchar *s, GtParity *out);

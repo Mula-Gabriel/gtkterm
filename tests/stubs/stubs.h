@@ -18,4 +18,7 @@ void         stub_inject_rx(const gchar *data, guint len);
 void         stub_link_set_write_fails(gboolean fails);
 void         stub_link_set_state(gint state);	/* GtLinkState rendu par gt_link_get_state ; GT_LINK_OPEN après stub_reset */
 
+/* Fichier de macros (stub_macros_file.c) : chemin rendu par macros_file_get_path, NULL : aucun */
+void         stub_macros_file_set_path(const gchar *path);
+
 #endif

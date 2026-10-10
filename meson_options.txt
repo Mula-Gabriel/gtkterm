@@ -1,3 +1,5 @@
 # meson construit toujours les prérequis des tests avec « ninja » : désactiver la suite pour une
 # construction destinée seulement à l'installation (c'est ce que fait data/gtkterm-update.sh).
 option('tests', type : 'boolean', value : true, description : 'Construire et déclarer la suite de tests (meson test)')
+option('test_hooks', type : 'boolean', value : true,
+	description : 'Crochet de test de l\'interface GTK 4 (actif seulement si GTKTERM_TEST_HOOKS=1) ; false le retire du binaire')

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/eu/mulagabriel/gtkterm/ui">
+    <file preprocess="xml-stripblanks">menus.ui</file>
+    <file preprocess="xml-stripblanks">terminal_dialog.ui</file>
+    <file alias="gtkterm_64x64.png">../../data/gtkterm_64x64.png</file>
+  </gresource>
+</gresources>
