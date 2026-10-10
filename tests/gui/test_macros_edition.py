@@ -52,7 +52,7 @@ envoi('B', b'<B5::x|y>')
 open_editor(e)
 e.action('macros')                     # synchrone : une seconde fenêtre serait déjà présentée au retour
 e.after_frame()
-check(len([w for w in e.windows() if w.get('title') == 'Configure Macros']) == 1, 'fenetre d\'edition a instance unique')
+check(len([w for w in e.windows() if w.get('name') == 'macro-editor']) == 1, 'fenetre d\'edition a instance unique (par session)')
 editor_select(e, 1)
 e.activate('macro-up')
 check(wait_until(lambda: libelles() == ['C', 'B']), 'C remontee')

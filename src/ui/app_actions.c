@@ -2,8 +2,8 @@
 /* app_actions.c                                                       */
 /*                                                                     */
 /*   Purpose                                                           */
-/*      Actions app.* d'options, de vue, de liaison et d'édition       */
-/*      (sous-projet 6a)                                               */
+/*      Actions de page du terminal (groupe de la session) et          */
+/*      raccourcis des actions app.* d'onglet (sous-projets 6a, 6b)    */
 /*                                                                     */
 /***********************************************************************/
 
@@ -12,136 +12,76 @@
 #include <gtk/gtk.h>
 #include <vte/vte.h>
 
-#include "app.h"
 #include "app_actions.h"
-#include "app_ui.h"
 #include "terminal_view.h"
+
+/* Actions de page d'un terminal : rangées comme donnée du groupe de la session (aucune statique d'onglet) ; libérées par le retrait
+ * (gt_app_actions_uninstall) ou avec le groupe */
+#define PAGE_ACTIONS_KEY "gt-app-actions"
 
 typedef struct
 {
-	GtkApplication *app;	/* non possédée */
-	GtkTermLink *link;	/* référence */
-	GtTermOptions *opts;	/* référence */
-	GtkWidget *view;	/* vue du terminal de la fenêtre principale (pointeur faible) */
+	GtkWidget *view;	/* vue du terminal de la page (pointeur faible) */
 	VteTerminal *vte;	/* son VteTerminal (pointeur faible) */
 	gulong selection_handler;
-	GMenuModel *context;	/* menu « terminal-context » de menus.ui (référence) */
-} ActionsState;
+	GSimpleAction *copy;	/* non possédée : le groupe la tient tant que cette structure vit */
+} PageActions;
 
-static ActionsState st;
+static const gchar *const page_action_names[] = { "clear-scrollback", "copy", "paste", "select-all" };
 
-static void action_set_enabled(const gchar *name, gboolean enabled)
+static void update_copy(PageActions *pa)
 {
-	GAction *a;
-
-	if(st.app == NULL)
-		return;
-	a = g_action_map_lookup_action(G_ACTION_MAP(st.app), name);
-	if(a != NULL)
-		g_simple_action_set_enabled(G_SIMPLE_ACTION(a), enabled);
-}
-
-/* Send break, DTR, RTS : seulement sur une liaison série ouverte (d'après la liaison, plus d'après le profil) */
-static void update_serial_actions(void)
-{
-	gboolean serial = st.link != NULL && gt_link_is_serial_open(st.link);
-
-	action_set_enabled("send-break", serial);
-	action_set_enabled("toggle-dtr", serial);
-	action_set_enabled("toggle-rts", serial);
-}
-
-static void update_copy(void)
-{
-	action_set_enabled("copy", st.vte != NULL && vte_terminal_get_has_selection(st.vte));
-}
-
-/* notify::state et notify::status-text : peut tourner sous la surveillance du transport, ne fait que changer des sensibilités */
-static void on_link_notify(GObject *object, GParamSpec *pspec, gpointer user_data)
-{
-	update_serial_actions();
+	g_simple_action_set_enabled(pa->copy, pa->vte != NULL && vte_terminal_get_has_selection(pa->vte));
 }
 
 static void on_selection_changed(VteTerminal *vte, gpointer user_data)
 {
-	update_copy();
-}
-
-static void on_clear_screen(GSimpleAction *action, GVariant *param, gpointer user_data)
-{
-	gt_link_clear_history(st.link);
+	update_copy(user_data);
 }
 
 /* Ne vide que le défilement du terminal : un réaffichage le fait revenir depuis l'historique (spec §3.2-11) */
 static void on_clear_scrollback(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	if(st.view != NULL)
-		gt_terminal_view_clear_scrollback(st.view);
+	PageActions *pa = user_data;
+
+	if(pa->view != NULL)
+		gt_terminal_view_clear_scrollback(pa->view);
 }
 
 static void on_copy(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	if(st.vte != NULL && vte_terminal_get_has_selection(st.vte))
-		vte_terminal_copy_clipboard_format(st.vte, VTE_FORMAT_TEXT);
+	PageActions *pa = user_data;
+
+	if(pa->vte != NULL && vte_terminal_get_has_selection(pa->vte))
+		vte_terminal_copy_clipboard_format(pa->vte, VTE_FORMAT_TEXT);
 }
 
 /* Le texte collé revient par « commit » et part sur le port comme une frappe */
 static void on_paste(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	if(st.vte != NULL)
-		vte_terminal_paste_clipboard(st.vte);
+	PageActions *pa = user_data;
+
+	if(pa->vte != NULL)
+		vte_terminal_paste_clipboard(pa->vte);
 }
 
 static void on_select_all(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	if(st.vte != NULL)
-		vte_terminal_select_all(st.vte);
-}
+	PageActions *pa = user_data;
 
-static void on_open_port(GSimpleAction *action, GVariant *param, gpointer user_data)
-{
-	gt_app_open_port();
-}
-
-static void on_close_port(GSimpleAction *action, GVariant *param, gpointer user_data)
-{
-	gt_app_close_port();
-}
-
-static void on_send_break(GSimpleAction *action, GVariant *param, gpointer user_data)
-{
-	if(!gt_link_is_serial_open(st.link))
-		return;
-	gt_link_send_break(st.link);
-	gt_app_status_flash(800, "%s", _("Break signal sent!"));
-}
-
-static void on_toggle_dtr(GSimpleAction *action, GVariant *param, gpointer user_data)
-{
-	if(gt_link_is_serial_open(st.link))
-		gt_link_toggle_line(st.link, GT_MODEM_DTR);
-}
-
-static void on_toggle_rts(GSimpleAction *action, GVariant *param, gpointer user_data)
-{
-	if(gt_link_is_serial_open(st.link))
-		gt_link_toggle_line(st.link, GT_MODEM_RTS);
+	if(pa->vte != NULL)
+		vte_terminal_select_all(pa->vte);
 }
 
 static const GActionEntry entries[] =
 {
-	{ "clear-screen", on_clear_screen, NULL, NULL, NULL, { 0 } },
-	{ "clear-scrollback", on_clear_scrollback, NULL, NULL, NULL, { 0 } },
-	{ "copy", on_copy, NULL, NULL, NULL, { 0 } },
-	{ "paste", on_paste, NULL, NULL, NULL, { 0 } },
-	{ "select-all", on_select_all, NULL, NULL, NULL, { 0 } },
-	{ "open-port", on_open_port, NULL, NULL, NULL, { 0 } },
-	{ "close-port", on_close_port, NULL, NULL, NULL, { 0 } },
-	{ "send-break", on_send_break, NULL, NULL, NULL, { 0 } },
-	{ "toggle-dtr", on_toggle_dtr, NULL, NULL, NULL, { 0 } },
-	{ "toggle-rts", on_toggle_rts, NULL, NULL, NULL, { 0 } },
+	{ .name = "clear-scrollback", .activate = on_clear_scrollback },
+	{ .name = "copy", .activate = on_copy },
+	{ .name = "paste", .activate = on_paste },
+	{ .name = "select-all", .activate = on_select_all },
 };
 
+/* Raccourcis de 6a, inchangés (actions de session et de page, toutes relayées en app.*) */
 static const struct
 {
 	const gchar *action;
@@ -158,87 +98,62 @@ static const struct
 	{ "app.close-port", { "F6", NULL } },
 	{ "app.toggle-dtr", { "F7", NULL } },
 	{ "app.toggle-rts", { "F8", NULL } },
+	{ "app.find", { "<Control><Shift>f", NULL } },
+	{ "app.send-file", { "<Control><Shift>r", NULL } },
 };
 
-static void add_property_action(GtkApplication *app, const gchar *name, gpointer object, const gchar *property)
+void gt_app_actions_set_accels(GtkApplication *app)
 {
-	GPropertyAction *action = g_property_action_new(name, object, property);
-
-	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(action));
-	g_object_unref(action);
-}
-
-void gt_app_actions_install(GtkApplication *app, GtkTermLink *link, GtTermOptions *opts)
-{
-	g_return_if_fail(GTK_IS_APPLICATION(app) && GT_IS_LINK(link) && GT_IS_TERM_OPTIONS(opts));
-
-	st.app = app;
-	st.link = g_object_ref(link);
-	st.opts = g_object_ref(opts);
-
-	add_property_action(app, "local-echo", opts, "echo");
-	add_property_action(app, "crlf-auto", opts, "crlf-auto");
-	add_property_action(app, "timestamp", opts, "timestamp");
-	add_property_action(app, "esc-clear-screen", opts, "esc-clear-screen");
-	add_property_action(app, "hex-index", opts, "hex-show-index");
-	add_property_action(app, "view-mode", opts, "view-mode");	/* état chaîne : nick « ascii » / « hex » */
-	add_property_action(app, "hex-bytes", opts, "hex-bytes-per-line");	/* état « u » */
-	add_property_action(app, "auto-reconnect", link, "auto-reconnect");
-
-	g_action_map_add_action_entries(G_ACTION_MAP(app), entries, G_N_ELEMENTS(entries), NULL);
 	for(gsize i = 0; i < G_N_ELEMENTS(accels); i++)
 		gtk_application_set_accels_for_action(app, accels[i].action, accels[i].accels);
-
-	g_signal_connect(link, "notify::state", G_CALLBACK(on_link_notify), NULL);
-	g_signal_connect(link, "notify::status-text", G_CALLBACK(on_link_notify), NULL);
-	update_serial_actions();
-	update_copy();
 }
 
-void gt_app_actions_attach_terminal(GtkApplication *app, GtkWidget *terminal_view)
+/* Destruction (retrait ou groupe finalisé) : plus aucun lien vers le terminal */
+static void page_actions_free(gpointer data)
 {
-	/* menus.ui n'est pas chargé d'office par GtkApplication (ressource sous …/ui/) : lu ici une fois, comme la barre de menus */
-	if(st.context == NULL)
-	{
-		GtkBuilder *builder = gtk_builder_new_from_resource("/eu/mulagabriel/gtkterm/ui/menus.ui");
+	PageActions *pa = data;
 
-		st.context = g_object_ref(G_MENU_MODEL(gtk_builder_get_object(builder, "terminal-context")));
-		g_object_unref(builder);
+	if(pa->vte != NULL)
+	{
+		g_clear_signal_handler(&pa->selection_handler, pa->vte);
+		g_object_remove_weak_pointer(G_OBJECT(pa->vte), (gpointer *)&pa->vte);
 	}
-	gt_app_actions_detach_terminal();
-	st.view = terminal_view;
-	g_object_add_weak_pointer(G_OBJECT(st.view), (gpointer *)&st.view);
-	st.vte = gt_terminal_view_get_vte(terminal_view);
-	g_object_add_weak_pointer(G_OBJECT(st.vte), (gpointer *)&st.vte);
-	st.selection_handler = g_signal_connect(st.vte, "selection-changed", G_CALLBACK(on_selection_changed), NULL);
-	vte_terminal_set_context_menu_model(st.vte, st.context);
-	update_copy();
+	if(pa->view != NULL)
+		g_object_remove_weak_pointer(G_OBJECT(pa->view), (gpointer *)&pa->view);
+	g_free(pa);
 }
 
-void gt_app_actions_detach_terminal(void)
+void gt_app_actions_install(GActionMap *tab_actions, GtkWidget *terminal_view)
 {
-	if(st.vte != NULL)
-	{
-		g_clear_signal_handler(&st.selection_handler, st.vte);
-		g_object_remove_weak_pointer(G_OBJECT(st.vte), (gpointer *)&st.vte);
-		st.vte = NULL;
-	}
-	st.selection_handler = 0;
-	if(st.view != NULL)
-	{
-		g_object_remove_weak_pointer(G_OBJECT(st.view), (gpointer *)&st.view);
-		st.view = NULL;
-	}
-	update_copy();
+	PageActions *pa;
+	GtkBuilder *builder;
+
+	g_return_if_fail(G_IS_ACTION_MAP(tab_actions) && GTK_IS_WIDGET(terminal_view));
+	g_return_if_fail(g_object_get_data(G_OBJECT(tab_actions), PAGE_ACTIONS_KEY) == NULL);
+
+	pa = g_new0(PageActions, 1);
+	pa->view = terminal_view;
+	g_object_add_weak_pointer(G_OBJECT(pa->view), (gpointer *)&pa->view);
+	pa->vte = gt_terminal_view_get_vte(terminal_view);
+	g_object_add_weak_pointer(G_OBJECT(pa->vte), (gpointer *)&pa->vte);
+	g_action_map_add_action_entries(tab_actions, entries, G_N_ELEMENTS(entries), pa);
+	pa->copy = G_SIMPLE_ACTION(g_action_map_lookup_action(tab_actions, "copy"));
+	g_object_set_data_full(G_OBJECT(tab_actions), PAGE_ACTIONS_KEY, pa, page_actions_free);
+	pa->selection_handler = g_signal_connect(pa->vte, "selection-changed", G_CALLBACK(on_selection_changed), pa);
+
+	/* menus.ui n'est pas chargé d'office par GtkApplication (ressource sous …/ui/) : lu ici, comme la barre de menus ; le VTE garde le modèle */
+	builder = gtk_builder_new_from_resource("/eu/mulagabriel/gtkterm/ui/menus.ui");
+	vte_terminal_set_context_menu_model(pa->vte, G_MENU_MODEL(gtk_builder_get_object(builder, "terminal-context")));
+	g_object_unref(builder);
+	update_copy(pa);
 }
 
-void gt_app_actions_shutdown(void)
+void gt_app_actions_uninstall(GActionMap *tab_actions)
 {
-	gt_app_actions_detach_terminal();
-	if(st.link != NULL)
-		g_signal_handlers_disconnect_by_func(st.link, on_link_notify, NULL);
-	g_clear_object(&st.link);
-	g_clear_object(&st.opts);
-	g_clear_object(&st.context);
-	st.app = NULL;
+	if(g_object_get_data(G_OBJECT(tab_actions), PAGE_ACTIONS_KEY) == NULL)
+		return;
+	/* Actions retirées d'abord (elles ne peuvent plus être activées), puis la structure qu'elles désignent */
+	for(gsize i = 0; i < G_N_ELEMENTS(page_action_names); i++)
+		g_action_map_remove_action(tab_actions, page_action_names[i]);
+	g_object_set_data(G_OBJECT(tab_actions), PAGE_ACTIONS_KEY, NULL);
 }

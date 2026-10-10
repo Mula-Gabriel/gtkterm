@@ -10,7 +10,8 @@ G_BEGIN_DECLS
 
 /* Vrai si la variable d'environnement GTKTERM_TEST_HOOKS vaut « 1 ». */
 gboolean gt_test_hooks_enabled(void);
-/* Ajoute à l'application les actions test-dump (état aa{sv}), test-terminal-text (état s), test-activate (s) et test-set-text ((ss)).
+/* Ajoute à l'application les actions test-dump (état aa{sv}), test-terminal-text (état s), test-terminal-props (état a{sv}), test-sessions
+ * (état aa{sv}, un dict par onglet), test-activate (s) et test-set-text ((ss)).
  * À appeler dans « startup », seulement si gt_test_hooks_enabled(). */
 void     gt_test_hooks_install(GtkApplication *app);
 

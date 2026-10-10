@@ -157,6 +157,14 @@ GTKTerm is a simple, graphical serial port terminal emulator for Linux and possi
 
 
 ## Usage
+### Tabs
+Each tab is a complete, independent GTKTerm session: its own port (serial or TCP), history, options (echo, CR/LF, timestamps, view), macros file and
+macro panel (polling keeps sending on the tab's own port while another tab is shown), Lua script panel (port 0 is the tab's port), log and file transfer.
+File › New tab (`<ctrl><shift>T`) opens the port dialog pre-filled with the active tab's settings; Cancel creates nothing. The tab bar only appears with
+two tabs or more; tabs can be reordered by dragging them. Closing a tab (its close button or `<ctrl><shift>W`) asks for confirmation only when a script is
+running or a file is being sent in it; the last tab cannot be closed. Menus, shortcuts and the Port, Terminal, profile and macro dialogs act on the active
+tab. The same serial port cannot be opened in two tabs (port lock, unless `--disable-port-lock`). Tabs are not restored at the next start.
+
 ### Keyboard Shortcuts 
 As GTKTerm is often used like a terminal emulator,
 the shortcut keys are assigned to `<ctrl><shift>`, rather than just `<ctrl>`. This allows the user to send keystrokes of the form `<ctrl>X` and not have GTKTerm intercept them.
@@ -173,6 +181,10 @@ Key Combination | Effect
 `<ctrl><shift>K` | Clear Scrollback
 `<ctrl><shift>A` | Select All
 `<ctrl><shift>B` | Send Break
+`<ctrl><shift>T` | New tab
+`<ctrl><shift>W` | Close tab
+`<ctrl><shift>Page Down` | Next tab
+`<ctrl><shift>Page Up` | Previous tab
 F5 | Open Port
 F6 | Close Port
 F7 | Toggle DTR
@@ -191,6 +203,8 @@ Signal | Action | Usage Example
 ---:|:---:|---
 `SIGUSR1` | Open Port | `killall -USR1 gtkterm`
 `SIGUSR2` | Close Port | `killall -USR2 gtkterm`
+
+The signals act on the port of every tab of the process.
 
 You may find it useful to send these signals in your own firmware flashing scripts.
 

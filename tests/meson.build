@@ -24,6 +24,7 @@ unit_tests = {
 	'test_rx_queue' : [],
 	'test_script_port' : [util_dep],
 	'test_term_options' : [gio_dep],
+	'test_action_relay' : [gio_dep],
 	'test_hex_input' : [],
 	'test_capture' : [],
 	'test_file_sender' : [],
@@ -76,16 +77,6 @@ integration_tests = {
 		'deps' : [gobject_dep],
 		'link_args' : [],
 	},
-	'test_app_config' : {
-		'sources' : files('../src/app_config.c', 'stubs/stub_macros_file.c') + stub_journal + stub_link,
-		'deps' : [gobject_dep],
-		'link_args' : [],
-	},
-	'test_cmdline' : {
-		'sources' : files('../src/cmdline.c', '../src/app_config.c', 'stubs/stub_macros_file.c') + stub_journal + stub_link,
-		'deps' : [gobject_dep],
-		'link_args' : [],
-	},
 	'test_script_engine' : {
 		'sources' : files('../src/script_engine.c', 'stubs/stub_macros.c') + stub_journal + stub_link,
 		'deps' : [gobject_dep, lua_dep, util_dep],
@@ -100,6 +91,18 @@ foreach name, t : integration_tests
 		dependencies : [gtkterm_core_dep] + t['deps'],
 		link_args : t['link_args'])
 	integration_exes += {name : exe}
+	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env, timeout : 60)
+endforeach
+
+# Tests de la couche application complète (gtkterm_app : sessions, configuration, ligne de commande), sans GTK ni fenêtre ; HOME et XDG privés.
+app_tests = {
+	'test_session' : [util_dep],
+	'test_session_manager' : [],
+	'test_app_config' : [],
+	'test_cmdline' : [],
+}
+foreach name, extra_deps : app_tests
+	exe = executable(name, name + '.c', dependencies : [gtkterm_app_dep] + extra_deps)
 	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env, timeout : 60)
 endforeach
 

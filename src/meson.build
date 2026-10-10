@@ -50,6 +50,8 @@ core_sources = [
 	'rx_queue.h',
 	'script_port.c',
 	'script_port.h',
+	'action_relay.c',
+	'action_relay.h',
 	'term_options.c',
 	'term_options.h',
 	'hex_input.c',
@@ -102,6 +104,10 @@ app_layer_sources = [
 	'macros.h',
 	'script_engine.c',
 	'script_engine.h',
+	'session.c',
+	'session.h',
+	'session_manager.c',
+	'session_manager.h',
 ]
 
 gtkterm_app = static_library('gtkterm_app', app_layer_sources,

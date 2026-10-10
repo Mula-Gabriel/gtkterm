@@ -24,7 +24,7 @@ typedef struct
 	GtkWidget *text;	/* status-text */
 	GtkWidget *flash;	/* status-flash */
 	GtkWidget *leds[6];
-	GBinding *text_binding, *title_binding;	/* pointeurs faibles */
+	GBinding *text_binding;	/* pointeur faible */
 	gboolean detached;
 	guint flash_id;
 	guint poll_id;
@@ -39,17 +39,14 @@ static const struct
 	{ "DTR", TIOCM_DTR }, { "RTS", TIOCM_RTS }, { "CTS", TIOCM_CTS }, { "CD", TIOCM_CD }, { "DSR", TIOCM_DSR }, { "RI", TIOCM_RI },
 };
 
-static StatusBar *main_bar = NULL;	/* barre de la fenêtre principale (crochet status_flash) */
-
 static void leds_set(StatusBar *sb, gint lines);	/* voyant i sensible ssi lines >= 0 et (lines & led_defs[i].bit) */
 static gboolean leds_poll(gpointer data);	/* leds_set(sb, gt_link_get_modem_lines(sb->link)) ; G_SOURCE_CONTINUE */
 static void leds_update(StatusBar *sb);	/* série ouverte : voyants visibles, minuterie armée ; sinon voyants cachés et éteints, minuterie retirée */
 static void on_link_notify(GObject *object, GParamSpec *pspec, gpointer user_data);	/* leds_update ; rien d'autre (réentrance, link.h) */
 static gboolean flash_end(gpointer data);	/* flash_id = 0, status-flash caché, status-text visible ; G_SOURCE_REMOVE */
-static gboolean title_from_status(GBinding *binding, const GValue *from, GValue *to, gpointer user_data);	/* « GTKTerm - %s » */
-static void on_destroy(GtkWidget *box, gpointer user_data);	/* retire les deux minuteries, déconnecte la liaison, main_bar = NULL si c'est elle, libère */
+static void on_destroy(GtkWidget *box, gpointer user_data);	/* retire les deux minuteries, déconnecte la liaison, libère */
 
-GtkWidget *gt_status_bar_new(GtkTermLink *link, GtkWindow *window)
+GtkWidget *gt_status_bar_new(GtkTermLink *link)
 {
 	StatusBar *sb = g_new0(StatusBar, 1);
 
@@ -87,12 +84,6 @@ GtkWidget *gt_status_bar_new(GtkTermLink *link, GtkWindow *window)
 
 	sb->text_binding = g_object_bind_property(link, "status-text", sb->text, "label", G_BINDING_SYNC_CREATE);
 	g_object_add_weak_pointer(G_OBJECT(sb->text_binding), (gpointer *)&sb->text_binding);
-	if(window != NULL)
-	{
-		sb->title_binding = g_object_bind_property_full(link, "status-text", window, "title", G_BINDING_SYNC_CREATE, title_from_status, NULL, NULL, NULL);
-		g_object_add_weak_pointer(G_OBJECT(sb->title_binding), (gpointer *)&sb->title_binding);
-		main_bar = sb;
-	}
 	g_signal_connect(link, "notify::state", G_CALLBACK(on_link_notify), sb);
 	g_signal_connect(link, "notify::status-text", G_CALLBACK(on_link_notify), sb);
 	g_object_set_data(G_OBJECT(sb->box), STATUS_BAR_KEY, sb);
@@ -149,14 +140,6 @@ static gboolean flash_end(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
-static gboolean title_from_status(GBinding *binding, const GValue *from, GValue *to, gpointer user_data)
-{
-	const gchar *status = g_value_get_string(from);
-
-	g_value_take_string(to, g_strdup_printf("GTKTerm - %s", status != NULL ? status : ""));
-	return TRUE;
-}
-
 static void on_destroy(GtkWidget *box, gpointer user_data)
 {
 	StatusBar *sb = user_data;
@@ -167,10 +150,6 @@ static void on_destroy(GtkWidget *box, gpointer user_data)
 	g_object_unref(sb->link);
 	if(sb->text_binding != NULL)
 		g_object_remove_weak_pointer(G_OBJECT(sb->text_binding), (gpointer *)&sb->text_binding);
-	if(sb->title_binding != NULL)
-		g_object_remove_weak_pointer(G_OBJECT(sb->title_binding), (gpointer *)&sb->title_binding);
-	if(main_bar == sb)
-		main_bar = NULL;
 	g_object_set_data(G_OBJECT(box), STATUS_BAR_KEY, NULL);
 	g_free(sb);
 }
@@ -188,12 +167,6 @@ void gt_status_bar_flash(GtkWidget *bar, const gchar *text, guint ms)
 	sb->flash_id = g_timeout_add(MAX(ms, 1), flash_end, sb);
 }
 
-void gt_status_bar_app_flash(const gchar *text, guint ms)
-{
-	if(main_bar != NULL)
-		gt_status_bar_flash(main_bar->box, text, ms);
-}
-
 void gt_status_bar_detach(GtkWidget *bar)
 {
 	StatusBar *sb = bar != NULL ? g_object_get_data(G_OBJECT(bar), STATUS_BAR_KEY) : NULL;
@@ -203,11 +176,7 @@ void gt_status_bar_detach(GtkWidget *bar)
 	sb->detached = TRUE;
 	if(sb->text_binding != NULL)
 		g_binding_unbind(sb->text_binding);
-	if(sb->title_binding != NULL)
-		g_binding_unbind(sb->title_binding);
 	g_signal_handlers_disconnect_by_data(sb->link, sb);
 	g_clear_handle_id(&sb->flash_id, g_source_remove);
 	g_clear_handle_id(&sb->poll_id, g_source_remove);
-	if(main_bar == sb)
-		main_bar = NULL;
 }

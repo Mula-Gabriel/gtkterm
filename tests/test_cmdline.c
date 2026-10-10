@@ -1,6 +1,6 @@
 /* Tests de cmdline.c (couche application, sans GTK) : analyse pure (gt_cmdline_parse, gt_cmdline_apply) et read_command_line
  * (--help et option invalide avant toute configuration, -c puis options, -f). HOME et XDG privés : jamais le vrai ~/.config.
- * Fichier de macros bouchonné (stub_macros_file.c). */
+ * Vraie couche application (gtkterm_app) : le profil lu est celui d'une session de test (une par cas). */
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -10,7 +10,7 @@
 #include "app_config.h"
 #include "app_ui.h"
 #include "cmdline.h"
-#include "stubs.h"
+#include "session.h"
 #include "test_util.h"
 
 static gchar *chemin_rc;
@@ -40,8 +40,8 @@ arguments(const gchar *premier, ...)
 	return (gchar **)g_ptr_array_free(a, FALSE);
 }
 
-/* Fichier de configuration (NULL : absent), magasin relu, profil en cours remis aux défauts : comme main() avant read_command_line */
-static void
+/* Fichier de configuration (NULL : absent), magasin relu, session neuve (profil par défaut, à libérer) : comme main() avant read_command_line */
+static GtSession *
 demarrer(const gchar *contenu)
 {
 	if(contenu == NULL)
@@ -50,11 +50,8 @@ demarrer(const gchar *contenu)
 		g_assert_true(g_file_set_contents(chemin_rc, contenu, -1, NULL));
 	gt_app_ui_set(&table_enregistrement);
 	nb_messages = 0;
-	stub_reset();
-	stub_macros_file_set_path(NULL);
 	config_file_init();
-	gt_profile_clear(&config);
-	gt_profile_init_defaults(&config);
+	return gt_session_new(NULL, NULL);
 }
 
 static void
@@ -219,17 +216,19 @@ test_aide_sans_configuration(void)
 {
 	if(g_test_subprocess())
 	{
+		GtSession *s;
 		gchar **av = arguments("--help", NULL);
 		GtCmdline cmd;
 
-		demarrer(NULL);
-		read_command_line((int)g_strv_length(av), av, &cmd);
+		s = demarrer(NULL);
+		read_command_line(s, (int)g_strv_length(av), av, &cmd);
 		g_assert_true(cmd.exit_now);
 		g_assert_cmpint(cmd.exit_code, ==, 0);
 		g_assert_null(cmd.send_file);
 		g_assert_false(g_file_test(chemin_rc, G_FILE_TEST_EXISTS));
 		g_assert_cmpint(nb_messages, ==, 0);
 		gt_cmdline_clear(&cmd);
+		g_object_unref(s);
 		g_strfreev(av);
 		return;
 	}
@@ -244,21 +243,23 @@ test_option_invalide_code_1(void)
 {
 	if(g_test_subprocess())
 	{
+		GtSession *s;
 		gchar **av = arguments("-e", "--nimporte", NULL);
 		gchar **av2 = arguments("-s", "abc", NULL);
 		GtCmdline cmd;
 
-		demarrer(NULL);
-		read_command_line((int)g_strv_length(av), av, &cmd);
+		s = demarrer(NULL);
+		read_command_line(s, (int)g_strv_length(av), av, &cmd);
 		g_assert_true(cmd.exit_now);
 		g_assert_cmpint(cmd.exit_code, ==, 1);
 		gt_cmdline_clear(&cmd);
-		read_command_line((int)g_strv_length(av2), av2, &cmd);
+		read_command_line(s, (int)g_strv_length(av2), av2, &cmd);
 		g_assert_true(cmd.exit_now);
 		g_assert_cmpint(cmd.exit_code, ==, 1);
 		g_assert_false(g_file_test(chemin_rc, G_FILE_TEST_EXISTS));
 		g_assert_cmpint(nb_messages, ==, 0);
 		gt_cmdline_clear(&cmd);
+		g_object_unref(s);
 		g_strfreev(av);
 		g_strfreev(av2);
 		return;
@@ -272,56 +273,62 @@ test_option_invalide_code_1(void)
 static void
 test_profil_et_fichier(void)
 {
+	GtSession *s;
 	gchar **av = arguments("-s", "4800", "-c", "atelier", "-f", "/tmp/envoi.bin", NULL);
 	GtCmdline cmd;
 
-	demarrer("[profile:default]\nport=/dev/null\nspeed=9600\n\n[profile:atelier]\nport=/dev/null\nspeed=19200\nbits=7\n");
-	read_command_line((int)g_strv_length(av), av, &cmd);
+	s = demarrer("[profile:default]\nport=/dev/null\nspeed=9600\n\n[profile:atelier]\nport=/dev/null\nspeed=19200\nbits=7\n");
+	read_command_line(s, (int)g_strv_length(av), av, &cmd);
 	g_assert_false(cmd.exit_now);
 	g_assert_cmpint(cmd.exit_code, ==, 0);
 	g_assert_cmpstr(cmd.send_file, ==, "/tmp/envoi.bin");
-	g_assert_cmpuint(config.baudrate, ==, 4800);
-	g_assert_cmpint(config.bits, ==, 7);
-	g_assert_cmpstr(app_config_active_name(), ==, "atelier");
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 4800);
+	g_assert_cmpint(gt_session_get_profile(s)->bits, ==, 7);
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "atelier");
 	g_assert_cmpint(nb_messages, ==, 0);
 	gt_cmdline_clear(&cmd);
 	g_assert_null(cmd.send_file);
 	g_strfreev(av);
+	g_object_unref(s);
 }
 
 static void
 test_retour_au_serie(void)
 {
+	GtSession *s;
 	gchar **av = arguments("-T", "serial", "-a", "none", "-w", "none", NULL);
 	GtCmdline cmd;
 
-	demarrer("[profile:default]\ntransport=tcp-client\nsocket_host=localhost\nsocket_port=2323\nport=/dev/null\nparity=odd\nflow=rts\n");
-	read_command_line((int)g_strv_length(av), av, &cmd);
+	s = demarrer("[profile:default]\ntransport=tcp-client\nsocket_host=localhost\nsocket_port=2323\nport=/dev/null\nparity=odd\nflow=rts\n");
+	read_command_line(s, (int)g_strv_length(av), av, &cmd);
 	g_assert_false(cmd.exit_now);
-	g_assert_cmpint(config.transport, ==, TRANSPORT_SERIAL);
-	g_assert_cmpint(config.parity, ==, GT_PARITY_NONE);
-	g_assert_cmpint(config.flow, ==, GT_FLOW_NONE);
-	g_assert_cmpstr(app_config_active_name(), ==, "default");
+	g_assert_cmpint(gt_session_get_profile(s)->transport, ==, TRANSPORT_SERIAL);
+	g_assert_cmpint(gt_session_get_profile(s)->parity, ==, GT_PARITY_NONE);
+	g_assert_cmpint(gt_session_get_profile(s)->flow, ==, GT_FLOW_NONE);
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "default");
 	g_assert_cmpint(nb_messages, ==, 0);
 	gt_cmdline_clear(&cmd);
 	g_strfreev(av);
+	g_object_unref(s);
 }
 
 /* Profil -c inconnu : message, démarrage sur « default » ; débit non standard : avertissement de la validation, valeur gardée */
 static void
 test_profil_inconnu_et_validation(void)
 {
+	GtSession *s;
 	gchar **av = arguments("-c", "inconnu", "-s", "12345", NULL);
 	GtCmdline cmd;
 
-	demarrer("[profile:default]\nport=/dev/null\nspeed=9600\n");
-	read_command_line((int)g_strv_length(av), av, &cmd);
+	s = demarrer("[profile:default]\nport=/dev/null\nspeed=9600\n");
+	read_command_line(s, (int)g_strv_length(av), av, &cmd);
 	g_assert_false(cmd.exit_now);
 	g_assert_cmpint(nb_messages, ==, 2);
-	g_assert_cmpuint(config.baudrate, ==, 12345);
-	g_assert_cmpstr(app_config_active_name(), ==, "default");
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 12345);
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "default");
 	gt_cmdline_clear(&cmd);
 	g_strfreev(av);
+	g_object_unref(s);
 }
 
 int

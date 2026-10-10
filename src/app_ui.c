@@ -42,7 +42,7 @@ void gt_app_message(GtAppMessageKind kind, const gchar *fmt, ...)
 	g_free(text);
 }
 
-void gt_app_status_flash(guint ms, const gchar *fmt, ...)
+void gt_app_status_flash(GtSession *session, guint ms, const gchar *fmt, ...)
 {
 	va_list args;
 	gchar *text;
@@ -52,6 +52,6 @@ void gt_app_status_flash(guint ms, const gchar *fmt, ...)
 	va_start(args, fmt);
 	text = g_strdup_vprintf(fmt, args);
 	va_end(args);
-	table.status_flash(text, ms);
+	table.status_flash(session, text, ms);
 	g_free(text);
 }

@@ -1,6 +1,8 @@
 /* Dialogue Port (§6.4, action app.port, Ctrl+Maj+S) : type de liaison, port série et ses réglages, hôte et port TCP, envoi de fichier (délai de fin de
  * ligne, attente d'un caractère), RS-485. Instance unique, modale, transitoire de la fenêtre principale (C12). Saisie contrôlée sans widget par
- * gt_port_form_apply (port_form.c) ; OK copie dans config et rouvre le port, Annuler ne change rien. Remplace Config_Port_Fenetre / Lis_Config (GTK 3). */
+ * gt_port_form_apply (port_form.c). Deux modes (6b) : réglage de la session active à l'ouverture (OK copie dans son profil et rouvre son port ;
+ * session fermée pendant le dialogue : fermé sans rien appliquer), ou création d'onglet (gt_port_dialog_show_new : OK rend le profil au rappel).
+ * Annuler ne change rien. Remplace Config_Port_Fenetre / Lis_Config (GTK 3). */
 #include <config.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
@@ -46,6 +48,10 @@ typedef struct
 	GtkEntry *wait_char;
 	GtkSpinButton *rs485_before, *rs485_after;
 	GtkLabel *error;
+	GWeakRef session;	/* réglage : session active à l'ouverture (spec §3.2-12) */
+	GtProfile *base;	/* création d'onglet : copie du profil initial (possédée) ; NULL en réglage */
+	GtPortDialogNewCb new_cb;
+	gpointer new_data;
 } PortDialog;
 
 static GtkWindow *port_window = NULL;	/* dialogue ouvert (pointeur faible) */
@@ -256,29 +262,61 @@ static void read_form(PortDialog *pd, GtPortForm *f)
 	f->rs485_after_ms = spin_value(pd->rs485_after);
 }
 
+/* Session du dialogue en réglage (référence à rendre), NULL si elle n'existe plus ou est arrêtée */
+static GtSession *dialog_session(PortDialog *pd)
+{
+	GtSession *s = g_weak_ref_get(&pd->session);
+
+	if(s != NULL && gt_session_is_shut_down(s))
+		g_clear_object(&s);
+	return s;
+}
+
 static void on_ok(GtkButton *button, PortDialog *pd)
 {
 	GtPortForm form;
 	GtProfile next = { 0 };
 	GError *error = NULL;
 	GPtrArray *warnings;
+	GtSession *s = NULL;
+	GtProfile *base;
+	GtPortDialogNewCb new_cb = pd->new_cb;
+	gpointer new_data = pd->new_data;
 
+	if(pd->base != NULL)
+		base = pd->base;
+	else
+	{
+		s = dialog_session(pd);
+		if(s == NULL)	/* session fermée pendant le dialogue : rien n'est appliqué */
+		{
+			gtk_window_destroy(pd->window);
+			return;
+		}
+		base = gt_session_get_profile(s);
+	}
 	read_form(pd, &form);
-	if(!gt_port_form_apply(&form, &config, &next, &error))
+	if(!gt_port_form_apply(&form, base, &next, &error))
 	{
 		gtk_label_set_text(pd->error, error->message);
 		gtk_widget_set_visible(GTK_WIDGET(pd->error), TRUE);
 		g_error_free(error);
 		gt_port_form_clear(&form);
+		g_clear_object(&s);
 		return;
 	}
 	gt_port_form_clear(&form);
 	warnings = g_ptr_array_new_with_free_func(g_free);
 	gt_profile_validate(&next, warnings);	/* corrections silencieuses ; seul avertissement possible ici : débit non standard */
-	gt_profile_copy(&config, &next);
-	gt_profile_clear(&next);
+	if(s != NULL)
+		gt_profile_copy(gt_session_get_profile(s), &next);
 	gtk_window_destroy(pd->window);	/* pd est libéré : plus aucun accès après cette ligne */
-	gt_app_open_port();
+	if(s != NULL)
+		gt_session_open_port(s);
+	else
+		new_cb(&next, new_data);	/* création d'onglet : dialogue déjà fermé */
+	gt_profile_clear(&next);
+	g_clear_object(&s);
 	if(warnings->len > 0)
 	{
 		gchar *text;
@@ -298,6 +336,12 @@ static void port_dialog_free(gpointer data)
 	g_hash_table_unref(pd->links);
 	g_object_unref(pd->device_model);
 	g_object_unref(pd->baud_model);
+	g_weak_ref_clear(&pd->session);
+	if(pd->base != NULL)
+	{
+		gt_profile_clear(pd->base);
+		g_free(pd->base);
+	}
 	g_free(pd);
 }
 
@@ -403,7 +447,8 @@ static GtkWidget *build_advanced(PortDialog *pd, const GtPortForm *form)
 	return expander;
 }
 
-void gt_port_dialog_show(GtkWindow *parent)
+/* s : session réglée (mode réglage) ; sinon initial copié, new_cb appelé par OK (création d'onglet) */
+static void port_dialog_open(GtkWindow *parent, GtSession *s, const GtProfile *initial, GtPortDialogNewCb new_cb, gpointer new_data)
 {
 	PortDialog *pd;
 	GtPortForm form;
@@ -413,10 +458,18 @@ void gt_port_dialog_show(GtkWindow *parent)
 
 	if(port_window != NULL)
 	{
-		gtk_window_present(port_window);	/* C12 : une seconde demande ramène le dialogue ouvert */
+		gtk_window_present(port_window);	/* C12 : une seconde demande ramène le dialogue ouvert, tel quel */
 		return;
 	}
 	pd = g_new0(PortDialog, 1);
+	g_weak_ref_init(&pd->session, s);
+	if(s == NULL)
+	{
+		pd->base = g_new0(GtProfile, 1);
+		gt_profile_copy(pd->base, initial);
+		pd->new_cb = new_cb;
+		pd->new_data = new_data;
+	}
 	pd->links = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 	pd->device_model = gtk_string_list_new(NULL);
 	pd->baud_model = gtk_string_list_new(NULL);
@@ -437,18 +490,20 @@ void gt_port_dialog_show(GtkWindow *parent)
 		if(p->is_link)
 			g_hash_table_add(pd->links, g_strdup(p->path));
 	}
-	gt_port_form_from_profile(&form, &config);
+	gt_port_form_from_profile(&form, s != NULL ? gt_session_get_profile(s) : pd->base);
 	if(form.device[0] == '\0' && ports->len > 0)
 		gt_profile_set_string(&form.device, ((GtSerialPort *)g_ptr_array_index(ports, 0))->path);
 
 	pd->window = GTK_WINDOW(gtk_window_new());
 	gtk_widget_set_name(GTK_WIDGET(pd->window), "port-dialog");
-	gtk_window_set_title(pd->window, _("Port configuration"));
+	gtk_window_set_title(pd->window, s != NULL ? _("Port configuration") : _("New tab"));
 	gtk_window_set_modal(pd->window, TRUE);
 	gtk_window_set_transient_for(pd->window, parent);
 	gtk_window_set_destroy_with_parent(pd->window, TRUE);
 	gtk_window_set_resizable(pd->window, FALSE);
 	g_object_set_data_full(G_OBJECT(pd->window), "port-dialog", pd, port_dialog_free);
+	if(s != NULL)	/* session fermée pendant le dialogue : fermé sans rien appliquer */
+		g_signal_connect_object(s, "closed", G_CALLBACK(gtk_window_destroy), pd->window, G_CONNECT_SWAPPED);
 	port_window = pd->window;
 	g_object_add_weak_pointer(G_OBJECT(pd->window), (gpointer *)&port_window);
 
@@ -505,6 +560,20 @@ void gt_port_dialog_show(GtkWindow *parent)
 	g_ptr_array_unref(ports);
 	g_array_unref(patterns);
 	gtk_window_present(pd->window);
+}
+
+void gt_port_dialog_show(GtkWindow *parent)
+{
+	GtSession *s = gt_app_get_active_session();
+
+	if(port_window == NULL && (s == NULL || gt_session_is_shut_down(s)))
+		return;
+	port_dialog_open(parent, s, NULL, NULL, NULL);
+}
+
+void gt_port_dialog_show_new(GtkWindow *parent, const GtProfile *initial, GtPortDialogNewCb cb, gpointer user_data)
+{
+	port_dialog_open(parent, NULL, initial, cb, user_data);
 }
 
 static void on_port_action(GSimpleAction *action, GVariant *param, gpointer user_data)

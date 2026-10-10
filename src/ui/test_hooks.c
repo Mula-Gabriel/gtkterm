@@ -12,7 +12,9 @@
 #include <vte/vte.h>
 
 #include "app.h"
-#include "main_window.h"
+#include "link.h"
+#include "macros.h"
+#include "session_view.h"
 #include "terminal_view.h"
 #include "test_hooks.h"
 
@@ -274,11 +276,11 @@ static void on_test_dump(GSimpleAction *action, GVariant *param, gpointer user_d
 
 static void on_test_terminal_text(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	GtkWidget *w = find_any("terminal");
+	GtkWidget *view = gt_app_get_active_view();	/* terminal de l'onglet actif */
 	gchar *text = NULL;
 
-	if(w != NULL && VTE_IS_TERMINAL(w))
-		text = vte_terminal_get_text_format(VTE_TERMINAL(w), VTE_FORMAT_TEXT);
+	if(view != NULL)
+		text = vte_terminal_get_text_format(gt_terminal_view_get_vte(gt_session_view_get_terminal_view(view)), VTE_FORMAT_TEXT);
 	g_simple_action_set_state(action, g_variant_new_take_string(text != NULL ? text : g_strdup("")));
 }
 
@@ -299,33 +301,60 @@ static const char *cursor_shape_name(VteCursorShape shape)
 /* test-terminal-props : état a{sv} recalculé à chaque activation (Activate puis Describe, comme test-dump) */
 static void on_test_terminal_props(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	GtkWindow *win = gt_app_get_main_window();
+	GtkWidget *page = gt_app_get_active_view();	/* terminal de l'onglet actif */
 	GVariantBuilder b;
 
 	g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
-	if(win != NULL)
+	if(page != NULL)
 	{
-		GtkWidget *view = gt_main_window_get_terminal_view(GTK_WIDGET(win));
+		GtkWidget *view = gt_session_view_get_terminal_view(page);
 		VteTerminal *vte = gt_terminal_view_get_vte(view);
 		const PangoFontDescription *font = vte_terminal_get_font(vte);
-		GValue lines = G_VALUE_INIT, lines64 = G_VALUE_INIT;
 		GdkRGBA bg, fg;
 
 		if(font != NULL)
 			g_variant_builder_add(&b, "{sv}", "font", g_variant_new_take_string(pango_font_description_to_string(font)));
-		/* Type de la propriété selon la version de VTE : converti en entier 64 bits */
-		g_object_get_property(G_OBJECT(vte), "scrollback-lines", &lines);
-		g_value_init(&lines64, G_TYPE_INT64);
-		if(g_value_transform(&lines, &lines64))
-			g_variant_builder_add(&b, "{sv}", "scrollback", g_variant_new_int64(g_value_get_int64(&lines64)));
-		g_value_unset(&lines);
-		g_value_unset(&lines64);
+		/* Par la fonction, pas par la propriété « scrollback-lines » : VTE 0.84 rend toujours G_MAXUINT pour la propriété */
+		g_variant_builder_add(&b, "{sv}", "scrollback", g_variant_new_int64(vte_terminal_get_scrollback_lines(vte)));
 		g_variant_builder_add(&b, "{sv}", "cursor", g_variant_new_string(cursor_shape_name(vte_terminal_get_cursor_shape(vte))));
 		vte_terminal_get_color_background_for_draw(vte, &bg);
 		g_variant_builder_add(&b, "{sv}", "background", g_variant_new_take_string(gdk_rgba_to_string(&bg)));
 		if(gt_terminal_view_get_foreground(view, &fg))
 			g_variant_builder_add(&b, "{sv}", "foreground", g_variant_new_take_string(gdk_rgba_to_string(&fg)));
 	}
+	g_simple_action_set_state(action, g_variant_builder_end(&b));
+}
+
+/* test-sessions (plan, décision 9) : état aa{sv} recalculé à chaque activation (Activate puis Describe, comme test-dump) ; un dict par onglet,
+ * dans l'ordre : index (i), id (u), name (s, nom court), state (s, pseudo de GtLinkState), profile (s), macros_file (s, vide si aucun),
+ * active (b), busy (b) */
+static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+	GtSessionManager *m = gt_app_get_sessions();
+	GtSession *active = gt_app_get_active_session();
+	GEnumClass *states = g_type_class_ref(GT_TYPE_LINK_STATE);
+	GVariantBuilder b;
+
+	g_variant_builder_init(&b, G_VARIANT_TYPE("aa{sv}"));
+	for(guint i = 0; m != NULL && i < gt_session_manager_get_n(m); i++)
+	{
+		GtSession *s = gt_session_manager_get_nth(m, i);
+		GEnumValue *st = g_enum_get_value(states, gt_link_get_state(gt_session_get_link(s)));
+		const gchar *macros = gt_macros_get_path(gt_session_get_macros(s));
+		GVariantBuilder d;
+
+		g_variant_builder_init(&d, G_VARIANT_TYPE_VARDICT);
+		g_variant_builder_add(&d, "{sv}", "index", g_variant_new_int32((gint32)i));
+		g_variant_builder_add(&d, "{sv}", "id", g_variant_new_uint32(gt_session_get_id(s)));
+		g_variant_builder_add(&d, "{sv}", "name", g_variant_new_string(gt_session_get_short_name(s) != NULL ? gt_session_get_short_name(s) : ""));
+		g_variant_builder_add(&d, "{sv}", "state", g_variant_new_string(st != NULL ? st->value_nick : "?"));
+		g_variant_builder_add(&d, "{sv}", "profile", g_variant_new_string(gt_session_get_profile_name(s)));
+		g_variant_builder_add(&d, "{sv}", "macros_file", g_variant_new_string(macros != NULL ? macros : ""));
+		g_variant_builder_add(&d, "{sv}", "active", g_variant_new_boolean(s == active));
+		g_variant_builder_add(&d, "{sv}", "busy", g_variant_new_boolean(gt_session_is_busy(s)));
+		g_variant_builder_add_value(&b, g_variant_builder_end(&d));
+	}
+	g_type_class_unref(states);
 	g_simple_action_set_state(action, g_variant_builder_end(&b));
 }
 
@@ -433,6 +462,10 @@ void gt_test_hooks_install(GtkApplication *app)
 	g_object_unref(a);
 	a = g_simple_action_new_stateful("test-terminal-props", NULL, g_variant_new_array(G_VARIANT_TYPE("{sv}"), NULL, 0));
 	g_signal_connect(a, "activate", G_CALLBACK(on_test_terminal_props), NULL);
+	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
+	g_object_unref(a);
+	a = g_simple_action_new_stateful("test-sessions", NULL, g_variant_new_array(G_VARIANT_TYPE_VARDICT, NULL, 0));
+	g_signal_connect(a, "activate", G_CALLBACK(on_test_sessions), NULL);
 	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
 	g_object_unref(a);
 	a = g_simple_action_new("test-activate", G_VARIANT_TYPE_STRING);

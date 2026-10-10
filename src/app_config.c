@@ -3,7 +3,7 @@
 /*                                                                     */
 /*   Purpose                                                           */
 /*      Configuration de l'application, sans GTK (sous-projet 6a) :    */
-/*      façade du magasin, profil en cours, profils, [general] et      */
+/*      façade du magasin, profils (profil en cours d'une session),    */
 /*      état de la fenêtre [window] (extrait de term_config.c)         */
 /*                                                                     */
 /***********************************************************************/
@@ -17,24 +17,17 @@
 #include "app_config.h"
 #include "app_ui.h"
 #include "config_file.h"
-#include "macros.h"
+#include "session.h"
 
 #define WINDOW_GROUP "window"
-#define WINDOW_DEFAULT_WIDTH 750
-#define WINDOW_DEFAULT_HEIGHT 550
+#define WINDOW_DEFAULT_WIDTH 1000
+#define WINDOW_DEFAULT_HEIGHT 600
 #define WINDOW_MAX_SIZE 10000
 
 static GtConfigStore *store = NULL;
 static gchar *store_load_error = NULL;	/* erreur de lecture (contient le chemin), signalée par Check_configuration_file */
-static gchar *active_config_name = NULL;	/* nom du profil chargé ou enregistré ; NULL : « default » */
 
-GtProfile config;
 GtkTermSettings settings;
-
-const gchar *app_config_active_name(void)
-{
-	return active_config_name != NULL ? active_config_name : "default";
-}
 
 void config_file_init(void)
 {
@@ -138,37 +131,43 @@ void config_save_update_check_startup(gboolean enabled)
 	config_save_store(TRUE);
 }
 
-void config_remember_macros_file(void)
+void config_remember_macros_file(GtSession *s)
 {
-	const gchar *path = macros_file_get_path();
+	GtProfile *profile = gt_session_get_profile(s);
+	const gchar *path = gt_macros_get_path(gt_session_get_macros(s));
+	const gchar *name = gt_session_get_profile_name(s);
 
 	/* Fichier de macros inchangé (perte de focus d'un argument, même fichier rechoisi) : rien à écrire */
-	if(g_strcmp0(path, config.macros_file) == 0)
+	if(g_strcmp0(path, profile->macros_file) == 0)
 		return;
-	gt_profile_set_string(&config.macros_file, path);
+	gt_profile_set_string(&profile->macros_file, path);
 	config_reload_store();
 	/* Profil actif supprimé entre-temps : pas de profil fantôme réduit à macros_file, mémoire seulement */
-	if(!gt_config_store_has_profile(store, app_config_active_name()))
+	if(!gt_config_store_has_profile(store, name))
 		return;
-	gt_config_store_set_profile_string(store, app_config_active_name(), "macros_file", config.macros_file);
+	gt_config_store_set_profile_string(store, name, "macros_file", profile->macros_file);
 	config_save_store(TRUE);
 }
 
-static void hard_default_configuration(void)
+/* Profil de s remis aux défauts (lock_port compris), [general] aussi */
+static void hard_default_configuration(GtSession *s)
 {
-	gt_profile_clear(&config);
-	gt_profile_init_defaults(&config);
+	GtProfile *profile = gt_session_get_profile(s);
+
+	gt_profile_clear(profile);
+	gt_profile_init_defaults(profile);
 	gt_profile_set_string(&settings.update_url, GTKTERM_DEFAULT_UPDATE_URL);
 	gt_profile_set_string(&settings.update_prefix, GTKTERM_DEFAULT_UPDATE_PREFIX);
 	settings.update_check_startup = TRUE;
 	g_clear_pointer(&settings.update_skipped_revision, g_free);
 }
 
-/* Profil du fichier copié dans config ; erreur (profil absent) : config et nom actif inchangés */
-static gboolean load_profile(const gchar *name, GError **error)
+/* Profil du fichier copié dans celui de s ; erreur (profil absent) : profil et nom de profil de s inchangés */
+static gboolean load_profile(GtSession *s, const gchar *name, GError **error)
 {
+	GtProfile *profile = gt_session_get_profile(s);
 	GtProfile loaded = { 0 };
-	gboolean lock_port = config.lock_port;
+	gboolean lock_port = profile->lock_port;
 
 	config_reload_store();
 	if(!gt_config_store_get_profile(store, name, &loaded))
@@ -176,23 +175,23 @@ static gboolean load_profile(const gchar *name, GError **error)
 		g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_GROUP_NOT_FOUND, _("No section \"%s\" in configuration file\n"), name);
 		return FALSE;
 	}
-	gt_profile_copy(&config, &loaded);
+	gt_profile_copy(profile, &loaded);
 	gt_profile_clear(&loaded);
 	/* Réglage de session jamais enregistré : --disable-port-lock survit au chargement d'un profil */
-	config.lock_port = lock_port;
+	profile->lock_port = lock_port;
 	/* Le nom actif n'est retenu qu'une fois le profil trouvé : un nom inconnu ne crée pas de profil à l'enregistrement (C13) */
-	gt_profile_set_string(&active_config_name, name);
+	gt_session_set_profile_name(s, name);
 	/* Fichier de macros du profil ; sans fichier, celui en cours est relu (non interactif : avertissement seulement) */
-	macros_load_file(config.macros_file, FALSE);
+	gt_macros_load_file(gt_session_get_macros(s), profile->macros_file, FALSE);
 	/* Pas d'application à l'interface ici : les valeurs ne sont pas encore validées (Verify_configuration) */
 	return TRUE;
 }
 
-gint Load_configuration_from_file(const gchar *name)
+gint Load_configuration_from_file(GtSession *s, const gchar *name)
 {
 	GError *error = NULL;
 
-	if(!load_profile(name, &error))
+	if(!load_profile(s, name, &error))
 	{
 		gt_app_message(GT_APP_MSG_ERROR, "%s", error->message);
 		g_error_free(error);
@@ -202,11 +201,11 @@ gint Load_configuration_from_file(const gchar *name)
 }
 
 /* Valide le profil en cours (avertissements dans un seul message) ; l'interface l'applique ensuite (jamais de valeur invalide dans VTE) */
-void Verify_configuration(void)
+void Verify_configuration(GtSession *s)
 {
 	GPtrArray *warnings = g_ptr_array_new_with_free_func(g_free);
 
-	if(!gt_profile_validate(&config, warnings))
+	if(!gt_profile_validate(gt_session_get_profile(s), warnings))
 	{
 		gchar *text;
 
@@ -218,14 +217,14 @@ void Verify_configuration(void)
 	g_ptr_array_unref(warnings);
 }
 
-gint Check_configuration_file(void)
+gint Check_configuration_file(GtSession *s)
 {
 	gchar **names;
 	gboolean no_profile;
 
-	hard_default_configuration();
+	hard_default_configuration(s);
 	settings_load();
-	g_clear_pointer(&active_config_name, g_free);
+	gt_session_set_profile_name(s, NULL);
 
 	/* Fichier illisible : défauts, magasin en lecture seule (rien ne sera écrit) */
 	if(store_load_error != NULL)
@@ -243,7 +242,7 @@ gint Check_configuration_file(void)
 	g_strfreev(names);
 	if(no_profile)
 	{
-		gt_config_store_put_profile(store, "default", &config);
+		gt_config_store_put_profile(store, "default", gt_session_get_profile(s));
 		if(config_save_store(TRUE))
 			gt_app_message(GT_APP_MSG_INFO, _("Configuration file (%s) with\n[default] configuration has been created.\n"), gt_config_store_get_path(store));
 		return 0;
@@ -254,33 +253,38 @@ gint Check_configuration_file(void)
 	if(!gt_config_store_has_profile(store, "default"))
 		return 0;
 
-	return Load_configuration_from_file("default") == 0 ? 0 : -1;
+	return Load_configuration_from_file(s, "default") == 0 ? 0 : -1;
 }
 
-gboolean app_config_load_profile(const gchar *name, GError **error)
+gboolean app_config_load_profile(GtSession *s, const gchar *name, GError **error)
 {
 	const GtAppUi *ui;
 
-	if(!load_profile(name, error))
+	if(!load_profile(s, name, error))
 		return FALSE;
-	Verify_configuration();
+	Verify_configuration(s);
 	ui = gt_app_ui_get();
 	if(ui->profile_applied != NULL)
-		ui->profile_applied();
+		ui->profile_applied(s);
 	return TRUE;
 }
 
-gboolean app_config_save_profile(const gchar *name, GError **error)
+gboolean app_config_save_profile(GtSession *s, const gchar *name, GError **error)
 {
+	GtProfile *profile = gt_session_get_profile(s);
 	gchar *normalized = NULL;
 	GError *save_error = NULL;
+	gboolean auto_reconnect = FALSE;
 
 	if(!gt_profile_name_validate(name, &normalized, error))
 		return FALSE;
-	/* Le profil enregistré prend le fichier de macros en cours */
-	gt_profile_set_string(&config.macros_file, macros_file_get_path());
+	/* Le profil enregistré prend l'état réel de la session : options des menus, auto-reconnexion de la liaison, fichier de macros en cours */
+	gt_term_options_store_profile(gt_session_get_options(s), profile);
+	g_object_get(gt_session_get_link(s), "auto-reconnect", &auto_reconnect, NULL);
+	profile->auto_reconnect = auto_reconnect;
+	gt_profile_set_string(&profile->macros_file, gt_macros_get_path(gt_session_get_macros(s)));
 	config_reload_store();
-	gt_config_store_put_profile(store, normalized, &config);
+	gt_config_store_put_profile(store, normalized, profile);
 	if(!gt_config_store_save(store, &save_error))
 	{
 		g_propagate_error(error, save_error);
@@ -288,8 +292,8 @@ gboolean app_config_save_profile(const gchar *name, GError **error)
 		return FALSE;
 	}
 	/* Le nom actif ne change qu'après réussite de l'enregistrement */
-	g_free(active_config_name);
-	active_config_name = normalized;
+	gt_session_set_profile_name(s, normalized);
+	g_free(normalized);
 	return TRUE;
 }
 

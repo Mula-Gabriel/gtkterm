@@ -71,6 +71,17 @@ gui_scenarios = [
 	# mise à jour et À propos
 	'test_update_window',
 	'test_about',
+	# onglets (sous-projet 6b)
+	'test_onglets',
+	'test_onglets_actions',
+	'test_onglets_fermeture',
+	'test_onglets_verrou',
+	'test_onglets_sigusr',
+	'test_onglets_terminal',
+	'test_onglets_ordre',
+	'test_onglets_macros_fichier',
+	'test_onglets_macros',
+	'test_onglets_lua',
 ]
 
 foreach s : gui_scenarios

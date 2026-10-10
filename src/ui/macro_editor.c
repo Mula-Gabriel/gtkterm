@@ -1,7 +1,8 @@
-/* macro_editor.c — fenêtre « Configure Macros » (interface GTK 4, spec 6a §6.5) : non modale, instance unique, pages Macros et Lists.
- * Les lignes sont des copies (GtMacroRow, GtMacroListRow) : rien n'est appliqué avant OK ou la fermeture par la barre de titre ; Cancel
- * jette tout. Un jeu remplacé pendant l'édition ferme la fenêtre sans rien enregistrer (ses lignes décrivent l'ancien jeu). La fenêtre
- * n'est pas rattachée à l'application : ses raccourcis (Ctrl+Maj+Q…) ne s'y appliquent pas, la capture reçoit toutes les touches. */
+/* macro_editor.c — fenêtre « Configure Macros » (interface GTK 4, spec 6a §6.5) : non modale, une par session (6b, spec §3.2-12), pages
+ * Macros et Lists. Les lignes sont des copies (GtMacroRow, GtMacroListRow) : rien n'est appliqué avant OK ou la fermeture par la barre de
+ * titre ; Cancel jette tout. Un jeu remplacé pendant l'édition, ou la session fermée, ferme la fenêtre sans rien enregistrer. La fenêtre
+ * n'est pas rattachée à l'application : ses raccourcis (Ctrl+Maj+Q…) ne s'y appliquent pas, la capture reçoit toutes les touches.
+ * L'état est attaché à la fenêtre ; les rappels le retrouvent par la fenêtre racine de leur widget. */
 
 #include <config.h>
 #include <glib/gi18n.h>
@@ -17,9 +18,13 @@
 
 enum { PAGE_MACROS, PAGE_LISTS };
 
+#define EDITOR_KEY "gt-macro-editor"	/* sur la fenêtre : MacroEditor, libéré avec elle */
+#define SESSION_EDITOR_KEY "gt-macro-editor-window"	/* sur la session : sa fenêtre ouverte (non possédée), retirée à la destruction */
+
 typedef struct
 {
 	GtkWidget         *window;	/* « macro-editor » */
+	GWeakRef           session;	/* session éditée (spec §3.2-12 : référence faible) */
 	GtMacroSet        *set;	/* jeu édité ; jamais déréférencé s'il n'est plus le jeu courant */
 	GListStore        *rows;	/* GtMacroRow */
 	GListStore        *list_rows;	/* GtMacroListRow */
@@ -37,8 +42,6 @@ typedef struct
 	GtkSelectionModel *selection;
 } CellSpec;
 
-static MacroEditor *editor = NULL;
-
 /* xgettext:no-c-format */
 static const gchar *help_text = N_(
 	"Action: the data sent on the port. Plain text, plus the escapes \\r (carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, "
@@ -55,7 +58,25 @@ static const gchar *help_text = N_(
 	"the repeated sending. Right-click the tab bar to hide or show tabs; hiding a tab stops its polling.\n\n"
 	"Examples: \"Hello\\n\" sends Hello and a line feed; \"Hello\\x0A\" does the same; \"SPEED %d\\r\" asks for a number.");
 
-static void set_message(const gchar *text, gboolean error)
+/* État de l'éditeur dont w fait partie (fenêtre racine) ; NULL si la fenêtre est en destruction */
+static MacroEditor *editor_of(GtkWidget *w)
+{
+	GtkRoot *root = w != NULL ? gtk_widget_get_root(w) : NULL;
+
+	return root != NULL ? g_object_get_data(G_OBJECT(root), EDITOR_KEY) : NULL;
+}
+
+/* Macros de la session éditée ; NULL si elle n'existe plus ou est arrêtée */
+static GtMacros *editor_macros(MacroEditor *editor)
+{
+	GtSession *s = g_weak_ref_get(&editor->session);
+	GtMacros *m = s != NULL && !gt_session_is_shut_down(s) ? gt_session_get_macros(s) : NULL;
+
+	g_clear_object(&s);	/* la session est tenue par le gestionnaire tant qu'elle n'est pas arrêtée */
+	return m;
+}
+
+static void set_message(MacroEditor *editor, const gchar *text, gboolean error)
 {
 	gtk_label_set_text(GTK_LABEL(editor->message), text != NULL ? text : "");
 	gtk_widget_set_visible(editor->message, text != NULL && text[0] != '\0');
@@ -65,12 +86,12 @@ static void set_message(const gchar *text, gboolean error)
 		gtk_widget_remove_css_class(editor->message, "error");
 }
 
-static void stop_capture(void)
+static void stop_capture(MacroEditor *editor)
 {
 	if(editor->capture_row == NULL)
 		return;
 	g_clear_object(&editor->capture_row);
-	set_message(NULL, FALSE);
+	set_message(editor, NULL, FALSE);
 }
 
 /* Positions sélectionnées, croissantes ; g_free */
@@ -95,12 +116,12 @@ static void reselect(GtkSelectionModel *model, const guint *pos, guint n)
 		gtk_selection_model_select_item(model, pos[k], FALSE);
 }
 
-static GListStore *page_store(gint page)
+static GListStore *page_store(MacroEditor *editor, gint page)
 {
 	return page == PAGE_MACROS ? editor->rows : editor->list_rows;
 }
 
-static GtkSelectionModel *page_selection(gint page)
+static GtkSelectionModel *page_selection(MacroEditor *editor, gint page)
 {
 	return page == PAGE_MACROS ? editor->selection : editor->list_selection;
 }
@@ -111,10 +132,11 @@ static GtkSelectionModel *page_selection(gint page)
 static void on_cell_editing(GObject *label, GParamSpec *pspec, gpointer cell)
 {
 	CellSpec *spec = g_object_get_data(label, "spec");
+	MacroEditor *editor = editor_of(GTK_WIDGET(label));
 
 	if(editor == NULL || !gtk_editable_label_get_editing(GTK_EDITABLE_LABEL(label)))
 		return;
-	stop_capture();
+	stop_capture(editor);
 	gtk_selection_model_select_item(spec->selection, gtk_column_view_cell_get_position(GTK_COLUMN_VIEW_CELL(cell)), TRUE);
 }
 
@@ -202,6 +224,7 @@ static void add_column(GtkColumnView *view, GtkSelectionModel *selection, const 
 
 static void on_add(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
 	gint page = GPOINTER_TO_INT(data);
 	GListStore *store;
 	guint n = 0, *pos, at;
@@ -209,62 +232,68 @@ static void on_add(GtkButton *button, gpointer data)
 
 	if(editor == NULL)
 		return;
-	store = page_store(page);
-	pos = selected_positions(page_selection(page), &n);
+	store = page_store(editor, page);
+	pos = selected_positions(page_selection(editor, page), &n);
 	at = gt_macro_rows_insert_position(pos, n, g_list_model_get_n_items(G_LIST_MODEL(store)));
 	row = page == PAGE_MACROS ? (gpointer)gt_macro_row_new(0, "", "", "", "") : (gpointer)gt_macro_list_row_new("NewList", "display", "value");
-	stop_capture();
+	stop_capture(editor);
 	g_list_store_insert(store, at, row);
 	g_object_unref(row);
-	gtk_selection_model_select_item(page_selection(page), at, TRUE);
+	gtk_selection_model_select_item(page_selection(editor, page), at, TRUE);
 	g_free(pos);
 }
 
 static void on_delete(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
 	gint page = GPOINTER_TO_INT(data);
 	guint n = 0, *pos;
 
 	if(editor == NULL)
 		return;
-	pos = selected_positions(page_selection(page), &n);
-	stop_capture();
-	gt_macro_rows_remove(page_store(page), pos, n);
+	pos = selected_positions(page_selection(editor, page), &n);
+	stop_capture(editor);
+	gt_macro_rows_remove(page_store(editor, page), pos, n);
 	g_free(pos);
 }
 
-static void move_selected(gint page, gint delta)
+static void move_selected(MacroEditor *editor, gint page, gint delta)
 {
-	guint n = 0, *pos = selected_positions(page_selection(page), &n);
+	guint n = 0, *pos = selected_positions(page_selection(editor, page), &n);
 
-	stop_capture();
-	if(gt_macro_rows_move(page_store(page), pos, n, delta))
-		reselect(page_selection(page), pos, n);	/* la sélection suit les lignes déplacées */
+	stop_capture(editor);
+	if(gt_macro_rows_move(page_store(editor, page), pos, n, delta))
+		reselect(page_selection(editor, page), pos, n);	/* la sélection suit les lignes déplacées */
 	g_free(pos);
 }
 
 static void on_up(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
+
 	if(editor == NULL)
 		return;
-	move_selected(GPOINTER_TO_INT(data), -1);
+	move_selected(editor, GPOINTER_TO_INT(data), -1);
 }
 
 static void on_down(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
+
 	if(editor == NULL)
 		return;
-	move_selected(GPOINTER_TO_INT(data), +1);
+	move_selected(editor, GPOINTER_TO_INT(data), +1);
 }
 
 static void on_unshortcut(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
 	guint n = 0, *pos;
 
 	if(editor == NULL)
 		return;
 	pos = selected_positions(editor->selection, &n);
-	stop_capture();
+	stop_capture(editor);
 	if(n > 0)
 	{
 		GtMacroRow *row = g_list_model_get_item(G_LIST_MODEL(editor->rows), pos[0]);
@@ -277,28 +306,29 @@ static void on_unshortcut(GtkButton *button, gpointer data)
 
 static void on_capture(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
 	guint n = 0, *pos;
 
 	if(editor == NULL)
 		return;
 	pos = selected_positions(editor->selection, &n);
-	stop_capture();
+	stop_capture(editor);
 	if(n == 0)
-		set_message(_("Select a macro first."), TRUE);
+		set_message(editor, _("Select a macro first."), TRUE);
 	else
 	{
 		gchar *text;
 
 		editor->capture_row = g_list_model_get_item(G_LIST_MODEL(editor->rows), pos[0]);
 		text = g_strdup_printf(_("Press the new shortcut for \"%s\" (Escape cancels)."), gt_macro_row_get_label(editor->capture_row));
-		set_message(text, FALSE);
+		set_message(editor, text, FALSE);
 		g_free(text);
 	}
 	g_free(pos);
 }
 
 /* Raccourci déjà pris par une action de l'application ou par une autre ligne : message de refus et TRUE */
-static gboolean refuse_if_taken(const gchar *accel)
+static gboolean refuse_if_taken(MacroEditor *editor, const gchar *accel)
 {
 	GArray *owners = gt_accel_owners_new();
 	GApplication *app = g_application_get_default();
@@ -324,7 +354,7 @@ static gboolean refuse_if_taken(const gchar *accel)
 	else if(owner != NULL)
 		text = g_strdup_printf(_("%s is already used by the macro \"%s\". Press other keys, or Escape to cancel."), accel, owner->owner);
 	if(text != NULL)
-		set_message(text, TRUE);
+		set_message(editor, text, TRUE);
 	g_free(text);
 	g_array_unref(owners);	/* owner pointait dans ce tableau */
 	return taken;
@@ -333,6 +363,7 @@ static gboolean refuse_if_taken(const gchar *accel)
 /* Capture : toutes les touches traitées sont consommées (phase de capture de la fenêtre) */
 static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer data)
 {
+	MacroEditor *editor = editor_of(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
 	gchar *accel = NULL;
 
 	if(editor == NULL || editor->capture_row == NULL)
@@ -342,18 +373,18 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
 	case GT_ACCEL_KEY_MODIFIER:
 		return GDK_EVENT_PROPAGATE;
 	case GT_ACCEL_KEY_CANCEL:
-		stop_capture();
+		stop_capture(editor);
 		return GDK_EVENT_STOP;
 	case GT_ACCEL_KEY_NEEDS_MODIFIER:
-		set_message(_("A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to F35). Press other keys, or Escape to cancel."), TRUE);
+		set_message(editor, _("A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to F35). Press other keys, or Escape to cancel."), TRUE);
 		return GDK_EVENT_STOP;
 	case GT_ACCEL_KEY_ACCEPTED:
 		break;
 	}
-	if(!refuse_if_taken(accel))
+	if(!refuse_if_taken(editor, accel))
 	{
 		gt_macro_row_set_shortcut(editor->capture_row, accel);
-		stop_capture();
+		stop_capture(editor);
 	}
 	g_free(accel);
 	return GDK_EVENT_STOP;
@@ -361,39 +392,50 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
 
 static void on_help(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
+
 	if(editor == NULL)
 		return;
-	stop_capture();	/* règle : tout autre bouton annule la capture en cours */
+	stop_capture(editor);	/* règle : tout autre bouton annule la capture en cours */
 	gt_ui_message(GTK_WINDOW(editor->window), GT_APP_MSG_INFO, _(help_text));
 }
 
 /* OK : les lignes, dans l'ordre affiché, avec leur identifiant (arguments et polling suivent l'identifiant, M16) */
-static void apply_edits(void)
+static void apply_edits(MacroEditor *editor)
 {
+	GtMacros *macros = editor_macros(editor);
+	GtSession *s;
 	GtMacroEdit *edits;
 	guint n = 0;
 
-	if(macros_get_set() != editor->set)	/* jeu remplacé : ces lignes ne s'appliquent jamais au nouveau jeu */
+	/* Session fermée, ou jeu remplacé : ces lignes ne s'appliquent jamais (au nouveau jeu ni à une session arrêtée) */
+	if(macros == NULL || gt_macros_get_set(macros) != editor->set)
 		return;
 	edits = gt_macro_rows_to_edits(G_LIST_MODEL(editor->rows), &n);
 	gt_macro_set_apply_edits(editor->set, edits, n, gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows)));
 	g_free(edits);
-	gt_macro_poller_sync(macros_get_poller());
-	macros_changed();	/* raccourcis et panneau ; ce module voit le même jeu et ne ferme rien */
-	macros_save_file(NULL, TRUE);
-	config_remember_macros_file();
+	gt_macro_poller_sync(gt_macros_get_poller(macros));
+	gt_macros_changed(macros);	/* raccourcis et panneau ; ce module voit le même jeu et ne ferme rien */
+	gt_macros_save_file(macros, NULL, TRUE);
+	s = g_weak_ref_get(&editor->session);
+	config_remember_macros_file(s);
+	g_object_unref(s);	/* non NULL : editor_macros l'a vue vivante, et rien ne la libère entre-temps */
 }
 
 static void on_ok(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
+
 	if(editor == NULL)
 		return;
-	apply_edits();
+	apply_edits(editor);
 	gtk_window_destroy(GTK_WINDOW(editor->window));	/* sans close-request */
 }
 
 static void on_cancel(GtkButton *button, gpointer data)
 {
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
+
 	if(editor == NULL)
 		return;
 	gtk_window_destroy(GTK_WINDOW(editor->window));
@@ -402,18 +444,44 @@ static void on_cancel(GtkButton *button, gpointer data)
 /* Fermer par la barre de titre vaut OK (comportement conservé) */
 static gboolean on_close_request(GtkWindow *window, gpointer data)
 {
+	MacroEditor *editor = g_object_get_data(G_OBJECT(window), EDITOR_KEY);
+
 	if(editor == NULL)
 		return FALSE;
-	apply_edits();
+	apply_edits(editor);
 	return FALSE;
 }
 
+/* Destruction : la session ne désigne plus cette fenêtre ; l'état est retiré de la fenêtre (les rappels encore branchés le trouvent NULL) */
 static void on_destroy(GtkWidget *window, gpointer data)
 {
+	MacroEditor *editor = g_object_get_data(G_OBJECT(window), EDITOR_KEY);
+	GtSession *s;
+
+	if(editor == NULL)
+		return;
+	s = g_weak_ref_get(&editor->session);
+	if(s != NULL && g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) == window)
+		g_object_set_data(G_OBJECT(s), SESSION_EDITOR_KEY, NULL);
+	g_clear_object(&s);
+	g_object_set_data(G_OBJECT(window), EDITOR_KEY, NULL);	/* editor_free */
+}
+
+static void editor_free(gpointer data)
+{
+	MacroEditor *editor = data;
+
 	g_clear_object(&editor->capture_row);
 	g_clear_object(&editor->rows);
 	g_clear_object(&editor->list_rows);
-	g_clear_pointer(&editor, g_free);	/* les rappels encore branchés vérifient editor != NULL */
+	g_weak_ref_clear(&editor->session);
+	g_free(editor);
+}
+
+/* Session fermée pendant l'édition (signal « closed ») : fenêtre fermée sans rien appliquer (spec §3.2-12) */
+static void on_session_closed(GtSession *s, gpointer window)
+{
+	gtk_window_destroy(GTK_WINDOW(window));	/* sans close-request */
 }
 
 /* --- Construction --- */
@@ -437,12 +505,12 @@ static GtkWidget *button_row(void)
 	return box;
 }
 
-static GtkWidget *build_page(gint page)
+static GtkWidget *build_page(MacroEditor *editor, gint page)
 {
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
 	GtkWidget *scrolled = gtk_scrolled_window_new();
 	GtkWidget *row1 = button_row(), *row2 = button_row();
-	GtkSelectionModel *selection = GTK_SELECTION_MODEL(gtk_multi_selection_new(G_LIST_MODEL(g_object_ref(page_store(page)))));
+	GtkSelectionModel *selection = GTK_SELECTION_MODEL(gtk_multi_selection_new(G_LIST_MODEL(g_object_ref(page_store(editor, page)))));
 	GtkWidget *view = gtk_column_view_new(selection);	/* prend la sélection */
 
 	gtk_column_view_set_reorderable(GTK_COLUMN_VIEW(view), FALSE);
@@ -484,23 +552,34 @@ static GtkWidget *build_page(gint page)
 	return box;
 }
 
-void gt_macro_editor_open(GtkWindow *parent)
+void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 {
-	GtkWidget *vbox, *stack, *switcher, *bottom;
+	GtkWidget *vbox, *stack, *switcher, *bottom, *open;
 	GtkEventController *keys;
+	MacroEditor *editor;
+	gchar *title;
 
-	if(editor != NULL)
+	if(s == NULL || gt_session_is_shut_down(s))
+		return;
+	open = g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY);
+	if(open != NULL)
 	{
-		gtk_window_present(GTK_WINDOW(editor->window));
+		gtk_window_present(GTK_WINDOW(open));
 		return;
 	}
 	editor = g_new0(MacroEditor, 1);
-	editor->set = macros_get_set();
+	g_weak_ref_init(&editor->session, s);
+	editor->set = gt_macros_get_set(gt_session_get_macros(s));
 	editor->rows = gt_macro_rows_from_set(editor->set);
 	editor->list_rows = gt_macro_list_rows_from_lists(editor->set != NULL ? gt_macro_set_get_lists(editor->set) : NULL);
 	editor->window = gtk_window_new();
+	g_object_set_data_full(G_OBJECT(editor->window), EDITOR_KEY, editor, editor_free);
+	g_object_set_data(G_OBJECT(s), SESSION_EDITOR_KEY, editor->window);
 	gtk_widget_set_name(editor->window, "macro-editor");
-	gtk_window_set_title(GTK_WINDOW(editor->window), _("Configure Macros"));
+	/* Titre au nom court de l'onglet (fixé à l'ouverture) */
+	title = g_strdup_printf(_("Configure Macros — %s"), gt_session_get_short_name(s));
+	gtk_window_set_title(GTK_WINDOW(editor->window), title);
+	g_free(title);
 	gtk_window_set_default_size(GTK_WINDOW(editor->window), 520, 500);
 	if(parent != NULL)
 	{
@@ -509,6 +588,7 @@ void gt_macro_editor_open(GtkWindow *parent)
 	}
 	g_signal_connect(editor->window, "close-request", G_CALLBACK(on_close_request), NULL);
 	g_signal_connect(editor->window, "destroy", G_CALLBACK(on_destroy), NULL);
+	g_signal_connect_object(s, "closed", G_CALLBACK(on_session_closed), editor->window, 0);
 	keys = gtk_event_controller_key_new();
 	gtk_event_controller_set_propagation_phase(keys, GTK_PHASE_CAPTURE);
 	g_signal_connect(keys, "key-pressed", G_CALLBACK(on_key_pressed), NULL);
@@ -521,8 +601,8 @@ void gt_macro_editor_open(GtkWindow *parent)
 	gtk_widget_set_margin_bottom(vbox, 8);
 	stack = gtk_stack_new();
 	gtk_widget_set_vexpand(stack, TRUE);
-	gtk_stack_add_titled(GTK_STACK(stack), build_page(PAGE_MACROS), "macros", _("Macros"));
-	gtk_stack_add_titled(GTK_STACK(stack), build_page(PAGE_LISTS), "lists", _("Lists"));
+	gtk_stack_add_titled(GTK_STACK(stack), build_page(editor, PAGE_MACROS), "macros", _("Macros"));
+	gtk_stack_add_titled(GTK_STACK(stack), build_page(editor, PAGE_LISTS), "lists", _("Lists"));
 	switcher = gtk_stack_switcher_new();
 	gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher), GTK_STACK(stack));
 	gtk_widget_set_halign(switcher, GTK_ALIGN_CENTER);
@@ -544,17 +624,21 @@ void gt_macro_editor_open(GtkWindow *parent)
 	gtk_window_present(GTK_WINDOW(editor->window));
 }
 
-/* Comparaison de pointeurs sûre : macros_replace_set crée le nouveau jeu avant de libérer l'ancien et appelle ce crochet à chaque
+/* Comparaison de pointeurs sûre : gt_macros_replace_set crée le nouveau jeu avant de libérer l'ancien et appelle ce crochet à chaque
  * remplacement ; editor->set n'est jamais déréférencé une fois différent du jeu courant. */
-void gt_macro_editor_macros_changed(void)
+void gt_macro_editor_macros_changed(GtSession *s)
 {
-	if(editor != NULL && macros_get_set() != editor->set)
-		gtk_window_destroy(GTK_WINDOW(editor->window));	/* sans close-request : rien n'est appliqué ni enregistré */
+	GtkWidget *window = s != NULL ? g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) : NULL;
+	MacroEditor *editor = window != NULL ? g_object_get_data(G_OBJECT(window), EDITOR_KEY) : NULL;
+
+	if(editor != NULL && gt_macros_get_set(gt_session_get_macros(s)) != editor->set)
+		gtk_window_destroy(GTK_WINDOW(window));	/* sans close-request : rien n'est appliqué ni enregistré */
 }
 
+/* app.macros : éditeur de la session active au moment de l'activation */
 static void on_macros_action(GSimpleAction *action, GVariant *parameter, gpointer data)
 {
-	gt_macro_editor_open(gt_app_get_main_window());
+	gt_macro_editor_open(gt_app_get_main_window(), gt_app_get_active_session());
 }
 
 void gt_macro_editor_install_action(GtkApplication *app)

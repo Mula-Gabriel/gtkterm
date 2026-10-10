@@ -57,7 +57,6 @@ enum
 
 static GParamSpec *props[N_PROPS];
 static guint signals[N_SIGNALS];
-static GtkTermLink *default_link = NULL;
 
 G_DEFINE_TYPE(GtkTermLink, gt_link, G_TYPE_OBJECT)
 
@@ -352,16 +351,6 @@ GtkTermLink *gt_link_new(void)
 	return g_object_new(GT_TYPE_LINK, NULL);
 }
 
-void gt_link_set_default(GtkTermLink *link)
-{
-	default_link = link;
-}
-
-GtkTermLink *gt_link_get_default(void)
-{
-	return default_link;
-}
-
 gboolean gt_link_open(GtkTermLink *link, const TransportParams *params, GError **error)
 {
 	GError *local = NULL;
@@ -551,8 +540,6 @@ static void gt_link_dispose(GObject *object)
 	GtkTermLink *link = GT_LINK(object);
 
 	link_shutdown(link);
-	if(default_link == link)
-		default_link = NULL;
 	G_OBJECT_CLASS(gt_link_parent_class)->dispose(object);
 }
 

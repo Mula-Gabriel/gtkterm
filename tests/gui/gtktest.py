@@ -19,8 +19,9 @@ APP_PATH = '/eu/mulagabriel/gtkterm/test/p%d'
 R = []
 FAILS = []
 _ENVS = []
-# Bruit connu de GTK 4 sous broadway, sans rapport avec GTKTerm (aucun mesuré par l'essai du 2026-10-09)
-KNOWN_NOISE = ()
+# Bruit connu de GTK 4 sous broadway, sans rapport avec GTKTerm (aucun mesuré par l'essai du 2026-10-09) : GTK 4.24 (Arch, 2026-10-10)
+# signale ses minutages d'images en double sous broadway, avec ou sans GTKTerm
+KNOWN_NOISE = ('Duplicate call to gdk_frame_timings_submitted()', 'gdk_frame_timings_submitted() called on submitted frame')
 BAD_STDERR = ('runtime error', 'Sanitizer', 'CRITICAL', '-WARNING **', 'EMGUARD', 'Segmentation', 'GTKTERM-TEST:')
 
 
@@ -67,9 +68,45 @@ def local_revision():
         return 'unknown'
 
 
+def _broadway_crash():
+    """Assertion interne de gtk4-broadwayd (défaut de GTK, ex. GTK 4.24.1 : broadway-server.c decode_nodes, broadway-output.c append_node_ops),
+    relevée dans le journal d'un serveur du scénario ; None sinon."""
+    for e in _ENVS:
+        try:
+            with open(os.path.join(e.root, 'broadwayd.log'), errors='replace') as f:
+                for line in f:
+                    if 'Gdk:ERROR:' in line and '/gdk/broadway/' in line:
+                        return line.strip()
+        except OSError:
+            pass
+    return None
+
+
+def _skip_if_broadway_crashed():
+    crash = _broadway_crash()
+    if crash is not None:
+        log('SAUTE : gtk4-broadwayd a plante (defaut de GTK, pas de GTKTerm) :', crash)
+        return True
+    return False
+
+
 def conclude():
     rep('BILAN : %d echec(s)%s' % (len(FAILS), (' : ' + ', '.join(FAILS)) if FAILS else ''))
+    if FAILS and _skip_if_broadway_crashed():
+        return 77
     return 1 if FAILS else 0
+
+
+def _excepthook(kind, value, tb):
+    # Exception non rattrapée (le faux navigateur ou D-Bus perd l'application quand le serveur broadway meurt) : sautée si broadwayd a planté
+    sys.__excepthook__(kind, value, tb)
+    if _skip_if_broadway_crashed():
+        _cleanup_all()
+        sys.stdout.flush()
+        os._exit(77)
+
+
+sys.excepthook = _excepthook
 
 
 @atexit.register
@@ -114,6 +151,42 @@ def _kill_group(proc, timeout=5):
         pass
 
 
+class Pty:
+    """Paire pty supplémentaire (onglets) : l'esclave, en mode brut, sert de port série à GTKTerm."""
+
+    def __init__(self):
+        self.master, self.slave = os.openpty()
+        tty.setraw(self.slave)
+        self.port = os.ttyname(self.slave)
+        os.set_blocking(self.master, False)
+
+    def read(self, duration=0.5):
+        buf = b''
+        t0 = time.time()
+        while time.time() - t0 < duration:
+            r, _, _ = select.select([self.master], [], [], 0.05)
+            if r:
+                try:
+                    buf += os.read(self.master, 65536)
+                except OSError:
+                    pass
+        return buf
+
+    def drain(self, settle=0.3):
+        return self.read(settle)
+
+    def write(self, data):
+        os.write(self.master, data)
+
+    def close(self):
+        for fd in (self.master, self.slave):
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+        self.master = self.slave = -1
+
+
 class Env:
     """Un lancement de gtkterm : dossiers privés runs/<name>/, paire pty (esclave brute = port série), gtk4-broadwayd propre."""
 
@@ -143,6 +216,7 @@ class Env:
         tty.setraw(self.slave)
         self.port = os.ttyname(self.slave)
         os.set_blocking(self.master, False)
+        self.ptys = []
         self.config_path = os.path.join(self.cfg, '.gtktermrc')
         self.macros_path = os.path.join(self.cfg, 'gtkterm_macros.ini')
         self.stderr_path = os.path.join(self.root, 'gtkterm.stderr')
@@ -280,6 +354,8 @@ class Env:
         except Exception:
             pass
         _kill_group(self.broadway, 3)
+        for p in self.ptys:
+            p.close()
         for fd in (self.master, self.slave):
             try:
                 os.close(fd)
@@ -304,6 +380,13 @@ class Env:
         """(activée, type du paramètre, état ou None)"""
         enabled, ptype, st = self._call('Describe', GLib.Variant('(s)', (name,)))[0]
         return enabled, ptype, (st[0] if st else None)
+
+    def state_type(self, name):
+        """Type exact (chaîne de type GVariant) de l'état de app.<name>, None sans état : Describe sans déballage python, qui perdrait b/s/u."""
+        r = self.bus.call_sync(self.dest, self.path, 'org.gtk.Actions', 'Describe', GLib.Variant('(s)', (name,)), None,
+                               Gio.DBusCallFlags.NONE, 10000, None)
+        st = r.get_child_value(0).get_child_value(2)
+        return st.get_child_value(0).get_variant().get_type_string() if st.n_children() > 0 else None
 
     def state(self, name):
         return self.describe(name)[2]
@@ -441,6 +524,21 @@ class Env:
     def write_pty(self, data):
         os.write(self.master, data)
 
+    def new_pty(self):
+        """Pty supplémentaire, fermée avec l'environnement."""
+        p = Pty()
+        self.ptys.append(p)
+        return p
+
+    # ---------- onglets ----------
+    def sessions(self):
+        """Onglets (crochet test-sessions) : liste de dict index, id, name, state, profile, macros_file, active, busy, dans l'ordre."""
+        self.action('test-sessions')
+        return self.state('test-sessions') or []
+
+    def active_session(self):
+        return [s for s in self.sessions() if s['active']][0]
+
     # ---------- port derrière un lien symbolique (perte et retour du périphérique) ----------
     def use_link(self):
         """Le port devient un lien symbolique stable vers la pty ; à passer à start(…, port=False) ou dans le profil."""
@@ -497,6 +595,18 @@ class Env:
         self.close()
         with open(os.path.join(self.root, 'result.txt'), 'w') as f:
             f.write('\n'.join(R) + '\n')
+
+
+def open_tab(env, port, timeout=8):
+    """Nouvel onglet par le vrai chemin : app.new-tab, dialogue Port prérempli, port remplacé, OK ; attend la nouvelle session active."""
+    avant = len(env.sessions())
+    env.action('new-tab')
+    env.find1(name='port-dialog', timeout=timeout)
+    env.set_text('port-device', port)
+    env.activate('port-ok')
+    ok = wait_until(lambda: len(env.sessions()) == avant + 1 and env.active_session()['name'] == os.path.basename(port), timeout)
+    check(ok, 'onglet ouvert sur %s' % port, env.sessions())
+    return ok
 
 
 def macros_v2_text(*libelles):
@@ -669,9 +779,9 @@ def editor_select(env, index, prefix='macro-cell', col='shortcut'):
 
 
 def open_editor(env):
-    """Ouvre « Configure Macros » par app.macros et attend sa liste."""
+    """Ouvre « Configure Macros » par app.macros et attend sa liste ; titre « Configure Macros — <nom court de l'onglet> » (6b)."""
     env.action('macros')
-    env.wait_window('Configure Macros')
+    env.wait_window('Configure Macros — ' + env.port.rsplit('/', 1)[-1])
     env.find1(name='macro-list')
 
 

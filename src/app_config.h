@@ -1,5 +1,5 @@
-/* Configuration de l'application (sous-projet 6a, spec §4.2), sans GTK : façade du magasin (.gtktermrc), profil en cours, profils,
- * réglages [general], état de la fenêtre [window]. Utilisée par l'interface GTK 4 (src/ui/) ; les effets
+/* Configuration de l'application (sous-projet 6a, spec §4.2), sans GTK : façade du magasin (.gtktermrc), profils, réglages [general],
+ * état de la fenêtre [window]. Le profil en cours et son nom sont ceux d'une session (6b, session.h). Utilisée par l'interface GTK 4 (src/ui/) ; les effets
  * d'interface passent par les crochets GtAppUi (app_ui.h). Fil principal seulement. */
 #ifndef APP_CONFIG_H_
 #define APP_CONFIG_H_
@@ -8,9 +8,7 @@
 
 #include "profile.h"
 #include "config_store.h"
-
-/* Profil en cours : profil chargé, modifié par les options de ligne de commande et les dialogues (jamais enregistré sans action explicite) */
-extern GtProfile config;
+#include "session.h"
 
 /* Réglages globaux (groupe [general] du fichier de configuration) */
 typedef struct
@@ -33,20 +31,22 @@ GtConfigStore *config_get_store(void);
  * de chaque écriture, avant d'appliquer le changement : relire, appliquer un seul changement, enregistrer */
 void           config_reload_store(void);
 gboolean       config_save_store(gboolean interactive);	/* erreur : gt_app_message si interactive, sinon g_printerr */
-/* Écritures partielles : macros_file du profil actif, update_url et update_skipped_revision de [general] (seulement s'ils ont changé) ;
- * jamais les options de ligne de commande */
-void           config_remember_macros_file(void);
+/* Écritures partielles : macros_file du profil actif d'une session, update_url et update_skipped_revision de [general] (seulement s'ils
+ * ont changé) ; jamais les options de ligne de commande */
+void           config_remember_macros_file(GtSession *s);	/* clé macros_file du profil actif de s seulement */
 void           config_save_update_url(const gchar *url);
 void           config_save_skipped_revision(const gchar *rev);	/* [general] update_skipped_revision ; NULL efface */
 void           config_save_update_check_startup(gboolean enabled);	/* [general] update_check_startup, seulement si la valeur change */
-const gchar   *app_config_active_name(void);	/* « default » par défaut */
-/* Démarrage (spec §3.2-14) : défauts, [general] ; fichier illisible : message, -1 ; aucun profil : [profile:default] créé (message) ;
- * « default » absent mais d'autres profils : défauts, sans message ni création ; sinon « default » chargé. */
-gint           Check_configuration_file(void);
-gint           Load_configuration_from_file(const gchar *name);	/* copie dans config (lock_port gardé), nom actif, fichier de macros non interactif */
-void           Verify_configuration(void);	/* gt_profile_validate + un seul gt_app_message ; n'applique rien à l'interface */
-gboolean       app_config_load_profile(const gchar *name, GError **error);	/* Load + Verify + crochet profile_applied */
-gboolean       app_config_save_profile(const gchar *name, GError **error);	/* nom validé ; macros_file = chemin courant ; relire, put, save */
+/* Démarrage (spec §3.2-14) : défauts (profil de s et [general]), [general] ; fichier illisible : message, -1 ; aucun profil :
+ * [profile:default] créé (message) ; « default » absent mais d'autres profils : défauts, sans message ni création ; sinon « default »
+ * chargé dans s. */
+gint           Check_configuration_file(GtSession *s);
+gint           Load_configuration_from_file(GtSession *s, const gchar *name);	/* copie dans le profil de s (lock_port gardé), nom de profil de s, macros de s */
+void           Verify_configuration(GtSession *s);	/* gt_profile_validate du profil de s + un seul gt_app_message ; n'applique rien à l'interface */
+gboolean       app_config_load_profile(GtSession *s, const gchar *name, GError **error);	/* Load + Verify + crochet profile_applied(s) */
+/* Options de s et auto-reconnect de sa liaison recopiés dans son profil (gt_term_options_store_profile), macros_file = chemin des macros de s,
+ * puis relire, écrire, enregistrer ; nom validé ; nom de profil de s changé seulement après réussite */
+gboolean       app_config_save_profile(GtSession *s, const gchar *name, GError **error);
 gboolean       app_config_delete_profile(const gchar *name, GError **error);
 gchar        **app_config_list_profiles(void);	/* relit d'abord ; g_strfreev */
 gboolean       app_config_has_profile(const gchar *name);	/* sans casse, après relecture */
@@ -61,7 +61,7 @@ typedef struct
 
 /* Clés [window] : width, height, maximized, paned_position (= h_paned), v_paned_position, macro_panel_visible, script_panel_visible,
  * hex_bar_visible ; x et y ne sont plus lus (spec §3.2-7). */
-void app_config_load_window_state(GtWindowState *out);	/* défauts : 750×550, non maximisée, -1, -1, TRUE, FALSE, FALSE ; valeurs aberrantes ignorées */
+void app_config_load_window_state(GtWindowState *out);	/* défauts : 1000×600, non maximisée, -1, -1, TRUE, FALSE, FALSE ; valeurs aberrantes ignorées */
 void app_config_save_window_state(const GtWindowState *st);	/* relit, écrit [window], retire x et y, enregistre (non interactif) ; rien si lecture seule */
 
 #endif

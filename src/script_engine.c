@@ -51,28 +51,52 @@
  * run_on_main_sync. Il ne tient jamais le verrou d'une file pendant un run_on_main_sync : le thread principal pousse dans ces
  * files (interblocage sinon). */
 
-/* Table des ports Lua : lue et écrite par le thread Lua seulement (aucun lecteur ailleurs, donc ni verrou ni atomique) ; indice 0
- * inutilisé (le port 0 est la liaison). */
-static GtScriptPort *ports[MAX_LUA_PORTS];
-/* Débordement déjà signalé pendant l'exécution en cours, par port (thread Lua ; remis à zéro au lancement). */
-static gboolean      overflow_reported[MAX_LUA_PORTS];
-/* Port 0 : réception de la liaison, alimentée par le signal « received » sur le thread principal. */
-static GtRxQueue    *main_queue = NULL;
-static GThread      *lua_thread = NULL;
-static GMutex        engine_mutex;
-static gint          stop_requested = 0;   /* atomique : « Stop » */
-static gint          exit_requested = 0;   /* atomique : os.exit appelé (stop_requested est alors posé aussi) */
-static lua_Integer   exit_status = 0;      /* code d'os.exit, jamais tronqué (écrit et lu par le thread Lua seulement) */
-/* Pauses interruptibles du thread Lua (sleep, attente de connexion, reprises d'envoi), réveillées par script_engine_stop. */
-static GMutex        pause_mutex;
-static GCond         pause_cond;
-/* Objet d'erreur de l'arrêt : une adresse propre au moteur, poussée comme valeur légère. */
+/* État d'un moteur (un par onglet, sous-projet 6b) : tout ce qui portait l'exécution d'un script est ici, rien n'est partagé entre deux
+ * moteurs hormis le thread principal et la file des demandes run_on_main_sync. */
+struct _GtScriptEngine {
+    GtkTermLink   *main_link;    /* port 0 (référence) */
+    GtMacros      *macros;       /* send_macro, get_macros, get_lists (non possédé) */
+    /* Table des ports Lua : lue et écrite par le thread Lua seulement (aucun lecteur ailleurs, donc ni verrou ni atomique) ; indice 0
+     * inutilisé (le port 0 est la liaison). */
+    GtScriptPort  *ports[MAX_LUA_PORTS];
+    /* Débordement déjà signalé pendant l'exécution en cours, par port (thread Lua ; remis à zéro au lancement). */
+    gboolean       overflow_reported[MAX_LUA_PORTS];
+    /* Port 0 : réception de la liaison, alimentée par le signal « received » sur le thread principal. */
+    GtRxQueue     *main_queue;
+    gulong         main_port_handler;   /* gestionnaire « received » sur main_link (thread principal) */
+    GThread       *lua_thread;          /* engine_mutex */
+    GMutex         engine_mutex;
+    gchar         *script_text;         /* texte à exécuter, remis au thread Lua (qui le libère) */
+    GtScriptEnd    end;                 /* raison de fin, posée par le thread Lua avant done_source_id */
+    guint          done_source_id;      /* source de done_idle_cb programmée, 0 sinon (engine_mutex) */
+    gboolean       thread_finished;     /* le thread Lua a fini son travail (calls_mutex) */
+    gint           stop_requested;      /* atomique : « Stop » */
+    gint           exit_requested;      /* atomique : os.exit appelé (stop_requested est alors posé aussi) */
+    lua_Integer    exit_status;         /* code d'os.exit, jamais tronqué (écrit et lu par le thread Lua seulement) */
+    /* Pauses interruptibles du thread Lua (sleep, attente de connexion, reprises d'envoi), réveillées par gt_script_engine_stop. */
+    GMutex         pause_mutex;
+    GCond          pause_cond;
+    ScriptLogFunc  log_func;
+    gpointer       log_data;
+    ScriptDoneFunc done_func;
+    gpointer       done_data;
+    /* Journal (voir plus bas) */
+    GMutex         log_mutex;
+    GString       *log_pending;         /* texte en attente (log_mutex) */
+    gsize          log_dropped;         /* octets jetés au-delà du plafond depuis le dernier vidage (log_mutex) */
+    guint          log_source_id;       /* source de vidage programmée, 0 sinon (log_mutex) */
+    gboolean       shut_down;           /* gt_script_engine_shutdown appelée : plus aucun lancement */
+    gboolean       abandoned;           /* thread Lua abandonné à la fermeture (encore vivant) : le moteur n'est jamais libéré */
+};
+
+/* Objet d'erreur de l'arrêt : une adresse propre au moteur (commune à tous les moteurs), poussée comme valeur légère. */
 static const char    stop_sentinel = 0;
 
-static ScriptLogFunc  log_func  = NULL;
-static gpointer       log_data  = NULL;
-static ScriptDoneFunc done_func = NULL;
-static gpointer       done_data = NULL;
+/* Moteur d'un état Lua : posé dans l'espace supplémentaire juste après luaL_newstate (recopié dans chaque coroutine). */
+static GtScriptEngine *engine_of(lua_State *L)
+{
+    return *(GtScriptEngine **)lua_getextraspace(L);
+}
 
 /* ------------------------------------------------------------------ */
 /* Journal                                                            */
@@ -80,19 +104,16 @@ static gpointer       done_data = NULL;
 
 /* Le texte du thread Lua et des avertissements du moteur s'accumule dans un tampon verrouillé ; une seule source à la fois, à
  * G_PRIORITY_DEFAULT_IDLE (après le rafraîchissement GTK) et 20 ms après le premier ajout, remet tout le tampon en un appel. */
-static GMutex   log_mutex;
-static GString *log_pending = NULL;     /* texte en attente (log_mutex) */
-static gsize    log_dropped = 0;        /* octets jetés au-delà du plafond depuis le dernier vidage (log_mutex) */
-static guint    log_source_id = 0;      /* source de vidage programmée, 0 sinon (log_mutex) */
-
-static void log_flush(void);
+static void log_flush(GtScriptEngine *e);
 
 static gboolean log_flush_cb(gpointer user_data)
 {
-    g_mutex_lock(&log_mutex);
-    log_source_id = 0;
-    g_mutex_unlock(&log_mutex);
-    log_flush();
+    GtScriptEngine *e = user_data;
+
+    g_mutex_lock(&e->log_mutex);
+    e->log_source_id = 0;
+    g_mutex_unlock(&e->log_mutex);
+    log_flush(e);
     return G_SOURCE_REMOVE;
 }
 
@@ -114,66 +135,66 @@ static void append_escaped(GString *out, const char *text, gsize len)
 
 /* N'importe quel thread : ajoute au tampon et programme un vidage s'il n'y en a pas. Plafond de 1 Mio comparé à la taille après
  * échappement des octets nuls (le tampon ne le dépasse jamais) ; au-delà, les octets du texte sont comptés comme jetés. */
-static void log_append_len(const char *text, gsize len)
+static void log_append_len(GtScriptEngine *e, const char *text, gsize len)
 {
     gsize escaped = len;
 
     for (const char *p = text; (p = memchr(p, '\0', (size_t)(text + len - p))) != NULL; p++)
         escaped++;
-    g_mutex_lock(&log_mutex);
-    if (log_pending == NULL)
-        log_pending = g_string_new(NULL);
-    if (log_pending->len + escaped > LOG_MAX_PENDING)
-        log_dropped += len;
+    g_mutex_lock(&e->log_mutex);
+    if (e->log_pending == NULL)
+        e->log_pending = g_string_new(NULL);
+    if (e->log_pending->len + escaped > LOG_MAX_PENDING)
+        e->log_dropped += len;
     else
-        append_escaped(log_pending, text, len);
-    if (log_source_id == 0)
-        log_source_id = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, LOG_FLUSH_DELAY_MS, log_flush_cb, NULL, NULL);
-    g_mutex_unlock(&log_mutex);
+        append_escaped(e->log_pending, text, len);
+    if (e->log_source_id == 0)
+        e->log_source_id = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, LOG_FLUSH_DELAY_MS, log_flush_cb, e, NULL);
+    g_mutex_unlock(&e->log_mutex);
 }
 
 /* Thread principal : tout le texte en attente en un appel (UTF-8 rendu valide), puis la ligne de pertes éventuelle. */
-static void log_flush(void)
+static void log_flush(GtScriptEngine *e)
 {
     GString *text = NULL;
     gsize dropped;
 
-    g_mutex_lock(&log_mutex);
-    if (log_pending != NULL && log_pending->len > 0) {
-        text = log_pending;
-        log_pending = g_string_new(NULL);
+    g_mutex_lock(&e->log_mutex);
+    if (e->log_pending != NULL && e->log_pending->len > 0) {
+        text = e->log_pending;
+        e->log_pending = g_string_new(NULL);
     }
-    dropped = log_dropped;
-    log_dropped = 0;
-    g_mutex_unlock(&log_mutex);
+    dropped = e->log_dropped;
+    e->log_dropped = 0;
+    g_mutex_unlock(&e->log_mutex);
 
     if (text != NULL) {
-        if (log_func) {
+        if (e->log_func) {
             gchar *valid = g_utf8_make_valid(text->str, (gssize)text->len);
-            log_func(valid, log_data);
+            e->log_func(valid, e->log_data);
             g_free(valid);
         }
         g_string_free(text, TRUE);
     }
-    if (dropped > 0 && log_func) {
+    if (dropped > 0 && e->log_func) {
         gchar *msg = g_strdup_printf(_("[%zu bytes of log output dropped]"), dropped);
         gchar *line = g_strconcat(msg, "\n", NULL);
-        log_func(line, log_data);
+        e->log_func(line, e->log_data);
         g_free(line);
         g_free(msg);
     }
 }
 
-static void engine_log_line(const char *fmt, ...) G_GNUC_PRINTF(1, 2);
+static void engine_log_line(GtScriptEngine *e, const char *fmt, ...) G_GNUC_PRINTF(2, 3);
 /* Une ligne du moteur (avertissement, erreur) : texte formaté suivi d'une fin de ligne, n'importe quel thread. */
-static void engine_log_line(const char *fmt, ...)
+static void engine_log_line(GtScriptEngine *e, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
     char *text = g_strdup_vprintf(fmt, ap);
     va_end(ap);
     char *line = g_strconcat(text, "\n", NULL);
-    log_append_len(line, strlen(line));
+    log_append_len(e, line, strlen(line));
     g_free(line);
     g_free(text);
 }
@@ -189,17 +210,17 @@ static int raise_stop(lua_State *L)
     return lua_error(L);
 }
 
-/* Attend au plus us microsecondes ; FALSE si l'arrêt est demandé (avant ou pendant l'attente). script_engine_stop réveille
+/* Attend au plus us microsecondes ; FALSE si l'arrêt est demandé (avant ou pendant l'attente). gt_script_engine_stop réveille
  * l'attente ; la relecture toutes les 20 ms n'est qu'une sécurité. */
-static gboolean pause_interruptible(gint64 us)
+static gboolean pause_interruptible(GtScriptEngine *e, gint64 us)
 {
     gint64 deadline = g_get_monotonic_time() + MAX(us, 0);
     gboolean stopped;
 
-    g_mutex_lock(&pause_mutex);
-    while (!(stopped = g_atomic_int_get(&stop_requested)) && g_get_monotonic_time() < deadline)
-        g_cond_wait_until(&pause_cond, &pause_mutex, MIN(deadline, g_get_monotonic_time() + STOP_POLL_US));
-    g_mutex_unlock(&pause_mutex);
+    g_mutex_lock(&e->pause_mutex);
+    while (!(stopped = g_atomic_int_get(&e->stop_requested)) && g_get_monotonic_time() < deadline)
+        g_cond_wait_until(&e->pause_cond, &e->pause_mutex, MIN(deadline, g_get_monotonic_time() + STOP_POLL_US));
+    g_mutex_unlock(&e->pause_mutex);
     return !stopped;
 }
 
@@ -209,9 +230,10 @@ static gboolean pause_interruptible(gint64 us)
 
 /* Le thread Lua ne touche jamais GTK, un transport ni l'état du thread principal (macros, listes, liaison) : il y fait exécuter
  * func et attend sa fin (C10, C11). La demande est inscrite dans pending_calls et une source est ajoutée au contexte par défaut ;
- * pendant script_engine_shutdown, le thread principal ne fait plus tourner ce contexte (les rappels de l'interface toucheraient
+ * pendant gt_script_engine_shutdown, le thread principal ne fait plus tourner ce contexte (les rappels de l'interface toucheraient
  * des widgets détruits) : il exécute lui-même les demandes inscrites et retire leurs sources. */
 typedef struct {
+    GtScriptEngine *engine;  /* moteur demandeur (toute demande est exécutée, quel que soit son moteur) */
     GSourceFunc func;
     gpointer    data;
     guint       source_id;   /* source du contexte par défaut (calls_mutex) */
@@ -220,11 +242,10 @@ typedef struct {
     GCond       cond;
 } MainCall;
 
-static GThread *main_thread = NULL;      /* thread principal, noté par script_engine_setup */
+static GThread *main_thread = NULL;      /* thread principal, noté par script_engine_setup (commun à tous les moteurs) */
 static GMutex   calls_mutex;
-static GCond    calls_cond;              /* nouvelle demande ou fin du thread Lua (calls_mutex) */
+static GCond    calls_cond;              /* nouvelle demande ou fin d'un thread Lua (calls_mutex) */
 static GQueue   pending_calls = G_QUEUE_INIT;   /* MainCall * pas encore exécutées (calls_mutex) */
-static gboolean thread_finished = FALSE; /* le thread Lua a fini son travail (calls_mutex) */
 
 static void main_call_run(MainCall *mc)
 {
@@ -239,7 +260,7 @@ static gboolean main_call_trampoline(gpointer user_data)
 {
     MainCall *mc = user_data;
 
-    /* Toujours encore inscrite : script_engine_shutdown retire la source avant d'exécuter une demande, sur ce même thread */
+    /* Toujours encore inscrite : gt_script_engine_shutdown retire la source avant d'exécuter une demande, sur ce même thread */
     g_mutex_lock(&calls_mutex);
     g_queue_remove(&pending_calls, mc);
     g_mutex_unlock(&calls_mutex);
@@ -247,7 +268,7 @@ static gboolean main_call_trampoline(gpointer user_data)
     return G_SOURCE_REMOVE;
 }
 
-static void run_on_main_sync(GSourceFunc func, gpointer data)
+static void run_on_main_sync(GtScriptEngine *e, GSourceFunc func, gpointer data)
 {
     /* Appelée par le thread principal : exécution directe (spec §2.3), sinon il attendrait une demande qu'il est seul à pouvoir
      * exécuter. */
@@ -256,6 +277,7 @@ static void run_on_main_sync(GSourceFunc func, gpointer data)
         return;
     }
     MainCall mc;
+    mc.engine = e;
     mc.func = func;
     mc.data = data;
     mc.done = FALSE;
@@ -283,35 +305,42 @@ static void lua_main_port_received(GtkTermLink *link, GBytes *bytes, gint64 wall
 {
     gsize size;
     const guint8 *data = g_bytes_get_data(bytes, &size);
-    gt_rx_queue_push(main_queue, data, size);
-}
+    GtScriptEngine *e = user_data;
 
-static gulong main_port_handler = 0;
+    gt_rx_queue_push(e->main_queue, data, size);
+}
 
 /* Connexion et déconnexion du gestionnaire sur le thread principal (run_on_main_sync) : l'objet GLib n'est jamais
    manipulé depuis le thread Lua (remarque reportée du sous-projet 1). */
 static gboolean main_port_connect_cb(gpointer data)
 {
-    GtkTermLink *link = gt_link_get_default();
+    GtScriptEngine *e = data;
 
-    if (link != NULL && main_port_handler == 0)
-        main_port_handler = g_signal_connect(link, "received", G_CALLBACK(lua_main_port_received), NULL);
+    if (e->main_port_handler == 0)
+        e->main_port_handler = g_signal_connect(e->main_link, "received", G_CALLBACK(lua_main_port_received), e);
     return G_SOURCE_REMOVE;
 }
 
 static gboolean main_port_disconnect_cb(gpointer data)
 {
-    GtkTermLink *link = gt_link_get_default();
+    GtScriptEngine *e = data;
 
-    if (link != NULL && main_port_handler != 0)
-        g_signal_handler_disconnect(link, main_port_handler);
-    main_port_handler = 0;
+    if (e->main_port_handler != 0)
+        g_signal_handler_disconnect(e->main_link, e->main_port_handler);
+    e->main_port_handler = 0;
     return G_SOURCE_REMOVE;
 }
 
+typedef struct {
+    GtScriptEngine *e;
+    GtLinkState     state;
+} MainLinkState;
+
 static gboolean main_link_state_cb(gpointer user_data)
 {
-    *(GtLinkState *)user_data = gt_link_get_state(gt_link_get_default());
+    MainLinkState *d = user_data;
+
+    d->state = gt_link_get_state(d->e->main_link);
     return G_SOURCE_REMOVE;
 }
 
@@ -337,28 +366,28 @@ static const char *link_state_name(GtLinkState s)
 /* ------------------------------------------------------------------ */
 
 /* File de réception du port h (0 : liaison) ; NULL si h est hors plage ou si le port Lua est fermé. Thread Lua. */
-static GtRxQueue *queue_for(int handle)
+static GtRxQueue *queue_for(GtScriptEngine *e, int handle)
 {
     if (handle == 0)
-        return main_queue;
-    if (handle > 0 && handle < MAX_LUA_PORTS && ports[handle] != NULL)
-        return gt_script_port_get_queue(ports[handle]);
+        return e->main_queue;
+    if (handle > 0 && handle < MAX_LUA_PORTS && e->ports[handle] != NULL)
+        return gt_script_port_get_queue(e->ports[handle]);
     return NULL;
 }
 
 /* Signale une fois par port et par exécution que sa file a débordé (thread Lua ; le cœur ne journalise pas). */
-static void report_overflow(int handle, GtRxQueue *q)
+static void report_overflow(GtScriptEngine *e, int handle, GtRxQueue *q)
 {
-    if (q == NULL || gt_rx_queue_take_dropped(q) == 0 || overflow_reported[handle])
+    if (q == NULL || gt_rx_queue_take_dropped(q) == 0 || e->overflow_reported[handle])
         return;
-    overflow_reported[handle] = TRUE;
-    engine_log_line(_("Port %d: receive buffer full, oldest data dropped"), handle);
+    e->overflow_reported[handle] = TRUE;
+    engine_log_line(e, _("Port %d: receive buffer full, oldest data dropped"), handle);
 }
 
-static void report_all_overflows(void)
+static void report_all_overflows(GtScriptEngine *e)
 {
     for (int h = 0; h < MAX_LUA_PORTS; h++)
-        report_overflow(h, queue_for(h));
+        report_overflow(e, h, queue_for(e, h));
 }
 
 /* ------------------------------------------------------------------ */
@@ -459,46 +488,46 @@ static gboolean main_output_cb(gpointer user_data)
  * thread principal) ; on attend donc ici qu'elle soit émise, relevé toutes les 5 ms par run_on_main_sync, au plus le temps
  * d'émission (10 bits par octet) + 500 ms, plafonné à 2 s. Aucune vidange si l'arrêt est demandé (Stop, os.exit, fermeture de
  * GTKTerm) ni sur un port perdu ; TCP : rien en attente (le noyau émet après la fermeture). */
-static void drain_output(GtScriptPort *port)
+static void drain_output(GtScriptEngine *e, GtScriptPort *port)
 {
     MainOutput d = { port, 0, 0 };
     gint64 start = g_get_monotonic_time();
     gint64 limit = start + DRAIN_MAX_US;    /* une seule échéance pour toute la vidange, marge de FIFO comprise */
     gint64 deadline, now;
 
-    if (g_atomic_int_get(&stop_requested) || gt_script_port_get_state(port) == GT_SCRIPT_PORT_LOST)
+    if (g_atomic_int_get(&e->stop_requested) || gt_script_port_get_state(port) == GT_SCRIPT_PORT_LOST)
         return;
-    run_on_main_sync(main_output_cb, &d);
+    run_on_main_sync(e, main_output_cb, &d);
     /* pending == 0 n'est pas une sortie anticipée : une courte trame (« RESET\r\n ») passe tout de suite dans la FIFO de l'UART */
     if (d.baud == 0)
         return;
     deadline = MIN(start + (gint64)d.pending * 10 * G_USEC_PER_SEC / d.baud + DRAIN_MARGIN_US, limit);
     while (d.pending > 0) {
         now = g_get_monotonic_time();
-        if (now >= deadline || !pause_interruptible(MIN(DRAIN_POLL_US, deadline - now)))
+        if (now >= deadline || !pause_interruptible(e, MIN(DRAIN_POLL_US, deadline - now)))
             return;
-        run_on_main_sync(main_output_cb, &d);
+        run_on_main_sync(e, main_output_cb, &d);
     }
     /* TIOCOUTQ ne compte que le tampon du pilote : la FIFO de l'UART (ou les URB d'un adaptateur USB) peut encore contenir
        quelques octets, que le TCOFLUSH de la fermeture couperait ; temps d'émission de DRAIN_FIFO_BYTES + 10 ms, dans l'échéance */
     now = g_get_monotonic_time();
     if (now < limit)
-        pause_interruptible(MIN((gint64)DRAIN_FIFO_BYTES * 10 * G_USEC_PER_SEC / d.baud + 10 * G_TIME_SPAN_MILLISECOND, limit - now));
+        pause_interruptible(e, MIN((gint64)DRAIN_FIFO_BYTES * 10 * G_USEC_PER_SEC / d.baud + 10 * G_TIME_SPAN_MILLISECOND, limit - now));
 }
 
 /* Ferme le port h (thread Lua). gt_script_port_close libère file et port tout de suite : l'entrée est retirée de la table avant,
  * et le thread Lua ne garde aucun pointeur vers eux ; transport fermé sur le thread principal. */
-static void lua_port_close(int handle)
+static void lua_port_close(GtScriptEngine *e, int handle)
 {
     GtScriptPort *port;
 
-    if (handle < 1 || handle >= MAX_LUA_PORTS || ports[handle] == NULL)
+    if (handle < 1 || handle >= MAX_LUA_PORTS || e->ports[handle] == NULL)
         return;
-    port = ports[handle];
-    drain_output(port);
-    report_overflow(handle, gt_script_port_get_queue(port));
-    ports[handle] = NULL;
-    run_on_main_sync(main_close_cb, port);
+    port = e->ports[handle];
+    drain_output(e, port);
+    report_overflow(e, handle, gt_script_port_get_queue(port));
+    e->ports[handle] = NULL;
+    run_on_main_sync(e, main_close_cb, port);
 }
 
 static int open_result(lua_State *L, const char *error)
@@ -516,9 +545,9 @@ typedef enum { CONNECT_OK, CONNECT_LOST, CONNECT_TIMEOUT, CONNECT_STOPPED } Conn
 
 /* Client TCP : attend OPEN jusqu'à deadline. Perte (refus) : port refermé, *reason = raison du transport (à libérer). Délai : port
  * refermé. Arrêt : le port reste dans la table et sera refermé par le nettoyage de fin de script. */
-static ConnectOutcome wait_connected(int handle, gint64 deadline, gchar **reason)
+static ConnectOutcome wait_connected(GtScriptEngine *e, int handle, gint64 deadline, gchar **reason)
 {
-    GtScriptPort *port = ports[handle];
+    GtScriptPort *port = e->ports[handle];
 
     for (;;) {
         GtScriptPortState st = gt_script_port_get_state(port);
@@ -529,25 +558,25 @@ static ConnectOutcome wait_connected(int handle, gint64 deadline, gchar **reason
         if (st == GT_SCRIPT_PORT_LOST) {
             gchar *r = gt_script_port_dup_reason(port);
             *reason = r != NULL ? r : g_strdup("link lost");
-            lua_port_close(handle);
+            lua_port_close(e, handle);
             return CONNECT_LOST;
         }
         now = g_get_monotonic_time();
         if (now >= deadline) {
-            lua_port_close(handle);
+            lua_port_close(e, handle);
             return CONNECT_TIMEOUT;
         }
-        if (!pause_interruptible(MIN(CONNECT_POLL_US, deadline - now)))
+        if (!pause_interruptible(e, MIN(CONNECT_POLL_US, deadline - now)))
             return CONNECT_STOPPED;
     }
 }
 
 /* Ouverture d'un port sur le thread principal ; NULL et *error (message sans fin de ligne, à libérer) en cas d'échec. */
-static GtScriptPort *open_on_main(const TransportParams *params, gchar **error)
+static GtScriptPort *open_on_main(GtScriptEngine *e, const TransportParams *params, gchar **error)
 {
     MainOpenData d = { params, NULL, NULL };
 
-    run_on_main_sync(main_open_cb, &d);
+    run_on_main_sync(e, main_open_cb, &d);
     *error = d.error;
     return d.port;
 }
@@ -580,6 +609,7 @@ static gchar *name_failure(gchar *error, const char *host, const char *numeric, 
  * timeout_us pour l'ensemble, résolution comprise. Raison d'échec : celle du dernier essai. */
 static int open_tcp_client(lua_State *L, int handle, const char *host, const char *port_str, gint64 timeout_us)
 {
+    GtScriptEngine *e = engine_of(L);
     gint64 deadline = g_get_monotonic_time() + timeout_us;
     struct addrinfo hints, *res = NULL;
     gchar *last_error = NULL;
@@ -593,7 +623,7 @@ static int open_tcp_client(lua_State *L, int handle, const char *host, const cha
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     ret = getaddrinfo(host, port_str, &hints, &res);
-    if (g_atomic_int_get(&stop_requested)) {
+    if (g_atomic_int_get(&e->stop_requested)) {
         if (ret == 0)
             freeaddrinfo(res);
         return raise_stop(L);
@@ -622,17 +652,17 @@ static int open_tcp_client(lua_State *L, int handle, const char *host, const cha
         params.type = TRANSPORT_TCP_CLIENT;
         params.host = numeric;
         params.tcp_port = (gchar *)port_str;
-        port = open_on_main(&params, &error);
+        port = open_on_main(e, &params, &error);
         if (port == NULL) {
             g_free(last_error);
             last_error = error;
             continue;
         }
         /* Dans la table dès maintenant : un arrêt pendant l'attente de connexion laisse le port au nettoyage de fin de script */
-        ports[handle] = port;
+        e->ports[handle] = port;
         g_free(last_error);
         last_error = NULL;
-        outcome = wait_connected(handle, deadline, &last_error);
+        outcome = wait_connected(e, handle, deadline, &last_error);
         if (outcome != CONNECT_LOST)
             break;
         /* Refus asynchrone : adresse suivante, sauf si le délai est déjà écoulé (dernière adresse : raison du refus) */
@@ -667,13 +697,14 @@ static int open_tcp_client(lua_State *L, int handle, const char *host, const cha
 
 static int l_open(lua_State *L)
 {
+    GtScriptEngine *e = engine_of(L);
     int handle = handle_arg(L, 1);
     TransportParams params;
     char port_str[16];
 
     if (handle < 1)
         return open_result(L, "invalid handle");
-    if (ports[handle] != NULL)
+    if (e->ports[handle] != NULL)
         return open_result(L, "already open");
 
     const char *type = luaL_checkstring(L, 2);
@@ -728,20 +759,20 @@ static int l_open(lua_State *L)
     }
 
     gchar *error = NULL;
-    GtScriptPort *port = open_on_main(&params, &error);
+    GtScriptPort *port = open_on_main(e, &params, &error);
     if (port == NULL) {
         lua_pushboolean(L, 0);
         lua_pushstring(L, error);
         g_free(error);
         return 2;
     }
-    ports[handle] = port;
+    e->ports[handle] = port;
     return open_result(L, NULL);
 }
 
 static int l_close(lua_State *L)
 {
-    lua_port_close(handle_arg(L, 1));
+    lua_port_close(engine_of(L), handle_arg(L, 1));
     return 0;
 }
 
@@ -765,14 +796,15 @@ static gboolean lua_port_lost(GtScriptPort *port)
 
 static int l_status(lua_State *L)
 {
+    GtScriptEngine *e = engine_of(L);
     int handle = handle_arg(L, 1);
 
     if (handle == 0) {
-        GtLinkState st = GT_LINK_CLOSED;
-        run_on_main_sync(main_link_state_cb, &st);
-        lua_pushstring(L, link_state_name(st));
-    } else if (handle > 0 && ports[handle] != NULL) {
-        GtScriptPort *port = ports[handle];
+        MainLinkState st = { e, GT_LINK_CLOSED };
+        run_on_main_sync(e, main_link_state_cb, &st);
+        lua_pushstring(L, link_state_name(st.state));
+    } else if (handle > 0 && e->ports[handle] != NULL) {
+        GtScriptPort *port = e->ports[handle];
         lua_pushstring(L, lua_port_lost(port) ? "lost" : port_state_name(gt_script_port_get_state(port)));
     } else {
         lua_pushstring(L, "closed");
@@ -785,6 +817,7 @@ static int l_status(lua_State *L)
 /* ------------------------------------------------------------------ */
 
 typedef struct {
+    GtScriptEngine *e;
     GtScriptPort *port;          /* NULL : port 0 (liaison) */
     const guint8 *data;
     gsize         len;
@@ -799,7 +832,7 @@ static gboolean main_try_send_cb(gpointer user_data)
     MainTrySend *d = user_data;
 
     /* Arrêt demandé (« Stop » ou fermeture, fenêtre peut-être détruite) : plus rien n'est écrit, comme main_send_macro_cb */
-    if (g_atomic_int_get(&stop_requested)) {
+    if (g_atomic_int_get(&d->e->stop_requested)) {
         d->written = -1;
         d->err = EAGAIN;
         return G_SOURCE_REMOVE;
@@ -808,7 +841,7 @@ static gboolean main_try_send_cb(gpointer user_data)
         d->written = gt_script_port_try_send(d->port, d->data, d->len, &d->err);
         return G_SOURCE_REMOVE;
     }
-    GtkTermLink *link = gt_link_get_default();
+    GtkTermLink *link = d->e->main_link;
     errno = 0;
     d->written = gt_link_send(link, d->data, d->len, GT_SEND_LUA);
     /* errno est propre au thread : relevé ici, avant tout autre appel (le thread Lua ne le verrait jamais) */
@@ -821,7 +854,7 @@ typedef enum { SEND_DONE, SEND_FAILED, SEND_STOPPED } SendOutcome;
 
 /* Écrit tout ou échoue (thread Lua) : écritures partielles et EAGAIN repris ici, pause de 2 ms entre deux essais sans progrès,
  * jusqu'au délai. *reason : chaîne statique (ou de g_strerror) en cas d'échec. Le port h est ouvert (vérifié par l'appelant). */
-static SendOutcome send_all(int handle, const guint8 *data, gsize len, gint64 timeout_us, const char **reason)
+static SendOutcome send_all(GtScriptEngine *e, int handle, const guint8 *data, gsize len, gint64 timeout_us, const char **reason)
 {
     gint64 deadline = g_get_monotonic_time() + timeout_us;
     gsize done = 0;
@@ -830,20 +863,21 @@ static SendOutcome send_all(int handle, const guint8 *data, gsize len, gint64 ti
         MainTrySend d;
         gboolean lost;
 
-        if (g_atomic_int_get(&stop_requested))
+        if (g_atomic_int_get(&e->stop_requested))
             return SEND_STOPPED;
         memset(&d, 0, sizeof(d));
-        d.port = handle > 0 ? ports[handle] : NULL;
+        d.e = e;
+        d.port = handle > 0 ? e->ports[handle] : NULL;
         d.data = data + done;
         d.len = len - done;
-        run_on_main_sync(main_try_send_cb, &d);
-        if (g_atomic_int_get(&stop_requested))
+        run_on_main_sync(e, main_try_send_cb, &d);
+        if (g_atomic_int_get(&e->stop_requested))
             return SEND_STOPPED;
         if (d.written > 0) {
             done += (gsize)d.written;
             continue;
         }
-        lost = handle > 0 ? lua_port_lost(ports[handle]) : link_state_lost(d.link_state);
+        lost = handle > 0 ? lua_port_lost(e->ports[handle]) : link_state_lost(d.link_state);
         if (d.written == 0) {
             /* Rien d'écrivable : connexion en cours, serveur sans client, liaison fermée ou perdue */
             *reason = lost ? "link lost" : "not connected";
@@ -854,7 +888,7 @@ static SendOutcome send_all(int handle, const guint8 *data, gsize len, gint64 ti
                 *reason = "timeout";
                 return SEND_FAILED;
             }
-            if (!pause_interruptible(SEND_RETRY_US))
+            if (!pause_interruptible(e, SEND_RETRY_US))
                 return SEND_STOPPED;
             continue;
         }
@@ -872,14 +906,15 @@ static SendOutcome send_all(int handle, const guint8 *data, gsize len, gint64 ti
 
 static int send_checked(lua_State *L, int handle, const guint8 *data, gsize len, gint64 timeout_us)
 {
+    GtScriptEngine *e = engine_of(L);
     const char *reason = NULL;
     SendOutcome o;
 
     if (handle < 0)
         return open_result(L, "invalid handle");
-    if (handle > 0 && ports[handle] == NULL)
+    if (handle > 0 && e->ports[handle] == NULL)
         return open_result(L, "not open");
-    o = send_all(handle, data, len, timeout_us, &reason);
+    o = send_all(e, handle, data, len, timeout_us, &reason);
     if (o == SEND_STOPPED)
         return raise_stop(L);
     return open_result(L, o == SEND_DONE ? NULL : reason);
@@ -954,6 +989,7 @@ static int nil_reason(lua_State *L, const char *reason)
 /* wait_for(handle, pattern [, timeout_ms]) -> données jusqu'au motif inclus | nil, "timeout" | nil, "closed" */
 static int l_wait_for(lua_State *L)
 {
+    GtScriptEngine *e = engine_of(L);
     int handle = handle_arg(L, 1);
     size_t pat_len;
     const char *pat = luaL_checklstring(L, 2, &pat_len);
@@ -964,12 +1000,12 @@ static int l_wait_for(lua_State *L)
 
     if (handle < 0)
         return nil_reason(L, "invalid handle");
-    q = queue_for(handle);
+    q = queue_for(e, handle);
     if (q == NULL)
         return nil_reason(L, "closed");
     /* L'attente prend et rend le verrou de la file elle-même ; l'arrêt est relu au moins toutes les 20 ms */
-    res = gt_rx_queue_wait_for(q, (const guint8 *)pat, pat_len, g_get_monotonic_time() + timeout_us, &stop_requested, &found);
-    report_overflow(handle, q);
+    res = gt_rx_queue_wait_for(q, (const guint8 *)pat, pat_len, g_get_monotonic_time() + timeout_us, &e->stop_requested, &found);
+    report_overflow(e, handle, q);
     switch (res) {
     case GT_RX_WAIT_FOUND: {
         gsize n;
@@ -989,8 +1025,9 @@ static int l_wait_for(lua_State *L)
 
 static int l_read(lua_State *L)
 {
+    GtScriptEngine *e = engine_of(L);
     int handle = handle_arg(L, 1);
-    GtRxQueue *q = queue_for(handle);
+    GtRxQueue *q = queue_for(e, handle);
     GBytes *b;
     gsize n;
     const char *p;
@@ -999,7 +1036,7 @@ static int l_read(lua_State *L)
         lua_pushstring(L, "");
         return 1;
     }
-    report_overflow(handle, q);
+    report_overflow(e, handle, q);
     b = gt_rx_queue_take_all(q);
     p = g_bytes_get_data(b, &n);
     lua_pushlstring(L, p, n);
@@ -1009,11 +1046,12 @@ static int l_read(lua_State *L)
 
 static int l_clear(lua_State *L)
 {
+    GtScriptEngine *e = engine_of(L);
     int handle = handle_arg(L, 1);
-    GtRxQueue *q = queue_for(handle);
+    GtRxQueue *q = queue_for(e, handle);
 
     if (q != NULL) {
-        report_overflow(handle, q);
+        report_overflow(e, handle, q);
         gt_rx_queue_clear(q);
     }
     return 0;
@@ -1025,10 +1063,11 @@ static int l_clear(lua_State *L)
 
 static int l_sleep(lua_State *L)
 {
+    GtScriptEngine *e = engine_of(L);
     lua_Integer ms = luaL_checkinteger(L, 1);
-    gboolean completed = pause_interruptible((gint64)CLAMP(ms, 0, MAX_TIMEOUT_MS) * 1000);
+    gboolean completed = pause_interruptible(e, (gint64)CLAMP(ms, 0, MAX_TIMEOUT_MS) * 1000);
 
-    report_all_overflows();
+    report_all_overflows(e);
     if (!completed)
         return raise_stop(L);
     return 0;
@@ -1048,7 +1087,7 @@ static int l_log(lua_State *L)
     lua_pushliteral(L, "\n");
     lua_concat(L, 2);
     const char *line = lua_tolstring(L, -1, &len);
-    log_append_len(line, len);
+    log_append_len(engine_of(L), line, len);
     lua_pop(L, 1);
     return 0;
 }
@@ -1092,7 +1131,7 @@ static int l_save_csv(lua_State *L)
 static void stop_hook(lua_State *L, lua_Debug *ar)
 {
     (void)ar;
-    if (g_atomic_int_get(&stop_requested)) {
+    if (g_atomic_int_get(&engine_of(L)->stop_requested)) {
         lua_sethook(L, stop_hook, LUA_MASKCOUNT, 1);
         raise_stop(L);
     }
@@ -1102,6 +1141,7 @@ static void stop_hook(lua_State *L, lua_Debug *ar)
  * fin en erreur avec « Script exited with status N ». */
 static int l_os_exit(lua_State *L)
 {
+    GtScriptEngine *e = engine_of(L);
     lua_Integer status;
 
     if (lua_isnoneornil(L, 1))
@@ -1110,9 +1150,9 @@ static int l_os_exit(lua_State *L)
         status = lua_toboolean(L, 1) ? 0 : 1;
     else
         status = luaL_checkinteger(L, 1);
-    exit_status = status;
-    g_atomic_int_set(&exit_requested, 1);
-    g_atomic_int_set(&stop_requested, 1);
+    e->exit_status = status;
+    g_atomic_int_set(&e->exit_requested, 1);
+    g_atomic_int_set(&e->stop_requested, 1);
     lua_sethook(L, stop_hook, LUA_MASKCOUNT, 1);
     return raise_stop(L);
 }
@@ -1136,7 +1176,7 @@ static int l_print(lua_State *L)
     lua_pushliteral(L, "\n");
     lua_concat(L, 2);
     const char *text = lua_tolstring(L, -1, &len);
-    log_append_len(text, len);
+    log_append_len(engine_of(L), text, len);
     return 0;
 }
 
@@ -1168,10 +1208,21 @@ static void list_snapshot_free(gpointer p)
     g_free(s);
 }
 
+/* Demande d'instantané : moteur (ses macros) et tableau rempli sur le thread principal */
+typedef struct {
+    GtScriptEngine *e;
+    GPtrArray      *out;
+} MainSnapshot;
+
 static gboolean main_snapshot_lists_cb(gpointer user_data)
 {
-    GPtrArray *out = user_data;
-    const GtMacroLists *lists = gt_macro_set_get_lists(macros_get_set());
+    MainSnapshot *d = user_data;
+    GPtrArray *out = d->out;
+
+    /* Arrêt demandé (« Stop », fermeture ; moteur peut-être abandonné, ses macros libérées) : macros jamais lues, instantané vide */
+    if (g_atomic_int_get(&d->e->stop_requested))
+        return G_SOURCE_REMOVE;
+    const GtMacroLists *lists = gt_macro_set_get_lists(gt_macros_get_set(d->e->macros));
     gint n_lists = gt_macro_lists_count(lists);
     for (int i = 0; i < n_lists; i++) {
         ListSnapshot *s = g_new0(ListSnapshot, 1);
@@ -1206,8 +1257,13 @@ static void macro_snapshot_free(gpointer p)
 
 static gboolean main_snapshot_macros_cb(gpointer user_data)
 {
-    GPtrArray *out = user_data;
-    GtMacroSet *set = macros_get_set();
+    MainSnapshot *d = user_data;
+    GPtrArray *out = d->out;
+
+    /* Arrêt demandé : macros jamais lues, instantané vide (comme main_snapshot_lists_cb) */
+    if (g_atomic_int_get(&d->e->stop_requested))
+        return G_SOURCE_REMOVE;
+    GtMacroSet *set = gt_macros_get_set(d->e->macros);
     for (guint i = 0; i < gt_macro_set_count(set); i++) {
         const GtMacro *m = gt_macro_set_get(set, i);
         MacroSnapshot *s = g_new0(MacroSnapshot, 1);
@@ -1222,7 +1278,12 @@ static gboolean main_snapshot_macros_cb(gpointer user_data)
 static int l_get_lists(lua_State *L)
 {
     GPtrArray *lists = g_ptr_array_new_with_free_func(list_snapshot_free);
-    run_on_main_sync(main_snapshot_lists_cb, lists);
+    MainSnapshot d = { engine_of(L), lists };
+    run_on_main_sync(d.e, main_snapshot_lists_cb, &d);
+    if (g_atomic_int_get(&d.e->stop_requested)) {
+        g_ptr_array_unref(lists);
+        return raise_stop(L);
+    }
     lua_newtable(L);
     for (guint i = 0; i < lists->len; i++) {
         ListSnapshot *s = g_ptr_array_index(lists, i);
@@ -1249,7 +1310,12 @@ static int l_get_lists(lua_State *L)
 static int l_get_macros(lua_State *L)
 {
     GPtrArray *snap = g_ptr_array_new_with_free_func(macro_snapshot_free);
-    run_on_main_sync(main_snapshot_macros_cb, snap);
+    MainSnapshot d = { engine_of(L), snap };
+    run_on_main_sync(d.e, main_snapshot_macros_cb, &d);
+    if (g_atomic_int_get(&d.e->stop_requested)) {
+        g_ptr_array_unref(snap);
+        return raise_stop(L);
+    }
     lua_newtable(L);
     for (guint i = 0; i < snap->len; i++) {
         MacroSnapshot *s = g_ptr_array_index(snap, i);
@@ -1279,6 +1345,7 @@ static int l_get_macros(lua_State *L)
 }
 
 typedef struct {
+    GtScriptEngine *e;
     int          index;     /* -1 : chercher par libellé */
     const char  *label;
     int          n_args;
@@ -1293,21 +1360,27 @@ typedef struct {
 static gboolean main_send_macro_cb(gpointer user_data)
 {
     MainMacroData *d = user_data;
-    GtMacroSet *set = macros_get_set();
+
+    d->found = FALSE;
+    d->ok = FALSE;
+    /* Arrêt demandé (« Stop », fermeture de l'onglet ou de GTKTerm, fenêtre peut-être détruite, moteur peut-être abandonné et ses
+     * macros libérées) : macros jamais lues, plus aucun envoi, même déjà demandé ; l_send_macro lève alors l'erreur d'arrêt */
+    if (g_atomic_int_get(&d->e->stop_requested))
+        return G_SOURCE_REMOVE;
+    GtMacroSet *set = gt_macros_get_set(d->e->macros);
     const GtMacro *m = d->index >= 0 ? gt_macro_set_get(set, (guint)d->index) : gt_macro_set_find_label(set, d->label);
 
     d->found = gt_macro_is_sendable(m);
-    d->ok = FALSE;
-    /* Arrêt demandé (« Stop » ou fermeture de GTKTerm, fenêtre peut-être détruite) : plus aucun envoi, même déjà demandé */
-    if (d->found && !g_atomic_int_get(&stop_requested))
-        d->ok = macros_send_quiet(m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
+    if (d->found)
+        d->ok = gt_macros_send_quiet(d->e->macros, m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
     return G_SOURCE_REMOVE;
 }
 
 /* send_macro(index_or_label [, arg1, arg2, ...]) */
 static int l_send_macro(lua_State *L)
 {
-    MainMacroData d = { -1, NULL, 0, NULL, FALSE, FALSE };
+    GtScriptEngine *e = engine_of(L);
+    MainMacroData d = { e, -1, NULL, 0, NULL, FALSE, FALSE };
 
     if (lua_type(L, 1) == LUA_TNUMBER) {
         /* luaL_checkinteger refuse 1.5 ; hors 0..G_MAXINT : jamais tronqué en int, simplement introuvable (M4) */
@@ -1330,9 +1403,9 @@ static int l_send_macro(lua_State *L)
         d.args[i] = g_strdup(s ? s : "");
     }
 
-    run_on_main_sync(main_send_macro_cb, &d);
+    run_on_main_sync(e, main_send_macro_cb, &d);
     g_strfreev(d.args);
-    if (g_atomic_int_get(&stop_requested))
+    if (g_atomic_int_get(&e->stop_requested))
         return raise_stop(L);
 
     if (!d.found) {
@@ -1371,7 +1444,7 @@ static const luaL_Reg gtkterm_funcs[] = {
  * attendre le crochet (jusqu'à 1000 instructions plus tard) ; une boucle d'appels à l'API s'arrête au premier appel suivant. */
 static int api_guard(lua_State *L)
 {
-    if (g_atomic_int_get(&stop_requested))
+    if (g_atomic_int_get(&engine_of(L)->stop_requested))
         return raise_stop(L);
     return lua_tocfunction(L, lua_upvalueindex(1))(L);
 }
@@ -1389,7 +1462,7 @@ static int std_guard(lua_State *L)
 {
     int n = lua_gettop(L);
 
-    if (g_atomic_int_get(&stop_requested))
+    if (g_atomic_int_get(&engine_of(L)->stop_requested))
         return raise_stop(L);
     lua_pushvalue(L, lua_upvalueindex(1));
     lua_insert(L, 1);
@@ -1503,38 +1576,36 @@ static void register_api(lua_State *L)
 /* Fin de script et thread Lua                                        */
 /* ------------------------------------------------------------------ */
 
-static guint done_source_id = 0;   /* source de done_idle_cb programmée, 0 sinon (engine_mutex) */
-
 static gboolean done_idle_cb(gpointer user_data)
 {
-    GtScriptEnd end = (GtScriptEnd)GPOINTER_TO_INT(user_data);
+    GtScriptEngine *e = user_data;
     GThread *finished;
 
     /* Le thread Lua a fini : on le joint ici, sur le thread principal, jamais pendant qu'il peut attendre ce thread (M30). */
-    g_mutex_lock(&engine_mutex);
-    done_source_id = 0;
-    finished = lua_thread;
-    lua_thread = NULL;
-    g_mutex_unlock(&engine_mutex);
+    g_mutex_lock(&e->engine_mutex);
+    e->done_source_id = 0;
+    finished = e->lua_thread;
+    e->lua_thread = NULL;
+    g_mutex_unlock(&e->engine_mutex);
     if (finished)
         g_thread_join(finished);
 
     /* Tout le texte du script avant le message de fin */
-    log_flush();
-    if (done_func)
-        done_func(end, done_data);
+    log_flush(e);
+    if (e->done_func)
+        e->done_func(e->end, e->done_data);
     return G_SOURCE_REMOVE;
 }
 
 /* Fin de script (thread Lua) : pertes signalées, ports Lua refermés sur le thread principal, écoute du port 0 retirée, file du
  * port 0 vidée. */
-static void end_of_script_cleanup(void)
+static void end_of_script_cleanup(GtScriptEngine *e)
 {
-    report_all_overflows();
+    report_all_overflows(e);
     for (int h = 1; h < MAX_LUA_PORTS; h++)
-        lua_port_close(h);
-    run_on_main_sync(main_port_disconnect_cb, NULL);
-    gt_rx_queue_clear(main_queue);
+        lua_port_close(e, h);
+    run_on_main_sync(e, main_port_disconnect_cb, e);
+    gt_rx_queue_clear(e->main_queue);
 }
 
 /* Message de l'objet d'erreur en haut de la pile, sans exécuter de Lua (aucun __tostring : on est hors de tout pcall). */
@@ -1562,20 +1633,20 @@ static gchar *error_message(lua_State *L)
 
 /* Raison de fin, décidée par les drapeaux et non par l'objet d'erreur (un gestionnaire xpcall interrompu donne « error in error
  * handling ») ; journalise le message d'erreur ou de code de sortie avant. Thread Lua. */
-static GtScriptEnd script_end_reason(lua_State *L, int ret)
+static GtScriptEnd script_end_reason(GtScriptEngine *e, lua_State *L, int ret)
 {
-    if (g_atomic_int_get(&exit_requested)) {
-        if (exit_status == 0)
+    if (g_atomic_int_get(&e->exit_requested)) {
+        if (e->exit_status == 0)
             return GT_SCRIPT_END_FINISHED;
-        engine_log_line(_("Script exited with status %lld"), (long long)exit_status);
+        engine_log_line(e, _("Script exited with status %lld"), (long long)e->exit_status);
         return GT_SCRIPT_END_ERROR;
     }
     if (ret == LUA_OK)
         return GT_SCRIPT_END_FINISHED;
-    if (g_atomic_int_get(&stop_requested))
+    if (g_atomic_int_get(&e->stop_requested))
         return GT_SCRIPT_END_STOPPED;
     gchar *msg = error_message(L);
-    engine_log_line(_("Lua error: %s"), msg);
+    engine_log_line(e, _("Lua error: %s"), msg);
     g_free(msg);
     return GT_SCRIPT_END_ERROR;
 }
@@ -1601,7 +1672,8 @@ static int protected_main(lua_State *L)
 
 static gpointer lua_thread_func(gpointer user_data)
 {
-    char *script = user_data;
+    GtScriptEngine *e = user_data;
+    char *script = e->script_text;   /* remis par gt_script_engine_run, libéré ici */
     int ret = LUA_ERRMEM;
 
     /* Nombres Lua avec un point quelle que soit la langue (M9) : LC_NUMERIC seul passe en « C », pour ce thread. Le reste (LC_MESSAGES
@@ -1615,10 +1687,11 @@ static gpointer lua_thread_func(gpointer user_data)
         freelocale(base);
 
     /* Écoute du port principal */
-    run_on_main_sync(main_port_connect_cb, NULL);
+    run_on_main_sync(e, main_port_connect_cb, e);
 
     lua_State *L = luaL_newstate();
     if (L != NULL) {
+        *(GtScriptEngine **)lua_getextraspace(L) = e;
         lua_atpanic(L, panic_cb);
         lua_sethook(L, stop_hook, LUA_MASKCOUNT, HOOK_COUNT);
         /* Ni lua_pushcfunction (fonction C sans valeur liée) ni lua_pushlightuserdata n'allouent : rien ne lève hors du pcall */
@@ -1626,14 +1699,14 @@ static gpointer lua_thread_func(gpointer user_data)
         lua_pushlightuserdata(L, script);
         ret = lua_pcall(L, 1, 0, 0);
     }
-    GtScriptEnd end = script_end_reason(L, ret);
+    GtScriptEnd end = script_end_reason(e, L, ret);
 
-    end_of_script_cleanup();
+    end_of_script_cleanup(e);
     if (L != NULL) {
         /* Arrêt posé avant lua_close (raison de fin déjà décidée, ports déjà refermés) : un finaliseur (__gc) ne peut plus rien
          * ouvrir ni attendre, api_guard et std_guard refusent tout appel (M2) ; le crochet reste armé. Lua coupe les crochets pendant
          * un finaliseur : une boucle Lua pure dans un __gc n'est pas interruptible (fermeture de GTKTerm : abandon au bout de 3 s). */
-        g_atomic_int_set(&stop_requested, 1);
+        g_atomic_int_set(&e->stop_requested, 1);
         lua_close(L);
     }
     g_free(script);
@@ -1643,12 +1716,13 @@ static gpointer lua_thread_func(gpointer user_data)
         freelocale(c_locale);
     }
 
-    g_mutex_lock(&engine_mutex);
-    done_source_id = g_idle_add_full(G_PRIORITY_DEFAULT, done_idle_cb, GINT_TO_POINTER(end), NULL);
-    g_mutex_unlock(&engine_mutex);
-    /* Après done_source_id : script_engine_shutdown, réveillé ici, retire cette source avant de joindre le thread */
+    g_mutex_lock(&e->engine_mutex);
+    e->end = end;
+    e->done_source_id = g_idle_add_full(G_PRIORITY_DEFAULT, done_idle_cb, e, NULL);
+    g_mutex_unlock(&e->engine_mutex);
+    /* Après done_source_id : gt_script_engine_shutdown, réveillé ici, retire cette source avant de joindre le thread */
     g_mutex_lock(&calls_mutex);
-    thread_finished = TRUE;
+    e->thread_finished = TRUE;
     g_cond_broadcast(&calls_cond);
     g_mutex_unlock(&calls_mutex);
     return NULL;
@@ -1662,66 +1736,87 @@ void script_engine_setup(void)
 {
     if (main_thread == NULL)
         main_thread = g_thread_self();
-    if (main_queue == NULL)
-        main_queue = gt_rx_queue_new(GT_SCRIPT_RX_MAX);
 }
 
-void script_engine_run(const char *script_text)
+GtScriptEngine *gt_script_engine_new(GtkTermLink *main_link, GtMacros *macros)
+{
+    GtScriptEngine *e = g_new0(GtScriptEngine, 1);
+
+    e->main_link = g_object_ref(main_link);
+    e->macros = macros;
+    e->main_queue = gt_rx_queue_new(GT_SCRIPT_RX_MAX);
+    g_mutex_init(&e->engine_mutex);
+    g_mutex_init(&e->pause_mutex);
+    g_cond_init(&e->pause_cond);
+    g_mutex_init(&e->log_mutex);
+    return e;
+}
+
+void gt_script_engine_run(GtScriptEngine *e, const char *script_text)
 {
     script_engine_setup();
-    g_mutex_lock(&engine_mutex);
-    if (lua_thread != NULL) {
-        g_mutex_unlock(&engine_mutex);
-        engine_log_line(_("Script already running."));
+    if (e->shut_down)
+        return;
+    g_mutex_lock(&e->engine_mutex);
+    if (e->lua_thread != NULL) {
+        g_mutex_unlock(&e->engine_mutex);
+        engine_log_line(e, _("Script already running."));
         return;
     }
     /* Exécution suivante : drapeaux d'arrêt et de sortie, pertes signalées et file du port 0 remis à zéro avant le thread */
-    g_atomic_int_set(&stop_requested, 0);
-    g_atomic_int_set(&exit_requested, 0);
-    exit_status = 0;
-    memset(overflow_reported, 0, sizeof(overflow_reported));
-    gt_rx_queue_reset(main_queue);
+    g_atomic_int_set(&e->stop_requested, 0);
+    g_atomic_int_set(&e->exit_requested, 0);
+    e->exit_status = 0;
+    memset(e->overflow_reported, 0, sizeof(e->overflow_reported));
+    gt_rx_queue_reset(e->main_queue);
     g_mutex_lock(&calls_mutex);
-    thread_finished = FALSE;
+    e->thread_finished = FALSE;
     g_mutex_unlock(&calls_mutex);
-    char *copy = g_strdup(script_text);
-    lua_thread = g_thread_new("lua-script", lua_thread_func, copy);
-    g_mutex_unlock(&engine_mutex);
+    e->script_text = g_strdup(script_text);
+    e->lua_thread = g_thread_new("lua-script", lua_thread_func, e);
+    g_mutex_unlock(&e->engine_mutex);
 }
 
-void script_engine_stop(void)
+void gt_script_engine_stop(GtScriptEngine *e)
 {
-    g_atomic_int_set(&stop_requested, 1);
-    g_mutex_lock(&pause_mutex);
-    g_cond_broadcast(&pause_cond);
-    g_mutex_unlock(&pause_mutex);
+    g_atomic_int_set(&e->stop_requested, 1);
+    g_mutex_lock(&e->pause_mutex);
+    g_cond_broadcast(&e->pause_cond);
+    g_mutex_unlock(&e->pause_mutex);
 }
 
-gboolean script_engine_is_running(void)
+gboolean gt_script_engine_is_running(GtScriptEngine *e)
 {
-    g_mutex_lock(&engine_mutex);
-    gboolean running = (lua_thread != NULL);
-    g_mutex_unlock(&engine_mutex);
+    g_mutex_lock(&e->engine_mutex);
+    gboolean running = (e->lua_thread != NULL);
+    g_mutex_unlock(&e->engine_mutex);
     return running;
 }
 
-void script_engine_shutdown(void)
+void gt_script_engine_shutdown(GtScriptEngine *e)
 {
-    if (!script_engine_is_running())
+    if (e->shut_down)
         return;
+    e->shut_down = TRUE;
     /* Les widgets du panneau sont détruits ou vont l'être : plus de journal ni de fin vers l'interface */
-    script_engine_set_log_func(NULL, NULL);
-    script_engine_set_done_func(NULL, NULL);
-    script_engine_stop();
+    gt_script_engine_set_log_func(e, NULL, NULL);
+    gt_script_engine_set_done_func(e, NULL, NULL);
+    if (!gt_script_engine_is_running(e))
+        return;
+    gt_script_engine_stop(e);
 
-    /* Le contexte par défaut ne tourne plus : ses sources (réception de la liaison, voyants, messages, minuteries de l'interface)
-     * toucheraient des widgets peut-être détruits. Ce thread exécute lui-même les demandes run_on_main_sync du thread Lua (fermeture
-     * de ses ports, fin de l'écoute du port 0) en retirant leurs sources, jusqu'à la fin du thread, au plus 3 s. */
+    /* Le contexte par défaut ne tourne plus forcément : ses sources (réception de la liaison, voyants, messages, minuteries de
+     * l'interface) toucheraient des widgets peut-être détruits. Ce thread exécute lui-même les demandes run_on_main_sync en attente
+     * (celles de ce moteur : fermeture de ses ports, fin de l'écoute du port 0 ; et celles des autres moteurs, demandes légitimes du
+     * thread principal) en retirant leurs sources, jusqu'à la fin du thread de ce moteur, au plus 3 s. */
     gint64 deadline = g_get_monotonic_time() + SHUTDOWN_TIMEOUT_US;
     gboolean finished;
 
     g_mutex_lock(&calls_mutex);
     for (;;) {
+        /* Fin et échéance relues avant chaque demande : un autre moteur qui enchaîne ses demandes ne prolonge pas l'attente */
+        if (e->thread_finished || g_get_monotonic_time() >= deadline)
+            break;
         MainCall *mc = g_queue_pop_head(&pending_calls);
         if (mc != NULL) {
             g_source_remove(mc->source_id);
@@ -1730,38 +1825,68 @@ void script_engine_shutdown(void)
             g_mutex_lock(&calls_mutex);
             continue;
         }
-        if (thread_finished || !g_cond_wait_until(&calls_cond, &calls_mutex, deadline)) {
-            if (thread_finished || g_queue_is_empty(&pending_calls))
-                break;
-        }
+        g_cond_wait_until(&calls_cond, &calls_mutex, deadline);
     }
-    finished = thread_finished;
+    finished = e->thread_finished;
     g_mutex_unlock(&calls_mutex);
 
     if (!finished) {
         g_warning("Lua script still running after 3 s (blocked in a standard library call?): quitting without waiting for it");
+        e->abandoned = TRUE;
         return;
     }
     /* Thread fini : joint ici, sa source de fin retirée (elle joindrait un thread déjà joint et appellerait la fonction de fin) */
-    g_mutex_lock(&engine_mutex);
-    GThread *thread = lua_thread;
-    guint source = done_source_id;
-    lua_thread = NULL;
-    done_source_id = 0;
-    g_mutex_unlock(&engine_mutex);
+    g_mutex_lock(&e->engine_mutex);
+    GThread *thread = e->lua_thread;
+    guint source = e->done_source_id;
+    e->lua_thread = NULL;
+    e->done_source_id = 0;
+    g_mutex_unlock(&e->engine_mutex);
     if (source != 0)
         g_source_remove(source);
     g_thread_join(thread);
 }
 
-void script_engine_set_log_func(ScriptLogFunc func, gpointer user_data)
+void gt_script_engine_free(GtScriptEngine *e)
 {
-    log_func = func;
-    log_data = user_data;
+    guint source;
+
+    if (e == NULL)
+        return;
+    gt_script_engine_shutdown(e);
+    /* Thread Lua abandonné après 3 s (fermeture de GTKTerm ou d'un onglet) : il tient encore le moteur, jamais libéré. À la fermeture
+     * d'un onglet, l'application continue : ce thread et ses ports Lua 1-15 restent vivants jusqu'au retour de l'appel C long qui le
+     * bloque (il voit alors l'arrêt, ferme ses ports par run_on_main_sync et se termine) ; le moteur reste une fuite assumée. */
+    if (e->abandoned)
+        return;
+    g_mutex_lock(&e->log_mutex);
+    source = e->log_source_id;
+    e->log_source_id = 0;
+    g_mutex_unlock(&e->log_mutex);
+    if (source != 0)
+        g_source_remove(source);
+    /* Thread joint : l'écoute du port 0 a été retirée par la fin du script ; par sécurité */
+    if (e->main_port_handler != 0)
+        g_signal_handler_disconnect(e->main_link, e->main_port_handler);
+    gt_rx_queue_free(e->main_queue);
+    if (e->log_pending != NULL)
+        g_string_free(e->log_pending, TRUE);
+    g_object_unref(e->main_link);
+    g_mutex_clear(&e->engine_mutex);
+    g_mutex_clear(&e->pause_mutex);
+    g_cond_clear(&e->pause_cond);
+    g_mutex_clear(&e->log_mutex);
+    g_free(e);
 }
 
-void script_engine_set_done_func(ScriptDoneFunc func, gpointer user_data)
+void gt_script_engine_set_log_func(GtScriptEngine *e, ScriptLogFunc func, gpointer user_data)
 {
-    done_func = func;
-    done_data = user_data;
+    e->log_func = func;
+    e->log_data = user_data;
+}
+
+void gt_script_engine_set_done_func(GtScriptEngine *e, ScriptDoneFunc func, gpointer user_data)
+{
+    e->done_func = func;
+    e->done_data = user_data;
 }

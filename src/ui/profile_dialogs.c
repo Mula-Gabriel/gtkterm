@@ -1,5 +1,7 @@
 /* Profils et fichiers de macros (sous-projet 6a, §6.4) : fenêtres modales transitoires de la fenêtre principale, sélecteurs GtkFileDialog.
- * Remplace Select_config, Save_config_file, load/save_macros_file_callback de term_config.c (GTK 3), sans boucle imbriquée. */
+ * Remplace Select_config, Save_config_file, load/save_macros_file_callback de term_config.c (GTK 3), sans boucle imbriquée.
+ * Chaque dialogue et chaque sélecteur agit sur la session active au moment de son ouverture (6b, plan, décision 4), gardée par référence
+ * faible : session fermée entre-temps, rien n'est appliqué. */
 #include <config.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
@@ -23,6 +25,7 @@ typedef enum
 typedef struct
 {
 	ProfileMode mode;
+	GWeakRef session;	/* session active à l'ouverture */
 	GtkWindow *window;
 	GtkSingleSelection *selection;	/* chargement et suppression ; NULL à l'enregistrement ou si la liste est vide */
 	GtkEditable *name;	/* enregistrement ; NULL sinon */
@@ -54,6 +57,24 @@ static ProfileDialog *dialog_of(GtkWindow *win)
 	return g_object_get_data(G_OBJECT(win), "profile-dialog");
 }
 
+static void profile_dialog_free(gpointer data)
+{
+	ProfileDialog *pd = data;
+
+	g_weak_ref_clear(&pd->session);
+	g_free(pd);
+}
+
+/* Session du dialogue (référence à rendre), NULL si elle n'existe plus ou est arrêtée */
+static GtSession *weak_session(GWeakRef *ref)
+{
+	GtSession *s = g_weak_ref_get(ref);
+
+	if(s != NULL && gt_session_is_shut_down(s))
+		g_clear_object(&s);
+	return s;
+}
+
 static PendingConfirm *pending_new(ProfileDialog *pd, const gchar *name)
 {
 	PendingConfirm *pc = g_new0(PendingConfirm, 1);
@@ -82,14 +103,19 @@ static gchar *selected_name(ProfileDialog *pd)
 
 static void save_now(ProfileDialog *pd, const gchar *name)
 {
+	GtSession *s = weak_session(&pd->session);
 	GError *error = NULL;
-	gboolean auto_reconnect = FALSE;
+	gboolean saved;
 
-	/* Le profil en cours prend l'état réel : options des menus (GtTermOptions) et auto-reconnexion de la liaison */
-	gt_term_options_store_profile(gt_app_get_options(), &config);
-	g_object_get(gt_app_get_link(), "auto-reconnect", &auto_reconnect, NULL);
-	config.auto_reconnect = auto_reconnect;
-	if(app_config_save_profile(name, &error))
+	if(s == NULL)	/* session fermée : rien n'est enregistré */
+	{
+		gtk_window_destroy(pd->window);
+		return;
+	}
+	/* Le profil de la session prend son état réel (options des menus, auto-reconnexion) dans app_config_save_profile */
+	saved = app_config_save_profile(s, name, &error);
+	g_object_unref(s);
+	if(saved)
 	{
 		gtk_window_destroy(pd->window);
 		return;
@@ -134,10 +160,16 @@ static void on_delete_answer(gboolean accepted, gpointer user_data)
 
 static void on_ok(GtkWidget *button, ProfileDialog *pd)
 {
+	GtSession *s = weak_session(&pd->session);
 	GError *error = NULL;
 	gchar *name = NULL;
 	gchar *question;
 
+	if(s == NULL)	/* session fermée pendant le dialogue : rien n'est appliqué */
+	{
+		gtk_window_destroy(pd->window);
+		return;
+	}
 	clear_error(pd);
 	switch(pd->mode)
 	{
@@ -145,7 +177,7 @@ static void on_ok(GtkWidget *button, ProfileDialog *pd)
 		name = selected_name(pd);
 		if(name == NULL)
 			show_error(pd, _("Select a configuration."));
-		else if(app_config_load_profile(name, &error))
+		else if(app_config_load_profile(s, name, &error))
 			gtk_window_destroy(pd->window);	/* crochet profile_applied : options, terminal, couleurs, port rouvert */
 		else
 		{
@@ -181,6 +213,7 @@ static void on_ok(GtkWidget *button, ProfileDialog *pd)
 		break;
 	}
 	g_free(name);
+	g_object_unref(s);
 }
 
 static void on_row_activated(GtkListView *list, guint position, ProfileDialog *pd)
@@ -207,10 +240,10 @@ static void row_bind(GtkSignalListItemFactory *factory, GObject *object, gpointe
 }
 
 /* Liste des profils (relue : profils ajoutés ou supprimés par une autre instance) ; libellé seul si aucun profil n'existe */
-static GtkWidget *build_list(ProfileDialog *pd)
+static GtkWidget *build_list(ProfileDialog *pd, GtSession *s)
 {
 	gchar **names = app_config_list_profiles();
-	const gchar *active = app_config_active_name();
+	const gchar *active = gt_session_get_profile_name(s);
 	GtkStringList *model;
 	GtkListItemFactory *factory;
 	GtkWidget *list, *scroll;
@@ -244,6 +277,7 @@ static GtkWidget *build_list(ProfileDialog *pd)
 static void profile_dialog_open(ProfileMode mode)
 {
 	static const gchar *const titles[] = { N_("Load configuration"), N_("Save configuration"), N_("Delete configuration") };
+	GtSession *s = gt_app_get_active_session();
 	ProfileDialog *pd;
 	GtkWidget *box, *buttons, *cancel, *ok, *error;
 
@@ -252,8 +286,11 @@ static void profile_dialog_open(ProfileMode mode)
 		gtk_window_present(profile_window);
 		return;
 	}
+	if(s == NULL || gt_session_is_shut_down(s))
+		return;
 	pd = g_new0(ProfileDialog, 1);
 	pd->mode = mode;
+	g_weak_ref_init(&pd->session, s);
 	pd->window = GTK_WINDOW(gtk_window_new());
 	gtk_widget_set_name(GTK_WIDGET(pd->window), "profile-window");
 	gtk_window_set_title(pd->window, _(titles[mode]));
@@ -261,7 +298,8 @@ static void profile_dialog_open(ProfileMode mode)
 	gtk_window_set_transient_for(pd->window, gt_app_get_main_window());
 	gtk_window_set_destroy_with_parent(pd->window, TRUE);
 	gtk_window_set_default_size(pd->window, 320, mode == PROFILE_SAVE ? -1 : 320);
-	g_object_set_data_full(G_OBJECT(pd->window), "profile-dialog", pd, g_free);
+	g_object_set_data_full(G_OBJECT(pd->window), "profile-dialog", pd, profile_dialog_free);
+	g_signal_connect_object(s, "closed", G_CALLBACK(gtk_window_destroy), pd->window, G_CONNECT_SWAPPED);	/* fermé sans rien appliquer */
 	profile_window = pd->window;
 	g_object_add_weak_pointer(G_OBJECT(pd->window), (gpointer *)&profile_window);
 
@@ -276,7 +314,7 @@ static void profile_dialog_open(ProfileMode mode)
 		GtkWidget *entry = gtk_entry_new();
 
 		gtk_widget_set_name(entry, "profile-name");
-		gtk_editable_set_text(GTK_EDITABLE(entry), app_config_active_name());
+		gtk_editable_set_text(GTK_EDITABLE(entry), gt_session_get_profile_name(s));
 		gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
 		gtk_label_set_mnemonic_widget(GTK_LABEL(label), entry);
 		gtk_label_set_xalign(GTK_LABEL(label), 0.0);
@@ -286,7 +324,7 @@ static void profile_dialog_open(ProfileMode mode)
 		gtk_box_append(GTK_BOX(box), entry);
 	}
 	else
-		gtk_box_append(GTK_BOX(box), build_list(pd));
+		gtk_box_append(GTK_BOX(box), build_list(pd, s));
 
 	error = gtk_label_new(NULL);
 	gtk_widget_set_name(error, "profile-error");
@@ -324,9 +362,9 @@ static void profile_dialog_open(ProfileMode mode)
 
 /* ---- Fichiers de macros ------------------------------------------------- */
 
-static GFile *macros_folder(void)
+static GFile *macros_folder(GtSession *s)
 {
-	const gchar *cur = macros_file_get_path();
+	const gchar *cur = gt_macros_get_path(gt_session_get_macros(s));
 	gchar *dir;
 	GFile *folder;
 
@@ -338,34 +376,62 @@ static GFile *macros_folder(void)
 	return folder;
 }
 
+/* Sélecteurs de fichiers de macros : user_data = GWeakRef sur la session active à l'ouverture (libéré par le rappel, appelé une fois) */
+static GWeakRef *session_weak_new(GtSession *s)
+{
+	GWeakRef *ref = g_new0(GWeakRef, 1);
+
+	g_weak_ref_init(ref, s);
+	return ref;
+}
+
+static GtSession *session_weak_take(GWeakRef *ref)
+{
+	GtSession *s = weak_session(ref);
+
+	g_weak_ref_clear(ref);
+	g_free(ref);
+	return s;
+}
+
 static void on_macros_load_chosen(GFile *file, gpointer user_data)
 {
+	GtSession *s = session_weak_take(user_data);
 	gchar *path;
 
-	if(file == NULL)
-		return;	/* annulé, ou fenêtre principale fermée pendant le choix */
+	if(file == NULL || s == NULL)	/* annulé, fenêtre principale fermée pendant le choix, ou session fermée */
+	{
+		g_clear_object(&s);
+		return;
+	}
 	path = g_file_get_path(file);
 	/* Interactif : un fichier illisible ouvre une boîte ; le jeu et le chemin restent ceux d'avant */
-	if(path != NULL && macros_load_file(path, TRUE))
-		config_remember_macros_file();
+	if(path != NULL && gt_macros_load_file(gt_session_get_macros(s), path, TRUE))
+		config_remember_macros_file(s);
 	g_free(path);
+	g_object_unref(s);
 }
 
 static void on_macros_save_chosen(GFile *file, gpointer user_data)
 {
+	GtSession *s = session_weak_take(user_data);
 	gchar *path;
 
-	if(file == NULL)
+	if(file == NULL || s == NULL)
+	{
+		g_clear_object(&s);
 		return;
+	}
 	path = g_file_get_path(file);
 	if(path != NULL)
 	{
 		/* Enregistrement explicite : un échec déjà signalé par un enregistrement implicite est de nouveau affiché */
-		macros_forget_save_error();
-		if(macros_save_file(path, TRUE))
-			config_remember_macros_file();
+		gt_macros_forget_save_error(gt_session_get_macros(s));
+		if(gt_macros_save_file(gt_session_get_macros(s), path, TRUE))
+			config_remember_macros_file(s);
 	}
 	g_free(path);
+	g_object_unref(s);
 }
 
 /* ---- Actions ------------------------------------------------------------- */
@@ -387,17 +453,25 @@ static void on_delete_profile(GSimpleAction *action, GVariant *param, gpointer u
 
 static void on_load_macros(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	GFile *folder = macros_folder();
+	GtSession *s = gt_app_get_active_session();
+	GFile *folder;
 
-	gt_ui_open_file(gt_app_get_main_window(), _("Load macros file"), folder, NULL, on_macros_load_chosen, NULL);
+	if(s == NULL || gt_session_is_shut_down(s))
+		return;
+	folder = macros_folder(s);
+	gt_ui_open_file(gt_app_get_main_window(), _("Load macros file"), folder, NULL, on_macros_load_chosen, session_weak_new(s));
 	g_object_unref(folder);
 }
 
 static void on_save_macros(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	GFile *folder = macros_folder();
+	GtSession *s = gt_app_get_active_session();
+	GFile *folder;
 
-	gt_ui_save_file(gt_app_get_main_window(), _("Save macros file"), folder, "gtkterm_macros.ini", on_macros_save_chosen, NULL);
+	if(s == NULL || gt_session_is_shut_down(s))
+		return;
+	folder = macros_folder(s);
+	gt_ui_save_file(gt_app_get_main_window(), _("Save macros file"), folder, "gtkterm_macros.ini", on_macros_save_chosen, session_weak_new(s));
 	g_object_unref(folder);
 }
 

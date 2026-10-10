@@ -14,9 +14,10 @@ src/port_form.c
 src/profile.c
 src/rx_logger.c
 src/script_engine.c
+src/session.c
 src/transport.c
 src/ui/about.c
-src/ui/app_actions.c
+src/ui/app.c
 src/ui/dialogs.c
 src/ui/file_actions.c
 src/ui/file_send_window.c
@@ -28,6 +29,7 @@ src/ui/port_dialog.c
 src/ui/profile_dialogs.c
 src/ui/script_panel.c
 src/ui/search_bar.c
+src/ui/tab_label.c
 src/ui/terminal_dialog.ui
 src/ui/terminal_view.c
 src/ui/update_window.c

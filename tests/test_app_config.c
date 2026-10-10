@@ -1,7 +1,7 @@
 /* Tests d'intégration de app_config.c (couche application, sans interface) : démarrage (premier lancement, profil « default » absent,
  * fichier illisible), profils (chargement, enregistrement, suppression, noms), validation, réglages [general], état de la fenêtre
  * ([window], x et y ignorés puis retirés) ; et la table de crochets GtAppUi (app_ui.c). HOME et XDG privés : jamais le vrai ~/.config.
- * Fichier de macros bouchonné (stub_macros_file.c). */
+ * Vraie couche application (gtkterm_app) : le profil en cours et ses macros sont ceux d'une session de test (une par cas). */
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -9,7 +9,7 @@
 
 #include "app_config.h"
 #include "app_ui.h"
-#include "stubs.h"
+#include "session.h"
 #include "test_util.h"
 
 #define RC_DEUX_PROFILS \
@@ -19,6 +19,7 @@
 static gchar *chemin_rc;
 static GPtrArray *messages;	/* « I|texte », « W|texte », « E|texte » */
 static gint profils_appliques;
+static GtSession *dernier_profil_applique;
 
 static void
 enr_message(GtAppMessageKind kind, const gchar *text)
@@ -29,9 +30,10 @@ enr_message(GtAppMessageKind kind, const gchar *text)
 }
 
 static void
-enr_profil_applique(void)
+enr_profil_applique(GtSession *session)
 {
 	profils_appliques++;
+	dernier_profil_applique = session;
 }
 
 static const GtAppUi table_enregistrement = { .message = enr_message, .profile_applied = enr_profil_applique };
@@ -53,8 +55,8 @@ dernier_message(void)
 	return messages->len > 0 ? g_ptr_array_index(messages, messages->len - 1) : "";
 }
 
-/* Fichier de configuration (NULL : absent), puis magasin relu comme au démarrage de GTKTerm */
-static void
+/* Fichier de configuration (NULL : absent), puis magasin relu comme au démarrage de GTKTerm ; rend une session neuve (à libérer) */
+static GtSession *
 demarrer(const gchar *contenu)
 {
 	gchar *copie = g_strconcat(chemin_rc, ".avant-migration", NULL);
@@ -68,9 +70,21 @@ demarrer(const gchar *contenu)
 	gt_app_ui_set(&table_enregistrement);
 	g_ptr_array_set_size(messages, 0);
 	profils_appliques = 0;
-	stub_reset();
-	stub_macros_file_set_path(NULL);
 	config_file_init();
+	return gt_session_new(NULL, NULL);
+}
+
+/* Chemin courant des macros de la session (fichier absent : jeu vide, chemin retenu) */
+static void
+chemin_macros(GtSession *s, const gchar *chemin)
+{
+	g_assert_true(gt_macros_load_file(gt_session_get_macros(s), chemin, FALSE));
+}
+
+static const gchar *
+macros_de(GtSession *s)
+{
+	return gt_macros_get_path(gt_session_get_macros(s));
 }
 
 static gchar *
@@ -104,7 +118,7 @@ test_crochets(void)
 	g_ptr_array_set_size(messages, 0);
 	gt_app_message(GT_APP_MSG_WARNING, "valeur %d", 42);
 	g_assert_cmpstr(dernier_message(), ==, "W|valeur 42");
-	gt_app_status_flash(500, "sans crochet %s", "rien");	/* status_flash NULL : aucun effet */
+	gt_app_status_flash(NULL, 500, "sans crochet %s", "rien");	/* status_flash NULL : aucun effet */
 	g_assert_cmpuint(messages->len, ==, 1);
 	gt_app_ui_set(NULL);
 	g_assert_nonnull(gt_app_ui_get());
@@ -133,55 +147,61 @@ test_message_sans_crochet(void)
 static void
 test_premier_lancement(void)
 {
+	GtSession *s;
 	gchar *contenu;
 
-	demarrer(NULL);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(NULL);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_cmpint(nb_messages('I'), ==, 1);
 	g_assert_cmpuint(messages->len, ==, 1);
 	g_assert_nonnull(strstr(dernier_message(), chemin_rc));
 	contenu = lire_rc();
 	g_assert_nonnull(strstr(contenu, "[profile:default]"));
 	g_free(contenu);
-	g_assert_cmpstr(app_config_active_name(), ==, "default");
-	g_assert_cmpuint(config.baudrate, ==, 115200);
-	g_assert_cmpint(stub_count("macros_load_file"), ==, 0);
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "default");
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 115200);
+	g_assert_null(macros_de(s));
+	g_object_unref(s);
 }
 
 static void
 test_fichier_sans_profil(void)
 {
+	GtSession *s;
 	GKeyFile *kf;
 
-	demarrer("[window]\nwidth=700\n");
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer("[window]\nwidth=700\n");
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_cmpint(nb_messages('I'), ==, 1);
 	kf = charger_rc();
 	g_assert_true(g_key_file_has_group(kf, "profile:default"));
 	g_assert_cmpint(g_key_file_get_integer(kf, "window", "width", NULL), ==, 700);
 	g_key_file_free(kf);
+	g_object_unref(s);
 }
 
 /* Spec §3.2-14 : d'autres profils mais pas « default » : valeurs par défaut, aucun message, rien n'est écrit */
 static void
 test_default_absent(void)
 {
+	GtSession *s;
 	gchar *avant, *apres;
 
-	demarrer("[profile:atelier]\nport=/dev/null\nspeed=19200\n");
+	s = demarrer("[profile:atelier]\nport=/dev/null\nspeed=19200\n");
 	avant = lire_rc();
-	config.baudrate = 1;
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	gt_session_get_profile(s)->baudrate = 1;
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_cmpuint(messages->len, ==, 0);
-	g_assert_cmpuint(config.baudrate, ==, 115200);
-	g_assert_cmpstr(config.port, ==, GT_PROFILE_DEFAULT_PORT);
-	g_assert_cmpstr(app_config_active_name(), ==, "default");
-	g_assert_cmpint(stub_count("macros_load_file"), ==, 0);
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 115200);
+	g_assert_cmpstr(gt_session_get_profile(s)->port, ==, GT_PROFILE_DEFAULT_PORT);
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "default");
+	g_assert_null(macros_de(s));
 	apres = lire_rc();
 	g_assert_cmpstr(apres, ==, avant);
 	g_assert_false(app_config_has_profile("default"));
 	g_free(avant);
 	g_free(apres);
+	g_object_unref(s);
 }
 
 /* ---- Profils ---------------------------------------------------------------- */
@@ -189,80 +209,99 @@ test_default_absent(void)
 static void
 test_chargement_profils(void)
 {
+	GtSession *s;
 	GError *err = NULL;
+	gchar *defaut = macros_file_default_path();
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
-	g_assert_cmpuint(config.baudrate, ==, 9600);
-	g_assert_cmpstr(stub_last("macros_load_file"), ==, "(null)|non-interactif");
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 9600);
+	g_assert_cmpstr(macros_de(s), ==, defaut);	/* profil sans fichier : fichier par défaut, non interactif */
 	g_assert_cmpint(profils_appliques, ==, 0);	/* démarrage : l'interface applique elle-même le profil */
-	config.lock_port = FALSE;	/* --disable-port-lock */
-	g_assert_true(app_config_load_profile("ATELIER", &err));
+	gt_session_get_profile(s)->lock_port = FALSE;	/* --disable-port-lock */
+	g_assert_true(app_config_load_profile(s, "ATELIER", &err));
 	g_assert_no_error(err);
-	g_assert_cmpuint(config.baudrate, ==, 19200);
-	g_assert_false(config.lock_port);
-	g_assert_cmpstr(app_config_active_name(), ==, "ATELIER");
-	g_assert_cmpstr(stub_last("macros_load_file"), ==, "/nulle-part/atelier.ini|non-interactif");
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 19200);
+	g_assert_false(gt_session_get_profile(s)->lock_port);
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "ATELIER");
+	g_assert_cmpstr(macros_de(s), ==, "/nulle-part/atelier.ini");
 	g_assert_cmpint(profils_appliques, ==, 1);
+	g_assert_true(dernier_profil_applique == s);	/* crochet appelé pour cette session */
 	g_assert_cmpuint(messages->len, ==, 0);
+	g_free(defaut);
+	g_object_unref(s);
 }
 
 static void
 test_profil_inconnu(void)
 {
+	GtSession *s;
 	GError *err = NULL;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
-	g_assert_false(app_config_load_profile("absent", &err));
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
+	g_assert_false(app_config_load_profile(s, "absent", &err));
 	g_assert_error(err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_GROUP_NOT_FOUND);
 	g_assert_nonnull(strstr(err->message, "absent"));
 	g_clear_error(&err);
-	g_assert_cmpuint(config.baudrate, ==, 9600);
-	g_assert_cmpstr(app_config_active_name(), ==, "default");
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 9600);
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "default");
 	g_assert_cmpint(profils_appliques, ==, 0);
 	g_assert_cmpuint(messages->len, ==, 0);	/* l'appelant affiche l'erreur */
-	g_assert_cmpint(Load_configuration_from_file("absent"), ==, -1);
+	g_assert_cmpint(Load_configuration_from_file(s, "absent"), ==, -1);
 	g_assert_cmpint(nb_messages('E'), ==, 1);
 	g_assert_nonnull(strstr(dernier_message(), "absent"));
+	g_object_unref(s);
 }
 
 static void
 test_verification(void)
 {
-	demarrer("[profile:default]\nport=/dev/null\nbits=3\n\n[profile:abime]\nport=/dev/null\nstopbits=5\n");
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	GtSession *s;
+
+	s = demarrer("[profile:default]\nport=/dev/null\nbits=3\n\n[profile:abime]\nport=/dev/null\nstopbits=5\n");
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_cmpuint(messages->len, ==, 0);	/* le démarrage ne valide pas : la ligne de commande le fait après ses options */
-	g_assert_cmpint(config.bits, ==, 3);
-	Verify_configuration();
+	g_assert_cmpint(gt_session_get_profile(s)->bits, ==, 3);
+	Verify_configuration(s);
 	g_assert_cmpint(nb_messages('E'), ==, 1);
-	g_assert_cmpint(config.bits, ==, 8);
-	Verify_configuration();
+	g_assert_cmpint(gt_session_get_profile(s)->bits, ==, 8);
+	Verify_configuration(s);
 	g_assert_cmpint(nb_messages('E'), ==, 1);
-	g_assert_true(app_config_load_profile("abime", NULL));
+	g_assert_true(app_config_load_profile(s, "abime", NULL));
 	g_assert_cmpint(nb_messages('E'), ==, 2);	/* un seul message pour le profil chargé */
-	g_assert_cmpint(config.stopbits, ==, 1);
+	g_assert_cmpint(gt_session_get_profile(s)->stopbits, ==, 1);
 	g_assert_cmpint(profils_appliques, ==, 1);
+	g_object_unref(s);
 }
 
 static void
 test_enregistrement(void)
 {
+	GtSession *s;
 	GError *err = NULL;
 	GKeyFile *kf;
 	gchar **noms;
 	gchar *valeur;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
-	stub_macros_file_set_path("/nulle-part/courant.ini");
-	config.baudrate = 57600;
-	g_assert_true(app_config_save_profile("  atelier é  ", &err));
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
+	chemin_macros(s, "/nulle-part/courant.ini");
+	gt_session_get_profile(s)->baudrate = 57600;
+	/* État réel de la session recopié dans le profil : options (menus) et auto-reconnexion de la liaison, quel que soit le profil en mémoire */
+	gt_session_get_profile(s)->echo = FALSE;
+	gt_session_get_profile(s)->auto_reconnect = TRUE;
+	g_object_set(gt_session_get_options(s), "echo", TRUE, NULL);
+	g_object_set(gt_session_get_link(s), "auto-reconnect", FALSE, NULL);
+	g_assert_true(app_config_save_profile(s, "  atelier é  ", &err));
 	g_assert_no_error(err);
-	g_assert_cmpstr(app_config_active_name(), ==, "atelier é");
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "atelier é");
 	kf = charger_rc();
 	g_assert_true(g_key_file_has_group(kf, "profile:atelier é"));
 	g_assert_cmpint(g_key_file_get_integer(kf, "profile:atelier é", "speed", NULL), ==, 57600);
+	g_assert_true(g_key_file_get_boolean(kf, "profile:atelier é", "echo", NULL));
+	g_assert_true(g_key_file_has_key(kf, "profile:atelier é", "autoreconnect_enabled", NULL));
+	g_assert_false(g_key_file_get_boolean(kf, "profile:atelier é", "autoreconnect_enabled", NULL));
 	valeur = g_key_file_get_string(kf, "profile:atelier é", "macros_file", NULL);
 	g_assert_cmpstr(valeur, ==, "/nulle-part/courant.ini");
 	g_free(valeur);
@@ -273,18 +312,19 @@ test_enregistrement(void)
 	g_assert_true(g_strv_contains((const gchar * const *)noms, "atelier é"));
 	g_assert_true(g_strv_contains((const gchar * const *)noms, "atelier"));
 	g_strfreev(noms);
-	config.baudrate = 1200;
-	g_assert_true(app_config_load_profile("atelier é", NULL));
-	g_assert_cmpuint(config.baudrate, ==, 57600);
+	gt_session_get_profile(s)->baudrate = 1200;
+	g_assert_true(app_config_load_profile(s, "atelier é", NULL));
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 57600);
 	g_assert_cmpuint(messages->len, ==, 0);
+	g_object_unref(s);
 }
 
 static void
-verifier_nom_refuse(const gchar *nom, gint code)
+verifier_nom_refuse(GtSession *s, const gchar *nom, gint code)
 {
 	GError *err = NULL;
 
-	g_assert_false(app_config_save_profile(nom, &err));
+	g_assert_false(app_config_save_profile(s, nom, &err));
 	g_assert_error(err, GT_PROFILE_ERROR, code);
 	g_clear_error(&err);
 }
@@ -292,47 +332,52 @@ verifier_nom_refuse(const gchar *nom, gint code)
 static void
 test_enregistrement_nom_invalide(void)
 {
+	GtSession *s;
 	gchar *avant, *apres;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	avant = lire_rc();
-	verifier_nom_refuse("a[b", GT_PROFILE_ERROR_NAME_INVALID_CHAR);
-	verifier_nom_refuse("Window", GT_PROFILE_ERROR_NAME_RESERVED);
-	verifier_nom_refuse("   ", GT_PROFILE_ERROR_NAME_EMPTY);
+	verifier_nom_refuse(s, "a[b", GT_PROFILE_ERROR_NAME_INVALID_CHAR);
+	verifier_nom_refuse(s, "Window", GT_PROFILE_ERROR_NAME_RESERVED);
+	verifier_nom_refuse(s, "   ", GT_PROFILE_ERROR_NAME_EMPTY);
 	apres = lire_rc();
 	g_assert_cmpstr(apres, ==, avant);
-	g_assert_cmpstr(app_config_active_name(), ==, "default");
+	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "default");
 	g_free(avant);
 	g_free(apres);
+	g_object_unref(s);
 }
 
 /* C6 : « DEFAULT » écrase « default » (même profil sans casse), sans groupe en double */
 static void
 test_ecrasement_sans_doublon(void)
 {
+	GtSession *s;
 	GKeyFile *kf;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_true(app_config_has_profile("DEFAULT"));
-	config.baudrate = 38400;
-	g_assert_true(app_config_save_profile("DEFAULT", NULL));
+	gt_session_get_profile(s)->baudrate = 38400;
+	g_assert_true(app_config_save_profile(s, "DEFAULT", NULL));
 	kf = charger_rc();
 	g_assert_true(g_key_file_has_group(kf, "profile:default"));
 	g_assert_false(g_key_file_has_group(kf, "profile:DEFAULT"));
 	g_assert_cmpint(g_key_file_get_integer(kf, "profile:default", "speed", NULL), ==, 38400);
 	g_key_file_free(kf);
+	g_object_unref(s);
 }
 
 static void
 test_suppression(void)
 {
+	GtSession *s;
 	GError *err = NULL;
 	gchar *contenu;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_true(app_config_delete_profile("ATELIER", &err));
 	g_assert_no_error(err);
 	g_assert_false(app_config_has_profile("atelier"));
@@ -343,19 +388,21 @@ test_suppression(void)
 	g_assert_false(app_config_delete_profile("atelier", &err));
 	g_assert_error(err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_GROUP_NOT_FOUND);
 	g_clear_error(&err);
+	g_object_unref(s);
 }
 
 /* Une autre instance (ou une modification à la main) ajoute un profil : la liste le voit, une écriture ne l'efface pas */
 static void
 test_relecture_autre_instance(void)
 {
+	GtSession *s;
 	GtWindowState st;
 	gchar *contenu, *ajout;
 	gchar **noms;
 	GKeyFile *kf;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	contenu = lire_rc();
 	ajout = g_strconcat(contenu, "\n[profile:externe]\nport=/dev/null\nspeed=4800\n", NULL);
 	g_assert_true(g_file_set_contents(chemin_rc, ajout, -1, NULL));
@@ -369,18 +416,20 @@ test_relecture_autre_instance(void)
 	g_key_file_free(kf);
 	g_free(contenu);
 	g_free(ajout);
+	g_object_unref(s);
 }
 
 static void
 test_fichier_de_macros_retenu(void)
 {
+	GtSession *s;
 	GKeyFile *kf;
 	gchar *valeur;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
-	stub_macros_file_set_path("/nulle-part/autre.ini");
-	config_remember_macros_file();
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
+	chemin_macros(s, "/nulle-part/autre.ini");
+	config_remember_macros_file(s);
 	kf = charger_rc();
 	valeur = g_key_file_get_string(kf, "profile:default", "macros_file", NULL);
 	g_assert_cmpstr(valeur, ==, "/nulle-part/autre.ini");
@@ -388,33 +437,70 @@ test_fichier_de_macros_retenu(void)
 	g_key_file_free(kf);
 	/* Profil actif supprimé entre-temps : mémoire seulement, pas de profil fantôme réduit à macros_file */
 	g_assert_true(app_config_delete_profile("default", NULL));
-	stub_macros_file_set_path("/nulle-part/troisieme.ini");
-	config_remember_macros_file();
-	g_assert_cmpstr(config.macros_file, ==, "/nulle-part/troisieme.ini");
+	chemin_macros(s, "/nulle-part/troisieme.ini");
+	config_remember_macros_file(s);
+	g_assert_cmpstr(gt_session_get_profile(s)->macros_file, ==, "/nulle-part/troisieme.ini");
 	kf = charger_rc();
 	g_assert_false(g_key_file_has_group(kf, "profile:default"));
 	g_key_file_free(kf);
 	g_assert_cmpuint(messages->len, ==, 0);
+	g_object_unref(s);
+}
+
+/* Deux sessions, profils « a » et « b » : chacune retient son propre fichier de macros dans son propre profil */
+static void
+test_macros_file_par_session(void)
+{
+	GtSession *a, *b;
+	GKeyFile *kf;
+	gchar *valeur;
+
+	a = demarrer("[profile:default]\nport=/dev/null\n\n[profile:a]\nport=/dev/null\n\n[profile:b]\nport=/dev/null\n");
+	b = gt_session_new(NULL, NULL);
+	g_assert_cmpint(Check_configuration_file(a), ==, 0);
+	g_assert_true(app_config_load_profile(a, "a", NULL));
+	g_assert_true(app_config_load_profile(b, "b", NULL));
+	g_assert_cmpstr(gt_session_get_profile_name(a), ==, "a");
+	g_assert_cmpstr(gt_session_get_profile_name(b), ==, "b");
+	chemin_macros(a, "/nulle-part/a.ini");
+	chemin_macros(b, "/nulle-part/b.ini");
+	config_remember_macros_file(a);
+	config_remember_macros_file(b);
+	kf = charger_rc();
+	valeur = g_key_file_get_string(kf, "profile:a", "macros_file", NULL);
+	g_assert_cmpstr(valeur, ==, "/nulle-part/a.ini");
+	g_free(valeur);
+	valeur = g_key_file_get_string(kf, "profile:b", "macros_file", NULL);
+	g_assert_cmpstr(valeur, ==, "/nulle-part/b.ini");
+	g_free(valeur);
+	g_assert_false(g_key_file_has_key(kf, "profile:default", "macros_file", NULL));
+	g_key_file_free(kf);
+	g_assert_cmpstr(gt_session_get_profile(a)->macros_file, ==, "/nulle-part/a.ini");
+	g_assert_cmpstr(gt_session_get_profile(b)->macros_file, ==, "/nulle-part/b.ini");
+	g_assert_cmpuint(messages->len, ==, 0);
+	g_object_unref(a);
+	g_object_unref(b);
 }
 
 /* Fichier illisible : défauts, un message, plus aucune écriture (ni état de fenêtre, ni profil, ni [general]) */
 static void
 test_lecture_seule(void)
 {
+	GtSession *s;
 	GtWindowState st;
 	GError *err = NULL;
 	gchar *avant, *apres, *copie;
 
-	demarrer("ceci n'est pas un fichier ini\n[profile:a]\nport=/dev/x\n");
+	s = demarrer("ceci n'est pas un fichier ini\n[profile:a]\nport=/dev/x\n");
 	avant = lire_rc();
-	g_assert_cmpint(Check_configuration_file(), ==, -1);
+	g_assert_cmpint(Check_configuration_file(s), ==, -1);
 	g_assert_cmpint(nb_messages('E'), ==, 1);
 	g_assert_nonnull(strstr(dernier_message(), ".gtktermrc"));
-	g_assert_cmpuint(config.baudrate, ==, 115200);
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 115200);
 	app_config_load_window_state(&st);
 	st.width = 900;
 	app_config_save_window_state(&st);
-	g_assert_false(app_config_save_profile("atelier", &err));
+	g_assert_false(app_config_save_profile(s, "atelier", &err));
 	g_assert_nonnull(err);
 	g_clear_error(&err);
 	config_save_skipped_revision("0123abc");
@@ -426,17 +512,19 @@ test_lecture_seule(void)
 	g_free(copie);
 	g_free(avant);
 	g_free(apres);
+	g_object_unref(s);
 }
 
 /* M34 : « Skip this version » enregistré dans [general] et relu au démarrage suivant ; NULL l'efface */
 static void
 test_revision_ignoree(void)
 {
+	GtSession *s;
 	GKeyFile *kf;
 	gchar *valeur;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_null(settings.update_skipped_revision);
 	config_save_skipped_revision("0123abc");
 	g_assert_cmpstr(settings.update_skipped_revision, ==, "0123abc");
@@ -446,14 +534,15 @@ test_revision_ignoree(void)
 	g_free(valeur);
 	g_key_file_free(kf);
 	config_file_init();
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_cmpstr(settings.update_skipped_revision, ==, "0123abc");
 	config_save_skipped_revision(NULL);
 	g_assert_null(settings.update_skipped_revision);
 	config_file_init();
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_null(settings.update_skipped_revision);
 	g_assert_cmpuint(messages->len, ==, 0);
+	g_object_unref(s);
 }
 
 /* Case « Check for updates at startup » (fenêtre « Updates ») : seule la clé [general] update_check_startup est écrite, après
@@ -461,11 +550,12 @@ test_revision_ignoree(void)
 static void
 test_verification_au_demarrage(void)
 {
+	GtSession *s;
 	GKeyFile *kf;
 	gchar *avant, *apres;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_true(settings.update_check_startup);	/* absente du fichier : TRUE */
 	avant = lire_rc();
 	config_save_update_check_startup(TRUE);
@@ -481,10 +571,11 @@ test_verification_au_demarrage(void)
 	g_assert_cmpuint(g_key_file_get_uint64(kf, "profile:atelier", "speed", NULL), ==, 19200);	/* profils conservés */
 	g_key_file_free(kf);
 	config_file_init();
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	g_assert_false(settings.update_check_startup);
 	g_assert_cmpuint(messages->len, ==, 0);
 	g_free(avant);
+	g_object_unref(s);
 }
 
 /* ---- État de la fenêtre ------------------------------------------------------ */
@@ -492,29 +583,32 @@ test_verification_au_demarrage(void)
 static void
 test_etat_fenetre_defauts(void)
 {
+	GtSession *s;
 	GtWindowState st;
 
-	demarrer(NULL);
+	s = demarrer(NULL);
 	app_config_load_window_state(&st);
-	g_assert_cmpint(st.width, ==, 750);
-	g_assert_cmpint(st.height, ==, 550);
+	g_assert_cmpint(st.width, ==, 1000);
+	g_assert_cmpint(st.height, ==, 600);
 	g_assert_false(st.maximized);
 	g_assert_cmpint(st.h_paned, ==, -1);
 	g_assert_cmpint(st.v_paned, ==, -1);
 	g_assert_true(st.macro_panel_visible);
 	g_assert_false(st.script_panel_visible);
 	g_assert_false(st.hex_bar_visible);
+	g_object_unref(s);
 }
 
 static void
 test_etat_fenetre_aller_retour(void)
 {
+	GtSession *s;
 	GtWindowState st = { 1024, 700, TRUE, 300, 200, FALSE, TRUE, TRUE };
 	GtWindowState lu;
 	GKeyFile *kf;
 
-	demarrer(RC_DEUX_PROFILS);
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	app_config_save_window_state(&st);
 	kf = charger_rc();
 	g_assert_cmpint(g_key_file_get_integer(kf, "window", "width", NULL), ==, 1024);
@@ -538,18 +632,20 @@ test_etat_fenetre_aller_retour(void)
 	g_assert_false(lu.macro_panel_visible);
 	g_assert_true(lu.script_panel_visible);
 	g_assert_true(lu.hex_bar_visible);
+	g_object_unref(s);
 }
 
 /* Spec §3.2-7 : x et y ne sont plus lus, et disparaissent au premier enregistrement ; les autres groupes restent */
 static void
 test_etat_fenetre_x_y_retires(void)
 {
+	GtSession *s;
 	GtWindowState st;
 	GKeyFile *kf;
 	gchar *valeur;
 
-	demarrer("[window]\nx=10\ny=20\nwidth=800\nheight=600\n\n[profile:default]\nport=/dev/null\n\n[colors]\nbg=#000000\n");
-	g_assert_cmpint(Check_configuration_file(), ==, 0);
+	s = demarrer("[window]\nx=10\ny=20\nwidth=800\nheight=600\n\n[profile:default]\nport=/dev/null\n\n[colors]\nbg=#000000\n");
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
 	app_config_load_window_state(&st);
 	g_assert_cmpint(st.width, ==, 800);
 	g_assert_cmpint(st.height, ==, 600);
@@ -562,26 +658,30 @@ test_etat_fenetre_x_y_retires(void)
 	g_assert_cmpstr(valeur, ==, "#000000");
 	g_free(valeur);
 	g_key_file_free(kf);
+	g_object_unref(s);
 }
 
 /* Spec §8 : tailles ≤ 0 ou > 10 000, positions négatives, valeurs illisibles : ignorées */
 static void
 test_etat_fenetre_aberrant(void)
 {
+	GtSession *s;
 	GtWindowState st;
 
-	demarrer("[window]\nwidth=-5\nheight=20000\npaned_position=-3\nv_paned_position=abc\nmaximized=peut-etre\nscript_panel_visible=yes\n");
+	s = demarrer("[window]\nwidth=-5\nheight=20000\npaned_position=-3\nv_paned_position=abc\nmaximized=peut-etre\nscript_panel_visible=yes\n");
 	app_config_load_window_state(&st);
-	g_assert_cmpint(st.width, ==, 750);
-	g_assert_cmpint(st.height, ==, 550);
+	g_assert_cmpint(st.width, ==, 1000);
+	g_assert_cmpint(st.height, ==, 600);
 	g_assert_cmpint(st.h_paned, ==, -1);
 	g_assert_cmpint(st.v_paned, ==, -1);
 	g_assert_false(st.maximized);
 	g_assert_true(st.script_panel_visible);
-	demarrer("[window]\nwidth=900\nheight=0\n");
+	g_object_unref(s);
+	s = demarrer("[window]\nwidth=900\nheight=0\n");
 	app_config_load_window_state(&st);
-	g_assert_cmpint(st.width, ==, 750);
-	g_assert_cmpint(st.height, ==, 550);
+	g_assert_cmpint(st.width, ==, 1000);
+	g_assert_cmpint(st.height, ==, 600);
+	g_object_unref(s);
 }
 
 int
@@ -611,6 +711,7 @@ main(int argc, char **argv)
 	g_test_add_func("/app_config/suppression", test_suppression);
 	g_test_add_func("/app_config/relecture-autre-instance", test_relecture_autre_instance);
 	g_test_add_func("/app_config/fichier-de-macros-retenu", test_fichier_de_macros_retenu);
+	g_test_add_func("/app_config/macros-file-par-session", test_macros_file_par_session);
 	g_test_add_func("/app_config/lecture-seule", test_lecture_seule);
 	g_test_add_func("/app_config/revision-ignoree", test_revision_ignoree);
 	g_test_add_func("/app_config/verification-au-demarrage", test_verification_au_demarrage);

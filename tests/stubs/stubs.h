@@ -4,21 +4,22 @@
 
 #include <glib.h>
 #include "history.h"
+#include "link.h"
 
 void         stub_reset(void);
 void         stub_record(const gchar *nom, const gchar *texte);
 gint         stub_count(const gchar *nom);
 const gchar *stub_last(const gchar *nom);
 
-/* Liaison (stub_link.c) */
+/* Liaison (stub_link.c) : chaque GtkTermLink du bouchon enregistre ses envois. Les fonctions sans argument visent stub_link_default(). */
+GtkTermLink *stub_link_default(void);	/* créée au premier appel, jamais libérée */
+GByteArray  *stub_link_sent(GtkTermLink *link);
+void         stub_link_inject_rx(GtkTermLink *link, const gchar *data, guint len);
 GByteArray  *stub_sent(void);
 GThread     *stub_send_thread(void);
 GtSendOrigin stub_last_origin(void);
 void         stub_inject_rx(const gchar *data, guint len);
 void         stub_link_set_write_fails(gboolean fails);
 void         stub_link_set_state(gint state);	/* GtLinkState rendu par gt_link_get_state ; GT_LINK_OPEN après stub_reset */
-
-/* Fichier de macros (stub_macros_file.c) : chemin rendu par macros_file_get_path, NULL : aucun */
-void         stub_macros_file_set_path(const gchar *path);
 
 #endif

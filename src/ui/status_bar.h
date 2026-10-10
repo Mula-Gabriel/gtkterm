@@ -4,17 +4,17 @@
 
 #include <gtk/gtk.h>
 
+#include "app_ui.h"
 #include "link.h"
 
 G_BEGIN_DECLS
 
-/* window non NULL : barre de la fenêtre principale — son titre suit aussi status-text, et le crochet status_flash vise cette barre */
-GtkWidget *gt_status_bar_new(GtkTermLink *link, GtkWindow *window);
+/* Barre d'une page d'onglet (une par page) : texte suivant status-text de link ; le titre de la fenêtre est lié par app.c */
+GtkWidget *gt_status_bar_new(GtkTermLink *link);
 /* Remplace le texte d'état par text pendant ms, puis le rend ; un nouveau message remplace l'ancien (pas de pile) */
 void       gt_status_bar_flash(GtkWidget *bar, const gchar *text, guint ms);
-/* Crochet GtAppUi.status_flash : barre de la fenêtre principale, sans effet sans elle */
-void       gt_status_bar_app_flash(const gchar *text, guint ms);
-/* Fermeture (close-request, avant l'arrêt des services) : titre et texte ne suivent plus la liaison, voyants et messages arrêtés ; idempotente */
+/* Arrêt de la page (gt_session_view_shutdown, avant l'arrêt de la session) : le texte ne suit plus la liaison, voyants et messages arrêtés ;
+ * idempotente */
 void       gt_status_bar_detach(GtkWidget *bar);
 
 G_END_DECLS
