@@ -116,5 +116,19 @@ e.bw.key('F5')
 check(wait_until(lambda: e.describe('send-break')[0], 3), 'F5 : port rouvert, Send break actif')
 e.bw.type('y')
 check(e.read_pty(0.8) == b'y', 'port rouvert : frappe envoyee')
+# 6b : chaque action garde son type de paramètre et d'état (relais)
+ATTENDU = {
+    'local-echo': ('', 'b'), 'crlf-auto': ('', 'b'), 'timestamp': ('', 'b'), 'esc-clear-screen': ('', 'b'), 'hex-index': ('', 'b'),
+    'auto-reconnect': ('', 'b'), 'view-mode': ('s', 's'), 'hex-bytes': ('u', 'u'), 'log-paused': ('', 'b'), 'show-hex-bar': ('', 'b'),
+    'show-macro-panel': ('', 'b'), 'show-script-panel': ('', 'b'), 'script-layout': ('s', 's'),
+    'clear-screen': ('', None), 'open-port': ('', None), 'close-port': ('', None), 'send-break': ('', None), 'toggle-dtr': ('', None),
+    'toggle-rts': ('', None), 'clear-scrollback': ('', None), 'copy': ('', None), 'paste': ('', None), 'select-all': ('', None), 'find': ('', None),
+    'send-file': ('', None), 'save-raw': ('', None), 'save-ascii': ('', None), 'log-start': ('', None), 'log-stop': ('', None), 'log-clear': ('', None),
+}
+for nom, (ptype, stype) in ATTENDU.items():
+    en, pt, st = e.describe(nom)
+    check(pt == ptype, 'type de parametre de %s : %r' % (nom, pt))
+    check((stype is None) == (st is None), 'etat de %s present ou absent comme attendu' % nom)
+    check(e.state_type(nom) == stype, 'type exact de l etat de %s : %r' % (nom, e.state_type(nom)))
 e.finish()
 sys.exit(conclude())

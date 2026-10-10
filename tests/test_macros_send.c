@@ -17,19 +17,19 @@ enr_message(GtAppMessageKind kind, const gchar *text)
 }
 
 static void
-enr_status_flash(const gchar *text, guint ms)
+enr_status_flash(GtSession *session, const gchar *text, guint ms)
 {
 	stub_record("status_flash", text);
 }
 
 static void
-enr_macros_changed(void)
+enr_macros_changed(GtSession *session)
 {
 	stub_record("macros_changed", NULL);
 }
 
 static void
-enr_polling(guint id, gboolean running)
+enr_polling(GtSession *session, guint id, gboolean running)
 {
 	stub_record("macro_polling_changed", running ? "1" : "0");
 }
@@ -42,6 +42,7 @@ static const GtAppUi table_enregistrement =
 	.macro_polling_changed = enr_polling,
 };
 
+static GtMacros *macros;
 static guint id_vitesse, id_sans_libelle, id_pourcent, id_separateur;
 
 static void
@@ -54,13 +55,13 @@ installer_macros(void)
 	id_sans_libelle = gt_macro_set_append(set, NULL, "<Control>F6", "SANS_LIBELLE", "");	/* C8 */
 	id_pourcent = gt_macro_set_append(set, "Pourcent", "None", "100%%", "");
 	id_separateur = gt_macro_set_append(set, "Sep", "<Control>F7", "%&", "");
-	macros_replace_set(set);
+	gt_macros_replace_set(macros, set);
 }
 
 static void
 desinstaller(void)
 {
-	macros_replace_set(gt_macro_set_new());
+	gt_macros_replace_set(macros, gt_macro_set_new());
 }
 
 static gchar *
@@ -78,7 +79,7 @@ test_arguments_enregistres(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_true(macros_send(id_vitesse, NULL, -1));
+	g_assert_true(gt_macros_send(macros, id_vitesse, NULL, -1));
 	s = envoye();
 	g_assert_cmpstr(s, ==, "V42\r");
 	g_assert_cmpint(stub_last_origin(), ==, GT_SEND_MACRO);
@@ -94,7 +95,7 @@ test_arguments_fournis(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_true(macros_send(id_vitesse, sept, 1));
+	g_assert_true(gt_macros_send(macros, id_vitesse, sept, 1));
 	s = envoye();
 	g_assert_cmpstr(s, ==, "V7\r");
 	g_free(s);
@@ -108,7 +109,7 @@ test_double_pourcent(void)
 
 	installer_macros();
 	stub_reset();
-	macros_send(id_pourcent, NULL, -1);
+	gt_macros_send(macros, id_pourcent, NULL, -1);
 	s = envoye();
 	g_assert_cmpstr(s, ==, "100%");
 	g_free(s);
@@ -122,7 +123,7 @@ test_sans_libelle(void)
 
 	installer_macros();
 	stub_reset();
-	macros_send(id_sans_libelle, NULL, -1);
+	gt_macros_send(macros, id_sans_libelle, NULL, -1);
 	s = envoye();
 	g_assert_cmpstr(s, ==, "SANS_LIBELLE");
 	g_assert_cmpint(stub_count("status_flash"), ==, 1);
@@ -136,8 +137,8 @@ test_inconnue_ou_separateur(void)
 {
 	installer_macros();
 	stub_reset();
-	g_assert_false(macros_send(9999999, NULL, -1));
-	g_assert_false(macros_send(id_separateur, NULL, -1));
+	g_assert_false(gt_macros_send(macros, 9999999, NULL, -1));
+	g_assert_false(gt_macros_send(macros, id_separateur, NULL, -1));
 	g_assert_cmpuint(stub_sent()->len, ==, 0);
 	g_assert_cmpint(stub_count("status_flash"), ==, 0);
 	desinstaller();
@@ -150,7 +151,7 @@ test_ecriture_en_echec(void)
 	installer_macros();
 	stub_reset();
 	stub_link_set_write_fails(TRUE);
-	g_assert_false(macros_send(id_vitesse, NULL, -1));
+	g_assert_false(gt_macros_send(macros, id_vitesse, NULL, -1));
 	g_assert_cmpuint(stub_sent()->len, ==, 0);
 	g_assert_cmpint(stub_count("gt_link_send"), ==, 1);
 	/* M3 : aucun octet ecrit, pas de message « envoyee » (le « - lost » de la barre d'etat reste visible) */
@@ -167,15 +168,15 @@ test_envoi_silencieux(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_true(macros_send_quiet(id_vitesse, NULL, -1));
+	g_assert_true(gt_macros_send_quiet(macros, id_vitesse, NULL, -1));
 	s = envoye();
 	g_assert_cmpstr(s, ==, "V42\r");
 	g_free(s);
 	g_assert_cmpint(stub_last_origin(), ==, GT_SEND_MACRO);
 	g_assert_cmpint(stub_count("status_flash"), ==, 0);
-	g_assert_false(macros_send_quiet(id_separateur, NULL, -1));
-	g_assert_false(macros_send_quiet(9999999, NULL, -1));
-	g_assert_true(macros_send(id_vitesse, NULL, -1));
+	g_assert_false(gt_macros_send_quiet(macros, id_separateur, NULL, -1));
+	g_assert_false(gt_macros_send_quiet(macros, 9999999, NULL, -1));
+	g_assert_true(gt_macros_send(macros, id_vitesse, NULL, -1));
 	g_assert_cmpint(stub_count("status_flash"), ==, 1);
 	g_assert_nonnull(strstr(stub_last("status_flash"), "Vitesse"));
 	desinstaller();
@@ -197,15 +198,15 @@ test_chargement_ancien_format_listes(void)
 
 	path = test_write_file(dir, "macros.ini", contenu);
 	stub_reset();
-	g_assert_true(macros_load_file(path, FALSE));
-	set = macros_get_set();
+	g_assert_true(gt_macros_load_file(macros, path, FALSE));
+	set = gt_macros_get_set(macros);
 	g_assert_cmpuint(gt_macro_set_count(set), ==, 2);
 	g_assert_cmpstr(gt_macro_set_get(set, 0)->args[0], ==, "115200");
 	g_assert_cmpstr(gt_macro_set_get(set, 1)->args[0], ==, "9600");
 	g_assert_cmpstr(gt_macro_set_get(set, 1)->args[1], ==, "5");
-	g_assert_cmpstr(macros_file_get_path(), ==, path);
+	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
 	g_assert_cmpint(stub_count("macros_changed"), >=, 1);
-	macros_send(gt_macro_set_get(set, 0)->id, NULL, -1);
+	gt_macros_send(macros, gt_macro_set_get(set, 0)->id, NULL, -1);
 	s = envoye();
 	g_assert_cmpstr(s, ==, "SPD 115200\r");
 	g_free(s);
@@ -223,9 +224,9 @@ test_chargement_fichier_absent(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_true(macros_load_file(path, TRUE));
-	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 0);
-	g_assert_cmpstr(macros_file_get_path(), ==, path);
+	g_assert_true(gt_macros_load_file(macros, path, TRUE));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, 0);
+	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
 	g_assert_cmpint(stub_count("message"), ==, 0);
 	test_rmdir(dir);
 	g_free(path);
@@ -239,13 +240,13 @@ test_chargement_corrompu_garde_le_jeu(void)
 	gchar *bon = g_build_filename(dir, "absent.ini", NULL);
 	gchar *corrompu = test_write_file(dir, "corrompu.ini", "[[[\n");
 
-	g_assert_true(macros_load_file(bon, FALSE));
+	g_assert_true(gt_macros_load_file(macros, bon, FALSE));
 	installer_macros();
 	stub_reset();
-	g_assert_false(macros_load_file(corrompu, TRUE));
-	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 4);
+	g_assert_false(gt_macros_load_file(macros, corrompu, TRUE));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, 4);
 	g_assert_cmpint(stub_count("message"), ==, 1);
-	g_assert_cmpstr(macros_file_get_path(), ==, bon);
+	g_assert_cmpstr(gt_macros_get_path(macros), ==, bon);
 	desinstaller();
 	test_rmdir(dir);
 	g_free(bon);
@@ -261,8 +262,8 @@ test_enregistrement_echec_une_seule_boite(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_false(macros_save_file(path, TRUE));
-	g_assert_false(macros_save_file(path, TRUE));
+	g_assert_false(gt_macros_save_file(macros, path, TRUE));
+	g_assert_false(gt_macros_save_file(macros, path, TRUE));
 	g_assert_cmpint(stub_count("message"), ==, 1);
 	desinstaller();
 	test_rmdir(dir);
@@ -279,11 +280,11 @@ test_enregistrement_explicite_reaffiche(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_false(macros_save_file(path, TRUE));
-	g_assert_false(macros_save_file(path, TRUE));
+	g_assert_false(gt_macros_save_file(macros, path, TRUE));
+	g_assert_false(gt_macros_save_file(macros, path, TRUE));
 	g_assert_cmpint(stub_count("message"), ==, 1);
-	macros_forget_save_error();
-	g_assert_false(macros_save_file(path, TRUE));
+	gt_macros_forget_save_error(macros);
+	g_assert_false(gt_macros_save_file(macros, path, TRUE));
 	g_assert_cmpint(stub_count("message"), ==, 2);
 	desinstaller();
 	test_rmdir(dir);
@@ -312,16 +313,16 @@ test_chargement_profil_abime(void)
 	installer_macros();
 	stub_reset();
 	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*m.ini*");
-	g_assert_false(macros_load_file(path, FALSE));
+	g_assert_false(gt_macros_load_file(macros, path, FALSE));
 	g_test_assert_expected_messages();
-	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 0);
-	g_assert_cmpstr(macros_file_get_path(), ==, path);
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, 0);
+	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
 	g_assert_cmpint(stub_count("message"), ==, 0);	/* jamais de boucle imbriquee pendant le chargement du profil */
 	iterer_boucle();
 	g_assert_cmpint(stub_count("message"), ==, 1);
 	g_assert_nonnull(strstr(stub_last("message"), "m.ini"));
-	g_assert_true(macros_save_file(NULL, TRUE));
-	g_assert_cmpstr(macros_file_get_path(), ==, path);
+	g_assert_true(gt_macros_save_file(macros, NULL, TRUE));
+	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
 	g_assert_true(g_file_get_contents(copie, &texte, NULL, NULL));
 	g_assert_cmpstr(texte, ==, original);
 	g_free(texte);
@@ -342,12 +343,12 @@ test_enregistrement_puis_relecture(void)
 	gchar *path = g_build_filename(dir, "m.ini", NULL);
 
 	installer_macros();
-	g_assert_true(macros_save_file(path, FALSE));
-	g_assert_cmpstr(macros_file_get_path(), ==, path);
+	g_assert_true(gt_macros_save_file(macros, path, FALSE));
+	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
 	desinstaller();
-	g_assert_true(macros_load_file(path, FALSE));
-	g_assert_cmpuint(gt_macro_set_count(macros_get_set()), ==, 4);
-	g_assert_cmpstr(gt_macro_set_get(macros_get_set(), 0)->args[0], ==, "42");
+	g_assert_true(gt_macros_load_file(macros, path, FALSE));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, 4);
+	g_assert_cmpstr(gt_macro_set_get(gt_macros_get_set(macros), 0)->args[0], ==, "42");
 	desinstaller();
 	test_rmdir(dir);
 	g_free(path);
@@ -360,12 +361,51 @@ test_polling_arrete_au_chargement(void)
 {
 	installer_macros();
 	stub_reset();
-	g_assert_true(gt_macro_set_set_polling(macros_get_set(), id_vitesse, TRUE, 1000));
-	g_assert_true(gt_macro_poller_start(macros_get_poller(), id_vitesse));
+	g_assert_true(gt_macro_set_set_polling(gt_macros_get_set(macros), id_vitesse, TRUE, 1000));
+	g_assert_true(gt_macro_poller_start(gt_macros_get_poller(macros), id_vitesse));
 	g_assert_cmpuint(stub_sent()->len, ==, 4);			/* envoi immédiat « V42\r » */
 	desinstaller();
-	g_assert_cmpuint(gt_macro_poller_running_count(macros_get_poller()), ==, 0);
+	g_assert_cmpuint(gt_macro_poller_running_count(gt_macros_get_poller(macros)), ==, 0);
 	g_assert_cmpint(stub_count("macro_polling_changed"), ==, 2);
+}
+
+/* Deux instances sur deux liaisons : chaque envoi et chaque polling part sur la liaison de son instance (spec §3.1-2) */
+static void
+test_deux_instances(void)
+{
+	GtkTermLink *l1 = gt_link_new(), *l2 = gt_link_new();
+	GtMacros *m1 = gt_macros_new(l1, NULL), *m2 = gt_macros_new(l2, NULL);
+	GtMacroSet *s1 = gt_macro_set_new(), *s2 = gt_macro_set_new();
+	guint id1 = gt_macro_set_append(s1, "Un", NULL, "UN", NULL);
+	guint id2 = gt_macro_set_append(s2, "Deux", NULL, "DEUX", NULL);
+	GMainContext *ctx = g_main_context_default();
+	gint64 fin;
+
+	gt_macros_replace_set(m1, s1);
+	gt_macros_replace_set(m2, s2);
+	g_assert_true(gt_macros_send(m1, id1, NULL, -1));
+	g_assert_true(gt_macros_send(m2, id2, NULL, -1));
+	g_assert_cmpmem(stub_link_sent(l1)->data, stub_link_sent(l1)->len, "UN", 2);
+	g_assert_cmpmem(stub_link_sent(l2)->data, stub_link_sent(l2)->len, "DEUX", 4);
+	/* L'identifiant de m1 n'existe pas dans m2 : rien n'est envoyé sur l2 */
+	g_assert_false(gt_macros_send(m2, id1 + 1000, NULL, -1));
+	/* Polling de m1 toutes les 10 ms : seul l1 reçoit */
+	g_byte_array_set_size(stub_link_sent(l1), 0);
+	g_byte_array_set_size(stub_link_sent(l2), 0);
+	g_assert_true(gt_macro_set_set_polling(gt_macros_get_set(m1), id1, TRUE, 10));
+	gt_macro_poller_start(gt_macros_get_poller(m1), id1);
+	fin = g_get_monotonic_time() + 100 * G_TIME_SPAN_MILLISECOND;
+	while(g_get_monotonic_time() < fin)
+		g_main_context_iteration(ctx, FALSE);
+	g_assert_cmpuint(stub_link_sent(l1)->len, >=, 4);
+	g_assert_cmpuint(stub_link_sent(l2)->len, ==, 0);
+	/* Après shutdown : plus rien n'est envoyé */
+	gt_macros_shutdown(m1);
+	g_assert_false(gt_macros_send(m1, id1, NULL, -1));
+	gt_macros_free(m1);
+	gt_macros_free(m2);
+	g_object_unref(l1);
+	g_object_unref(l2);
 }
 
 int
@@ -373,7 +413,7 @@ main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
 	gt_app_ui_set(&table_enregistrement);
-	macros_init();
+	macros = gt_macros_new(stub_link_default(), NULL);
 	g_test_add_func("/macros_send/arguments-enregistres", test_arguments_enregistres);
 	g_test_add_func("/macros_send/arguments-fournis", test_arguments_fournis);
 	g_test_add_func("/macros_send/double-pourcent", test_double_pourcent);
@@ -389,5 +429,6 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_send/chargement-profil-abime", test_chargement_profil_abime);
 	g_test_add_func("/macros_send/enregistrement-puis-relecture", test_enregistrement_puis_relecture);
 	g_test_add_func("/macros_send/polling-arrete-au-chargement", test_polling_arrete_au_chargement);
+	g_test_add_func("/macros_send/deux-instances", test_deux_instances);
 	return g_test_run();
 }

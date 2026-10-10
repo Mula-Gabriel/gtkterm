@@ -249,6 +249,7 @@ terminal) ne sont pas repris ici.
 
 - **Disposition par défaut** : à 750 px avec le panneau de macros visible, le terminal n'a que 63 colonnes, une ligne hexadécimale de 16 octets (64 colonnes) se
   replie ; `test_hex_index` tourne en 1000 px. Comme en GTK 3 ; à revoir avec les onglets (taille par défaut ou panneau replié au premier lancement).
+  **Traité par le sous-projet 6b (taille par défaut 1000 × 600).**
 - **Sélecteur de fichiers (GTK 4.14)** : `GtkFileDialog` ouvre le dossier du fichier proposé mais ne le présélectionne pas (constaté sous broadway ; à confirmer
   sur un vrai bureau).
 - **Configuration et fenêtre** (`app_config.c`, `app.c`) : profil resté en mémoire après un enregistrement échoué ; `[window]` lu au démarrage sans relecture
@@ -273,3 +274,32 @@ terminal) ne sont pas repris ici.
 - **Installation** : un `sudo meson install` manuel par-dessus une installation GTK 3 laisse l'ancien lanceur `gtkterm.desktop` (le script de mise à jour le
   retire ; le README le signale).
 - **Hors périmètre, relevé** : licence incohérente (À propos : LGPL 3, `--help` : « GPL V.2 », `COPYING` : GPL 3), antérieure à la branche.
+
+## Remarques mineures reportées par le sous-projet 6b (relectures par tâche et finale)
+
+Non bloquantes à la fusion ; à reprendre avec les projets (6c) ou au fil de l'eau. Les points marqués « traité » l'ont été par la vague finale de
+correctifs de la branche `feature/refonte-onglets`.
+
+- **Relais d'actions** (`action_relay.c`) : branches « valeur flottante » mortes dans `relay_activate`/`relay_change_state` ; `set_target` ne vérifie pas que
+  le type de paramètre et d'état de l'action cible est celui du relais ; `test_action_relay` ne couvre ni un relais désactivé ni une valeur flottante.
+- **Macros et Lua** : `test_macros_send` n'essaie pas `replace_set` après `gt_macros_shutdown` ; le cas `/moteur/arret-sert-l-autre` ne prouve pas que l'arrêt
+  d'un moteur exécute les demandes de l'autre (nom trop fort) ; le chevauchement réel de deux scripts n'est pas démontré ; `stub_macros` envoie sur la liaison
+  par défaut du bouchon.
+- **Moteur Lua abandonné à la fermeture d'un onglet** (`script_engine.c`, `session.c`) : après 3 s d'attente (interface figée pendant ce temps), le thread et
+  ses ports Lua 1-15 restent vivants jusqu'au retour de l'appel C long qui le bloque, l'application continue, le moteur n'est jamais libéré.
+  **Traité en partie : commentaires corrigés et cas décrit dans `CLAUDE.md` ; comportement inchangé.**
+- **Fermeture avec N scripts bloqués** (`app.c`) : moteurs arrêtés et attendus l'un après l'autre. **Traité : l'arrêt est demandé à tous les moteurs avant le
+  premier `gt_session_shutdown` ; un script bloqué plus de 3 s dans un appel C coûte encore ses 3 s d'attente (échéance propre à chaque moteur).**
+- **Interface** : `[window]` lu deux fois au démarrage et à chaque nouvel onglet ; couplage ad hoc `gt_app_take_initial_send_file` ; un échec de chargement
+  du fichier de macros se répète à chaque nouvel onglet qui hérite du chemin.
+- **Nouvel onglet : nom de profil et fichier de macros de repli** pris dans l'onglet actif au OK du dialogue Port. **Traité : commenté (le dialogue est modal,
+  l'onglet actif au OK est celui qui l'a prérempli).**
+- **Ctrl+Page sans Maj** : `GtkNotebook` a ses propres liaisons Ctrl+Page_Up/Down. **Traité : scénario dans `test_onglets.py` (focus au terminal, les
+  séquences partent sur le port de l'onglet actif, l'onglet actif ne change pas).**
+- **Suite graphique** : `drag_in_surface` arrondit vers le bas et la cible du glisser est mesurée sur `tab-name` ; dialogue Terminal modal fermé par
+  `test-activate`, pas par un geste ; focus après un changement d'onglet vérifié de façon non discriminante ; arrêt du polling à la fermeture d'un onglet
+  faiblement prouvé ; Stop Lua d'un onglet sans toucher l'autre non couvert en graphique ; attentes après `open_tab` qui supposent l'activation faite.
+  `time.sleep` non commentés de `test_onglets_terminal.py` et commentaire d'état divergent de `test_onglets.py` (panneau de script) : **traités.**
+- **Traductions et documents** : préfixe `"%s: %s"` du message `open-failed` non traduisible, ponctuation française mêlée dans `fr.po`.
+  « Configure Macros — %s » flou en allemand, hongrois, néerlandais, portugais du Brésil, russe et chinois : **traité** (ancienne traduction suivie de
+  « — %s »). Ligne de 272 colonnes dans la spec (§3.2-17) : **traité.**

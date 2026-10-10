@@ -29,6 +29,7 @@
 #include "test_util.h"
 
 static GThread *thread_principal;
+static GtScriptEngine *engine;	/* moteur des cas, créé dans main() (recréé après un arrêt définitif) */
 
 /* ---- Interceptions (-Wl,--wrap=ioctl, -Wl,--wrap=getaddrinfo) ---------------- */
 
@@ -114,6 +115,16 @@ sur_delai(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
+/* (Re)crée le moteur des cas sur la liaison et les macros par défaut des bouchons, journal et fin branchés. */
+static void
+nouveau_moteur(void)
+{
+	gt_script_engine_free(engine);
+	engine = gt_script_engine_new(stub_link_default(), stub_macros_default());
+	gt_script_engine_set_log_func(engine, sur_journal, NULL);
+	gt_script_engine_set_done_func(engine, sur_fin, NULL);
+}
+
 /* Lance le script et fait tourner la boucle jusqu'à sa fin (TRUE) ou jusqu'au délai (FALSE). */
 static gboolean
 executer(const gchar *script, guint delai_ms)
@@ -125,7 +136,7 @@ executer(const gchar *script, guint delai_ms)
 	fini = FALSE;
 	boucle = g_main_loop_new(NULL, FALSE);
 	delai = g_timeout_add(delai_ms, sur_delai, NULL);
-	script_engine_run(script);
+	gt_script_engine_run(engine, script);
 	g_main_loop_run(boucle);
 	if(fini)
 		g_source_remove(delai);
@@ -176,7 +187,7 @@ installer_macro_a(void)
 	gt_macro_set_append(set, "A", "", "A", "");
 	v = gt_macro_set_append(set, "V", "", "V%d", "");
 	gt_macro_set_set_arg(set, v, 0, "42");
-	stub_set_macro_set(set);
+	stub_macros_set_set(stub_macros_default(), set);
 }
 
 static void
@@ -224,7 +235,7 @@ test_get_lists(void)
 
 	gt_macro_lists_add(l, "Mode", "Marche", "M");
 	gt_macro_set_take_lists(set, l);
-	stub_set_macro_set(set);
+	stub_macros_set_set(stub_macros_default(), set);
 	g_assert_true(executer("local l = gtkterm.get_lists()\n"
 	                       "gtkterm.log(l[1].name .. ' ' .. l[1].entries[1].value)\n", 5000));
 	g_assert_nonnull(strstr(journal->str, "Mode M"));
@@ -317,7 +328,7 @@ test_executions_successives(void)
 {
 	g_assert_true(executer("gtkterm.log('un')\n", 5000));
 	g_assert_true(executer("gtkterm.log('deux')\n", 5000));
-	g_assert_false(script_engine_is_running());
+	g_assert_false(gt_script_engine_is_running(engine));
 }
 
 /* ---- M9 : nombres Lua indépendants de la langue ----------------------- */
@@ -1074,7 +1085,7 @@ arreter(gpointer data)
 	arret_id = 0;
 	arret_us = g_get_monotonic_time();
 	envoyes_a_l_arret = stub_sent()->len;
-	script_engine_stop();
+	gt_script_engine_stop(engine);
 	return G_SOURCE_REMOVE;
 }
 
@@ -1307,7 +1318,7 @@ test_journal_plafond(void)
 	stub_reset();
 	g_string_truncate(journal, 0);
 	fini = FALSE;
-	script_engine_run("gtkterm.log('pret')\n"
+	gt_script_engine_run(engine, "gtkterm.log('pret')\n"
 	                  "assert(gtkterm.wait_for(0, 'go', 10000))\n"
 	                  "local s = string.rep('x', 1023)\n"
 	                  "for i = 1, 3072 do gtkterm.log(s) end\n"
@@ -1393,12 +1404,16 @@ test_relance_apres_arret(void)
 static void
 test_shutdown_sans_script(void)
 {
-	g_assert_false(script_engine_is_running());
-	script_engine_shutdown();
-	g_assert_false(script_engine_is_running());
+	g_assert_false(gt_script_engine_is_running(engine));
+	gt_script_engine_shutdown(engine);
+	g_assert_false(gt_script_engine_is_running(engine));
+	/* Arrêt définitif : un lancement ne fait plus rien ; les cas suivants ont un moteur neuf */
+	gt_script_engine_run(engine, "gtkterm.log('jamais')\n");
+	g_assert_false(gt_script_engine_is_running(engine));
+	nouveau_moteur();
 }
 
-/* Dernier cas : script_engine_shutdown retire les fonctions de journal et de fin (remises ensuite pour la forme). */
+/* gt_script_engine_shutdown retire les fonctions de journal et de fin ; moteur neuf ensuite pour les cas suivants. */
 static void
 test_shutdown_pendant_boucle(void)
 {
@@ -1424,18 +1439,17 @@ test_shutdown_pendant_boucle(void)
 	stub_reset();
 	g_string_truncate(journal, 0);
 	fini = FALSE;
-	script_engine_run(script);
+	gt_script_engine_run(engine, script);
 	g_assert_true(iterer_jusqu_a("ouvert\n", 10000));
 	t0 = g_get_monotonic_time();
-	script_engine_shutdown();
+	gt_script_engine_shutdown(engine);
 	g_assert_cmpint(g_get_monotonic_time() - t0, <, 3 * G_USEC_PER_SEC);
-	g_assert_false(script_engine_is_running());
+	g_assert_false(gt_script_engine_is_running(engine));
 	g_assert_false(fini);	/* fonction de fin retirée : jamais appelée */
 	g_assert_cmpuint(compter_descripteurs(), ==, avant);
 	g_assert_cmpint(tcgetattr(esclave, &tio), ==, 0);
 	g_assert_cmpuint(tio.c_cflag & CSTOPB, ==, CSTOPB);
-	script_engine_set_log_func(sur_journal, NULL);
-	script_engine_set_done_func(sur_fin, NULL);
+	nouveau_moteur();
 	g_free(script);
 	g_free(chemin);
 	close(esclave);
@@ -1930,6 +1944,182 @@ test_vidange_trame_courte(void)
 	close(maitre);
 }
 
+/* ---- Sous-projet 6b : moteurs indépendants (un par onglet) -------------------- */
+
+typedef struct
+{
+	gboolean done;
+	GtScriptEnd end;
+} EndWait;
+
+static void
+end_wait_cb(GtScriptEnd end, gpointer user_data)
+{
+	EndWait *w = user_data;
+
+	w->end = end;
+	w->done = TRUE;
+}
+
+static void
+end_wait(EndWait *w, guint timeout_ms)
+{
+	gint64 fin = g_get_monotonic_time() + (gint64)timeout_ms * G_TIME_SPAN_MILLISECOND;
+
+	while(!w->done && g_get_monotonic_time() < fin)
+		g_main_context_iteration(NULL, FALSE);
+	g_assert_true(w->done);
+}
+
+static void
+append_log_cb(const char *text, gpointer user_data)
+{
+	g_string_append((GString *)user_data, text);
+}
+
+/* Fait tourner le contexte par défaut pendant ms : les demandes run_on_main_sync des threads Lua sont servies */
+static void
+iterer_pendant(guint ms)
+{
+	gint64 fin = g_get_monotonic_time() + (gint64)ms * G_TIME_SPAN_MILLISECOND;
+
+	while(g_get_monotonic_time() < fin)
+		g_main_context_iteration(NULL, FALSE);
+}
+
+/* Deux moteurs, deux liaisons : chacun écrit sur son port 0 et finit sans toucher à l'autre (spec §3.1-3) */
+static void
+test_deux_en_parallele(void)
+{
+	GtkTermLink *l1 = gt_link_new(), *l2 = gt_link_new();
+	GtScriptEngine *e1 = gt_script_engine_new(l1, stub_macros_new()), *e2 = gt_script_engine_new(l2, stub_macros_new());
+	EndWait w1 = { 0 }, w2 = { 0 };
+
+	gt_script_engine_set_done_func(e1, end_wait_cb, &w1);
+	gt_script_engine_set_done_func(e2, end_wait_cb, &w2);
+	gt_script_engine_run(e1, "for i = 1, 20 do gtkterm.send(0, 'A') gtkterm.sleep(2) end");
+	gt_script_engine_run(e2, "for i = 1, 20 do gtkterm.send(0, 'B') gtkterm.sleep(2) end");
+	g_assert_true(gt_script_engine_is_running(e1) && gt_script_engine_is_running(e2));
+	end_wait(&w1, 5000);
+	end_wait(&w2, 5000);
+	g_assert_cmpint(w1.end, ==, GT_SCRIPT_END_FINISHED);
+	g_assert_cmpint(w2.end, ==, GT_SCRIPT_END_FINISHED);
+	g_assert_cmpuint(stub_link_sent(l1)->len, ==, 20);
+	g_assert_null(memchr(stub_link_sent(l1)->data, 'B', stub_link_sent(l1)->len));
+	g_assert_cmpuint(stub_link_sent(l2)->len, ==, 20);
+	g_assert_null(memchr(stub_link_sent(l2)->data, 'A', stub_link_sent(l2)->len));
+	gt_script_engine_free(e1);
+	gt_script_engine_free(e2);
+	g_object_unref(l1);
+	g_object_unref(l2);
+}
+
+/* Arrêter (ou fermer) un moteur ne touche pas l'autre ; chaque port 0 ne reçoit que sa liaison */
+static void
+test_arret_independant(void)
+{
+	GtkTermLink *l1 = gt_link_new(), *l2 = gt_link_new();
+	GtScriptEngine *e1 = gt_script_engine_new(l1, stub_macros_new()), *e2 = gt_script_engine_new(l2, stub_macros_new());
+	EndWait w1 = { 0 }, w2 = { 0 };
+
+	gt_script_engine_set_done_func(e1, end_wait_cb, &w1);
+	gt_script_engine_set_done_func(e2, end_wait_cb, &w2);
+	gt_script_engine_run(e1, "while true do end");
+	gt_script_engine_run(e2, "local d = gtkterm.wait_for(0, 'X2', 3000) gtkterm.send(0, d and 'OK' or 'KO')");
+	iterer_pendant(100);	/* écoutes des deux ports 0 branchées (run_on_main_sync servi), e2 dans wait_for */
+	stub_link_inject_rx(l1, "X2", 2);	/* sur la liaison de e1 : e2 ne doit pas le voir */
+	iterer_pendant(100);
+	/* Avec une file du port 0 partagée, e2 aurait trouvé « X2 » et envoyé « OK » sur l2 */
+	g_assert_cmpuint(stub_link_sent(l2)->len, ==, 0);
+	g_assert_false(w2.done);
+	gt_script_engine_shutdown(e1);
+	g_assert_false(gt_script_engine_is_running(e1));
+	g_assert_true(gt_script_engine_is_running(e2));
+	stub_link_inject_rx(l2, "X2", 2);
+	end_wait(&w2, 5000);
+	g_assert_cmpint(w2.end, ==, GT_SCRIPT_END_FINISHED);
+	g_assert_cmpmem(stub_link_sent(l2)->data, stub_link_sent(l2)->len, "OK", 2);
+	g_assert_false(w1.done);	/* fonction de fin de e1 retirée par son arrêt */
+	gt_script_engine_free(e1);
+	gt_script_engine_free(e2);
+	g_object_unref(l1);
+	g_object_unref(l2);
+}
+
+/* L'arrêt d'un moteur sert aussi les demandes de l'autre (run_on_main_sync commun) et reste borné à 3 s ; l'autre continue */
+static void
+test_arret_sert_l_autre(void)
+{
+	GtkTermLink *l1 = gt_link_new(), *l2 = gt_link_new();
+	GtScriptEngine *e1 = gt_script_engine_new(l1, stub_macros_new()), *e2 = gt_script_engine_new(l2, stub_macros_new());
+	EndWait w2 = { 0 };
+	guint avant, pendant;
+	gint64 t0;
+
+	gt_script_engine_set_done_func(e2, end_wait_cb, &w2);
+	gt_script_engine_run(e1, "while true do end");
+	gt_script_engine_run(e2, "while true do gtkterm.send(0, 'B') gtkterm.sleep(1) end");
+	iterer_pendant(100);
+	avant = stub_link_sent(l2)->len;
+	g_assert_cmpuint(avant, >, 0);
+	t0 = g_get_monotonic_time();
+	gt_script_engine_shutdown(e1);
+	g_assert_cmpint(g_get_monotonic_time() - t0, <, 3 * G_USEC_PER_SEC);
+	g_assert_false(gt_script_engine_is_running(e1));
+	g_assert_true(gt_script_engine_is_running(e2));
+	pendant = stub_link_sent(l2)->len;
+	iterer_pendant(100);
+	g_assert_cmpuint(stub_link_sent(l2)->len, >, pendant);	/* e2 continue après l'arrêt de e1 */
+	g_assert_cmpuint(stub_link_sent(l1)->len, ==, 0);
+	gt_script_engine_stop(e2);
+	end_wait(&w2, 5000);
+	g_assert_cmpint(w2.end, ==, GT_SCRIPT_END_STOPPED);
+	gt_script_engine_free(e1);
+	gt_script_engine_free(e2);
+	g_object_unref(l1);
+	g_object_unref(l2);
+}
+
+/* Port série Lua tenu par un moteur : refusé à l'autre (verrou exclusif du transport) */
+static void
+test_port_serie_exclusif(void)
+{
+	int master, slave;
+	gchar *path, *script1, *script2;
+	GtScriptEngine *e1 = gt_script_engine_new(stub_link_default(), stub_macros_new());
+	GtScriptEngine *e2 = gt_script_engine_new(stub_link_default(), stub_macros_new());
+	EndWait w1 = { 0 }, w2 = { 0 };
+	GString *log1 = g_string_new(NULL), *log2 = g_string_new(NULL);
+
+	g_assert_cmpint(openpty(&master, &slave, NULL, NULL, NULL), ==, 0);
+	path = g_strdup(ttyname(slave));
+	script1 = g_strdup_printf("assert(gtkterm.open(1, 'serial', '%s', 9600)) gtkterm.log('OUVERT') gtkterm.sleep(1500)", path);
+	script2 = g_strdup_printf("local ok, err = gtkterm.open(1, 'serial', '%s', 9600) print(ok and 'OUVERT' or ('REFUS ' .. err))", path);
+	gt_script_engine_set_done_func(e1, end_wait_cb, &w1);
+	gt_script_engine_set_done_func(e2, end_wait_cb, &w2);
+	gt_script_engine_set_log_func(e1, append_log_cb, log1);
+	gt_script_engine_set_log_func(e2, append_log_cb, log2);
+	gt_script_engine_run(e1, script1);
+	/* Le port de e1 est ouvert avant le lancement de e2 (ouverture servie par le thread principal) */
+	for(gint64 fin = g_get_monotonic_time() + 5 * G_USEC_PER_SEC; strstr(log1->str, "OUVERT") == NULL && g_get_monotonic_time() < fin;)
+		g_main_context_iteration(NULL, FALSE);
+	g_assert_nonnull(strstr(log1->str, "OUVERT"));
+	gt_script_engine_run(e2, script2);
+	end_wait(&w2, 5000);
+	g_assert_nonnull(strstr(log2->str, "REFUS"));
+	end_wait(&w1, 5000);
+	g_assert_cmpint(w1.end, ==, GT_SCRIPT_END_FINISHED);
+	gt_script_engine_free(e1);
+	gt_script_engine_free(e2);
+	g_string_free(log1, TRUE);
+	g_string_free(log2, TRUE);
+	g_free(script1);
+	g_free(script2);
+	g_free(path);
+	close(master);
+	close(slave);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1937,8 +2127,7 @@ main(int argc, char **argv)
 	thread_principal = g_thread_self();
 	journal = g_string_new(NULL);
 	script_engine_setup();
-	script_engine_set_log_func(sur_journal, NULL);
-	script_engine_set_done_func(sur_fin, NULL);
+	nouveau_moteur();
 
 	g_test_add_func("/script_engine/erreur-avec-ports-ouverts", test_erreur_avec_ports_ouverts);
 	g_test_add_func("/script_engine/envois-sur-le-thread-principal-et-dans-l-ordre", test_envois_sur_le_thread_principal_et_dans_l_ordre);
@@ -1991,5 +2180,9 @@ main(int argc, char **argv)
 	g_test_add_func("/script_engine/vidange-trame-courte", test_vidange_trame_courte);
 	g_test_add_func("/script_engine/shutdown-sans-script", test_shutdown_sans_script);
 	g_test_add_func("/script_engine/shutdown-pendant-boucle", test_shutdown_pendant_boucle);
+	g_test_add_func("/moteur/deux-en-parallele", test_deux_en_parallele);
+	g_test_add_func("/moteur/arret-independant", test_arret_independant);
+	g_test_add_func("/moteur/arret-sert-l-autre", test_arret_sert_l_autre);
+	g_test_add_func("/moteur/port-serie-exclusif", test_port_serie_exclusif);
 	return g_test_run();
 }

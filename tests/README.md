@@ -54,17 +54,22 @@ Corriger un bogue = rendre le cas conforme **et** remplacer son identifiant par 
   LF, fichier vide, annulation, perte de liaison), `test_rx_logger` (transformation, pause sans ligne coupée, erreur
   d'écriture), `test_update_check` (comparaison de révisions, « unknown », révision ignorée, commande en liste d'arguments), `test_serial_ports` (motifs de
   `/proc/tty/drivers`, découverte des ports, ordre semi-numérique), `test_port_form` (validation du dialogue Port, série et TCP), `test_macro_view` (règles
-  d'affichage du panneau de macros : onglets, séparateurs, listes à deux valeurs).
+  d'affichage du panneau de macros : onglets, séparateurs, listes à deux valeurs), `test_action_relay` (relais d'action du sous-projet 6b : délégation
+  d'activation et d'état, reflet de l'état et de la sensibilité de la cible, ajout et retrait d'action dans la cible, changement de cible qui ne notifie que
+  ce qui change, sans cible = désactivé).
 - Tests d'intégration (dictionnaire `integration_tests`) : `test_link`, `test_transport` (sans bouchon : le transport n'appelle pas l'interface),
-  `test_macros_send` (état des macros sans GTK : envoi unique par identifiant, fichier, ordonnanceur), `test_app_config` (chargement, enregistrement et
-  suppression de profils, profil `default` absent, état de fenêtre, `x`/`y` ignorés puis retirés, case « vérifier au démarrage »), `test_cmdline` (analyse
-  pure : options inconnues, valeurs invalides, `-c` appliqué avant les autres options), `test_script_engine` (moteur Lua réel : ports sur pty et
-  TCP local, envois complets, raisons, « Stop » sur boucle de calcul, `os.exit`, journal regroupé, `script_engine_shutdown` ; le bouchon de la liaison simule
-  son état par `stub_link_set_state`). Logique sans affichage de `src/ui/` (dictionnaire `ui_logic_tests`) : `test_macro_row` (lignes de l'éditeur de
+  `test_macros_send` (`GtMacros` sans GTK : envoi unique par identifiant, fichier, ordonnanceur, instances : polling sur la liaison de son instance),
+  `test_script_engine` (moteur Lua réel : ports sur pty et TCP local, envois complets, raisons, « Stop » sur boucle de calcul, `os.exit`, journal regroupé,
+  `gt_script_engine_shutdown`, deux moteurs en parallèle et arrêt de l'un sans l'autre ; le bouchon de la liaison simule son état par `stub_link_set_state`).
+  Couche application complète, sans bouchon (dictionnaire `app_tests`, bibliothèque `gtkterm_app`) : `test_session`
+  (sessions sur pty : nom court, profil copié et appliqué, deux sessions indépendantes, arrêt, session occupée), `test_session_manager` (ordre, session
+  active, retrait, déplacement), `test_app_config` (chargement, enregistrement et suppression de profils par session, profil `default` absent, état de
+  fenêtre, `x`/`y` ignorés puis retirés, case « vérifier au démarrage », fichier de macros retenu par session), `test_cmdline` (analyse pure : options
+  inconnues, valeurs invalides, `-c` appliqué avant les autres options). Logique sans affichage de `src/ui/` (dictionnaire `ui_logic_tests`) : `test_macro_row` (lignes de l'éditeur de
   macros), `test_macro_accel` (forme canonique et capture d'un raccourci ; seul test qui lie GTK 4, sans jamais ouvrir d'affichage). Les autres ne lient pas GTK : les effets d'interface passent
   par la table `GtAppUi` (`app_ui.h`), que le test remplit avec ses
   propres fonctions d'enregistrement. Les bouchons de `tests/stubs/` remplacent des modules de la couche application (`stub_link.c` la liaison,
-  `stub_journal.c`, `stub_macros.c` l'état des macros, `stub_macros_file.c` le fichier de macros de `test_app_config` et `test_cmdline`) ; un bouchon enregistre l'appel (`stub_record`) et ne
+  `stub_journal.c`, `stub_macros.c` l'état des macros) ; un bouchon enregistre l'appel (`stub_record`) et ne
   contient aucune logique métier.
 - Style : celui de `.clang-format` (tabulations, Allman, `if(`).
 
@@ -109,12 +114,21 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
    programmé d'un widget désigné par son id de dump, son nom ou son libellé ; synchrone : un `GtkButton` sensible reçoit `clicked` avant la réponse D-Bus, un
    bouton insensible n'est jamais cliqué et fait échouer le scénario), `app.test-set-text((ss))` (texte d'une entrée ou d'un `GtkTextView`, choix d'un
    `GtkDropDown`, valeur d'un `GtkSpinButton`, police d'un `GtkFontDialogButton`, couleur d'un `GtkColorDialogButton`). Les classes CSS d'un widget sont
-   dans la clé `css` du dump.
+   dans la clé `css` du dump. Onglets (6b) : `test-terminal-text` et `test-terminal-props` visent l'onglet actif ; `app.test-sessions` (état `aa{sv}`
+   recalculé à chaque activation, comme `test-dump`) décrit chaque onglet dans l'ordre : `index` (i), `id` (u), `name` (s, nom court), `state` (s :
+   `closed`, `connecting`, `open`, `listening`, `lost`, `reconnecting`), `profile` (s), `macros_file` (s, vide si aucun), `active` (b), `busy` (b), pour
+   vérifier l'indépendance des onglets sans dépendre de l'affichage. Les widgets des pages non affichées du `GtkNotebook` sont visibles mais non mappés.
 3. **Faux navigateur broadway** (`broadway.py`) : protocole de `gtk4-broadwayd`, réponse immédiate aux `ROUNDTRIP`, souris (masque du bouton présent à l'appui
-   et au relâchement ; un clic attend que la géométrie du widget soit stable) et clavier ; une surface est visée par son identifiant, appariée par sa taille au
-   dump. À utiliser quand le geste est l'objet du test : frappe dans le terminal, raccourcis, menus par clic, sélecteurs de fichiers (Ctrl+L), menus contextuels.
+   et au relâchement ; un clic attend que la géométrie du widget soit stable ; `drag_in_surface` pour un glisser, par ex. réordonner les onglets) et
+   clavier ; une surface est visée par son identifiant, appariée par sa taille au dump. À utiliser quand le geste est l'objet
+   du test : frappe dans le terminal, raccourcis, menus par clic, sélecteurs de fichiers (Ctrl+L), menus contextuels.
 
 ### Environnement (`run-gui-test.sh`)
+
+- **Plantage de `gtk4-broadwayd` (GTK 4.24)** : sur un poste récent, le serveur broadway peut mourir sur ses propres assertions (`Gdk:ERROR:` dans
+  `/gdk/broadway/`, défaut de GTK et non de GTKTerm). Un scénario en échec dont le `broadwayd.log` contient une telle assertion, ou qui meurt d'une exception
+  non rattrapée dans ce cas, sort en SKIP (code 77) au lieu de FAIL (`conclude()` et le crochet d'exception de `gtktest.py`). Un SKIP n'est pas un échec,
+  un FAIL l'est ; un scénario sauté n'a rien vérifié de GTKTerm : le relancer.
 
 - `gtk4-broadwayd` sur un affichage propre au scénario (port dérivé du numéro d'affichage), `dbus-run-session` sur un bus privé sans dossier de services
   (rien n'y est activable, ni portail ni gvfs), `GDK_DEBUG=no-portals` (GTK 4 ignore `GTK_USE_PORTAL`), `XDG_RUNTIME_DIR` court (chemin de socket
@@ -142,6 +156,10 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
   `('ctrl', 'shift')`, `('alt',)`), `e.bw.focus_window(title)` ; `file_dialog(env, title, path, timeout=8)` (sélecteur de fichiers : focus, Ctrl+L, chemin,
   Entrée).
 - Port : `read_pty(duration)`, `drain()`, `write_pty(data)`, `use_link()`, `unplug()`, `replug()` (port derrière un lien symbolique).
+- Onglets : `e.new_pty()` (paire pty supplémentaire, objet `Pty` : `port`, `read(duration)`, `drain()`, `write(data)` ; fermée avec l'`Env`),
+  `e.sessions()` (liste de dict lue dans `test-sessions`), `e.active_session()`, `open_tab(env, port)` (nouvel onglet par le vrai chemin : `app.new-tab`,
+  dialogue Port, port remplacé, OK ; attend que la nouvelle session soit active). `find`/`find1` ignorent les widgets non mappés : un nom stable
+  (`terminal`, `macro-panel`…) désigne celui de l'onglet affiché.
 - Macros : `macros_v2_text(*libellés)`, `write_macros_v2(path, macros, lists=None)`, `write_macros_v1(path, macros, lists=None)`, `macro_config(env, fichier)`,
   `classes(w)`, `macro_buttons(env)`, `macro_id(env, label)` ; éditeur : `open_editor(env)`, `editor_rows(env)`, `editor_select(env, index)`,
   `close_by_titlebar(env, nom)`.
@@ -152,11 +170,19 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
 ### Écrire un scénario
 
 - `tests/gui/test_<nom>.py` : `from gtktest import *`, un `Env('<nom>')`, `write_config(e.general() + e.profile(…))`, `start(…)`, des `check(…)`, puis
-  `e.finish()` et `sys.exit(conclude())` ; l'ajouter à `gui_scenarios` dans `tests/gui/meson.build` (47 scénarios aujourd'hui).
+  `e.finish()` et `sys.exit(conclude())` ; l'ajouter à `gui_scenarios` dans `tests/gui/meson.build` (57 scénarios aujourd'hui).
 - Viser les widgets par leur nom stable (`gtk_widget_set_name` dans `src/ui/`, par ex. `port-dialog`, `macro-<id>`, `script-run`) ; passer par une action
   `app.*` quand le geste n'est pas l'objet du test, par le navigateur quand il l'est.
 - Échec : lire `build/tests/gui/runs/<scénario>/result.txt` (une ligne `OK` / `ECHEC` par vérification) et `gtkterm.stderr` (sortie d'erreur de GTKTerm) du même dossier.
 - Scénarios qui épinglent les points délicats : `test_messages_demarrage.py` (messages émis avant la fenêtre, affichés ensuite), `test_fermeture_dialogue.py`
   (fermeture pendant un dialogue asynchrone : code 0, aucun avertissement), `test_options_profil.py` (cases de menu fidèles après un rechargement de profil),
   `test_focus_terminal.py` (focus rendu au terminal), `test_profils.py` et `test_journal.py` (texte non ASCII et espaces dans les noms et chemins),
-  `test_menus_actions.py` (chaque entrée de `menus.ui` vise une action existante), `test_clavier_ctrl_b.py` (Ctrl+B part sur le port).
+  `test_menus_actions.py` (chaque entrée de `menus.ui` vise une action existante, types de paramètre et d'état des actions inchangés), `test_clavier_ctrl_b.py`
+  (Ctrl+B part sur le port).
+- Onglets (sous-projet 6b) : `test_onglets.py` (New tab par le dialogue Port, Annuler, barre visible à deux, navigation Ctrl+Maj+Page et `app.active-tab`,
+  titre, Ctrl+Maj+W/T, dernier onglet non fermable, focus au terminal après un clic d'étiquette), `test_onglets_actions.py` (actions relayées : écho, vue,
+  port et sensibilités propres à chaque onglet ; un « Configure Macros » par onglet), `test_onglets_fermeture.py` (confirmation si script ou envoi en cours,
+  fermeture de la fenêtre avec plusieurs onglets, `[session] script_path` gardé), `test_onglets_verrou.py` (même port série refusé au second onglet),
+  `test_onglets_sigusr.py` (SIGUSR1/2 sur tous les onglets), `test_onglets_terminal.py` (dialogue Terminal lié à sa session), `test_onglets_ordre.py`
+  (glisser d'étiquette → ordre du gestionnaire), `test_onglets_macros.py` et `test_onglets_macros_fichier.py` (macros, raccourcis et polling par onglet ;
+  fichier de macros d'un nouvel onglet), `test_onglets_lua.py` (port 0 = onglet de lancement, deux scripts en parallèle, fermeture pendant un script).

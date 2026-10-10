@@ -303,6 +303,22 @@ class Broadway:
         self._button(x, y, button, False, sid)
         time.sleep(settle)
 
+    def drag_in_surface(self, sid, x0, y0, x1, y1, steps=12, button=1, settle=0.3):
+        """Glisser du bouton button de (x0, y0) à (x1, y1), coordonnées de la surface sid : appui, déplacements en steps pas, relâchement."""
+        with self.lock:
+            s = dict(self.surfaces[sid])
+        ax, ay = s['x'] + x0, s['y'] + y0
+        self._move(ax, ay, sid)
+        time.sleep(0.05)
+        self._button(ax, ay, button, True, sid)
+        time.sleep(0.05)
+        for i in range(1, steps + 1):
+            self._move(s['x'] + x0 + (x1 - x0) * i // steps, s['y'] + y0 + (y1 - y0) * i // steps, sid)
+            time.sleep(0.03)
+        time.sleep(0.1)
+        self._button(s['x'] + x1, s['y'] + y1, button, False, sid)
+        time.sleep(settle)
+
     @staticmethod
     def _geometry(w):
         return tuple(w.get(k) for k in ('x', 'y', 'w', 'h', 'native_w', 'native_h'))
