@@ -331,6 +331,71 @@ test_profil_inconnu_et_validation(void)
 	g_object_unref(s);
 }
 
+static void
+test_project(void)
+{
+	gchar **av = arguments("--project", "rel.gtkterm", NULL);
+	GtCmdlineOptions o;
+	GtCmdline cmd;
+	GtSession *s;
+	gchar *attendu = g_canonicalize_filename("rel.gtkterm", NULL);
+
+	analyser(av, &o);
+	g_assert_cmpstr(o.project, ==, "rel.gtkterm");
+	gt_cmdline_options_clear(&o);
+	s = demarrer(NULL);
+	read_command_line(s, (int)g_strv_length(av), av, &cmd);
+	g_assert_false(cmd.exit_now);
+	g_assert_cmpstr(cmd.project, ==, attendu);
+	g_assert_false(cmd.profile_given);
+	gt_cmdline_clear(&cmd);
+	g_assert_null(cmd.project);
+	g_free(attendu);
+	g_strfreev(av);
+	g_object_unref(s);
+}
+
+static void
+refuser_projet(gchar **av)
+{
+	GtCmdlineOptions o;
+	GError *err = NULL;
+
+	g_assert_false(gt_cmdline_parse((int)g_strv_length(av), av, &o, &err));
+	g_assert_error(err, GT_CMDLINE_ERROR, GT_CMDLINE_ERROR_INVALID_VALUE);
+	g_assert_nonnull(strstr(err->message, "--project"));
+	g_clear_error(&err);
+	gt_cmdline_options_clear(&o);
+	g_strfreev(av);
+}
+
+static void
+test_project_refuse(void)
+{
+	refuser_projet(arguments("--project", "x", "-p", "/dev/pts/1", NULL));
+	refuser_projet(arguments("--project", "x", "-c", "a", NULL));
+}
+
+static void
+test_profile_given(void)
+{
+	const struct { const gchar *a; const gchar *b; gboolean attendu; } cas[] = { { "-s", "9600", TRUE }, { "-L", NULL, FALSE }, { "-c", "a", TRUE } };
+
+	for(guint i = 0; i < G_N_ELEMENTS(cas); i++)
+	{
+		gchar **av = arguments(cas[i].a, cas[i].b, NULL);
+		GtCmdline cmd;
+		GtSession *s = demarrer("[profile:default]\nport=/dev/null\n\n[profile:a]\nport=/dev/null\n");
+
+		read_command_line(s, (int)g_strv_length(av), av, &cmd);
+		g_assert_false(cmd.exit_now);
+		g_assert_cmpint(cmd.profile_given, ==, cas[i].attendu);
+		gt_cmdline_clear(&cmd);
+		g_strfreev(av);
+		g_object_unref(s);
+	}
+}
+
 int
 main(int argc, char **argv)
 {
@@ -353,6 +418,9 @@ main(int argc, char **argv)
 	g_test_add_func("/cmdline/profil-et-fichier", test_profil_et_fichier);
 	g_test_add_func("/cmdline/retour-au-serie", test_retour_au_serie);
 	g_test_add_func("/cmdline/profil-inconnu-et-validation", test_profil_inconnu_et_validation);
+	g_test_add_func("/cmdline/project", test_project);
+	g_test_add_func("/cmdline/project-refuse", test_project_refuse);
+	g_test_add_func("/cmdline/profile-given", test_profile_given);
 	ret = g_test_run();
 
 	g_free(chemin_rc);

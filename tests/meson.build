@@ -10,6 +10,7 @@ unit_tests = {
 	'test_macros_format' : [],
 	'test_macro_set' : [],
 	'test_macro_file' : [],
+	'test_project_file' : [],
 	'test_macro_poller' : [],
 	'test_macro_view' : [],
 	'test_baudrates' : [util_dep],
@@ -20,7 +21,9 @@ unit_tests = {
 	'test_device_match' : [],
 	'test_view_render' : [],
 	'test_profile' : [],
+	'test_profile_keyfile' : [],
 	'test_config_store' : [],
+	'test_file_stamp' : [],
 	'test_rx_queue' : [],
 	'test_script_port' : [util_dep],
 	'test_term_options' : [gio_dep],
@@ -97,6 +100,7 @@ endforeach
 # Tests de la couche application complète (gtkterm_app : sessions, configuration, ligne de commande), sans GTK ni fenêtre ; HOME et XDG privés.
 app_tests = {
 	'test_session' : [util_dep],
+	'test_project' : [util_dep],
 	'test_session_manager' : [],
 	'test_app_config' : [],
 	'test_cmdline' : [],

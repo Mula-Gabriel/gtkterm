@@ -1,5 +1,7 @@
 # Menus et actions (sous-projet 6a, §6.2) : chaque élément de menus.ui vise une action exportée ; cases du menu = état réel ; options de vue
 # indépendantes du mode (spec §5) ; raccourcis Ctrl+Maj+L, Ctrl+Maj+B, F5/F6 ; Échap avec et sans « ESC clear screen » ; Copy/Paste/Select All.
+# 6c (spec §3.2-10) : menus de premier niveau File, Edit, View, Port, Terminal, Macros, Log, Help ; actions project-* sans paramètre ni état ;
+# Ctrl+Maj+O ouvre le sélecteur « Open project ».
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -8,6 +10,12 @@ from gtktest import *
 
 MENUS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'src', 'ui', 'menus.ui')
 BOOLEENNES = ('local-echo', 'crlf-auto', 'timestamp', 'esc-clear-screen', 'hex-index', 'auto-reconnect')
+
+
+def menus_premier_niveau():
+    racine = ET.parse(MENUS).getroot()
+    barre = [m for m in racine.iter('menu') if m.get('id') == 'menubar'][0]
+    return [[a.text.strip() for a in sm.findall('attribute') if a.get('name') == 'label'][0] for sm in barre.findall('submenu')]
 
 
 def actions_du_menu():
@@ -29,6 +37,8 @@ noms = actions_du_menu()
 check(len(noms) >= 20, 'menus.ui lu : %d actions' % len(noms))
 for nom in noms:
     check(nom.startswith('app.') and nom[4:] in exportees, 'action du menu exportee : %s' % nom)
+check(menus_premier_niveau() == ['File', 'Edit', 'View', 'Port', 'Terminal', 'Macros', 'Log', 'Help'], 'menus de premier niveau dans l ordre : %r'
+      % menus_premier_niveau())
 
 # 2. Valeurs de départ et SetState
 check(e.state('view-mode') == 'ascii', 'vue ASCII au demarrage : %r' % e.state('view-mode'))
@@ -40,9 +50,9 @@ for nom in BOOLEENNES:
     e.set_state(nom, GLib.Variant('b', False))
     check(wait_until(lambda: e.state(nom) is False, 2), '%s faux apres SetState' % nom)
 
-# 3. Cases du menu = état réel (menu Configuration ouvert par un clic)
+# 3. Cases du menu = état réel (menu Terminal ouvert par un clic)
 e.set_state('local-echo', GLib.Variant('b', True))
-e.bw.click(e.find1(label='Configuration'))
+e.bw.click(e.find1(label='Terminal'))
 echo = e.find1(label='Local echo', type='GtkModelButton')
 horo = e.find1(label='Timestamp', type='GtkModelButton')
 check(echo.get('active') is True, 'case Local echo cochee comme l option')
@@ -130,5 +140,19 @@ for nom, (ptype, stype) in ATTENDU.items():
     check(pt == ptype, 'type de parametre de %s : %r' % (nom, pt))
     check((stype is None) == (st is None), 'etat de %s present ou absent comme attendu' % nom)
     check(e.state_type(nom) == stype, 'type exact de l etat de %s : %r' % (nom, e.state_type(nom)))
+
+# 10. Actions de projet (6c) : sans paramètre ni état ; Ctrl+Maj+O ouvre le sélecteur « Open project » (Échap le ferme)
+for nom in ('project-new', 'project-open', 'project-save', 'project-save-as', 'project-close'):
+    en, pt, st = e.describe(nom)
+    check(pt == '' and st is None, '%s sans parametre ni etat (%r, %r)' % (nom, pt, st))
+e.bw.click(e.find1(name='terminal'))
+e.bw.key('o', mods=('ctrl', 'shift'))
+ouvert = wait_until(lambda: [w for w in e.windows() if w.get('title') == 'Open project'], 5)
+check(bool(ouvert), 'Ctrl+Maj+O ouvre « Open project » (%r)' % [w.get('title') for w in e.windows()])
+if ouvert:
+    e.bw.focus_window('Open project')
+    e.bw.key('Escape')
+    check(wait_until(lambda: not [w for w in e.windows() if w.get('title') == 'Open project'], 5), 'Echap ferme « Open project »')
+check(len(e.sessions()) == 1 and e.project().get('open') is False, 'rien ne change apres l annulation')
 e.finish()
 sys.exit(conclude())

@@ -2,7 +2,9 @@
 
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <errno.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "macro_file.h"
 #include "test_util.h"
@@ -568,6 +570,229 @@ test_echec_ecriture(void)
 	g_free(dir);
 }
 
+/* Texte produit par le code 6b (avant l'extraction de gt_macro_set_to_key_file) pour le jeu de référence de test_aller_retour : le format
+ * du fichier .ini ne change pas */
+static GtMacroSet *
+jeu_reference(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	GtMacroLists *lists = gt_macro_lists_new();
+	const gchar *deux[] = { "", "a;b\\c" };
+	guint id1, id2, id3;
+
+	gt_macro_lists_add(lists, "Vitesses", "Lent", "0");
+	gt_macro_lists_add(lists, "Vitesses", "Rapide", "1");
+	gt_macro_lists_add(lists, "S\303\251p;ar\303\251e", "a;b", "x\\y");
+	gt_macro_set_take_lists(set, lists);
+	id1 = gt_macro_set_append(set, "  Lecture", "<Control>F5", "R%d::x|y;z=w\\r", GENERAL);
+	gt_macro_set_set_arg(set, id1, 0, "42");
+	gt_macro_set_set_polling(set, id1, TRUE, 250);
+	id2 = gt_macro_set_append(set, "Vide", "", "V%s %s", "");
+	g_assert_true(gt_macro_set_set_args(set, id2, deux, 2));
+	id3 = gt_macro_set_append(set, "Liste", "", "S %#Vitesses", "Onglet 2");
+	gt_macro_set_set_arg(set, id3, 0, "1");
+	gt_macro_set_append(set, "", "", "%&", "");
+	return set;
+}
+
+static void
+test_identique_6b(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macro-file-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	GtMacroSet *set = jeu_reference();
+	gchar *texte;
+	const gchar *attendu =
+		"[gtkterm-macros]\n"
+		"version=2\n"
+		"\n"
+		"[macro:1]\n"
+		"label=\\s\\sLecture\n"
+		"shortcut=<Control>F5\n"
+		"action=R%d::x|y;z=w\\\\r\n"
+		"tab=G\303\251n\303\251ral\n"
+		"args=42;\n"
+		"polling=true\n"
+		"polling_period_ms=250\n"
+		"\n"
+		"[macro:2]\n"
+		"label=Vide\n"
+		"shortcut=\n"
+		"action=V%s %s\n"
+		"tab=\n"
+		"args=;a\\;b\\\\c;\n"
+		"polling=false\n"
+		"polling_period_ms=1000\n"
+		"\n"
+		"[macro:3]\n"
+		"label=Liste\n"
+		"shortcut=\n"
+		"action=S %#Vitesses\n"
+		"tab=Onglet 2\n"
+		"args=1;\n"
+		"polling=false\n"
+		"polling_period_ms=1000\n"
+		"\n"
+		"[macro:4]\n"
+		"label=\n"
+		"shortcut=\n"
+		"action=%&\n"
+		"tab=\n"
+		"polling=false\n"
+		"polling_period_ms=1000\n"
+		"\n"
+		"[list:1]\n"
+		"name=Vitesses\n"
+		"displays=Lent;Rapide;\n"
+		"values=0;1;\n"
+		"\n"
+		"[list:2]\n"
+		"name=S\303\251p;ar\303\251e\n"
+		"displays=a\\;b;\n"
+		"values=x\\\\y;\n";
+
+	g_assert_true(gt_macro_file_save(set, path, NULL));
+	texte = lire(path);
+	g_assert_cmpstr(texte, ==, attendu);
+	g_free(texte);
+	gt_macro_set_free(set);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+static void
+test_prefixe(void)
+{
+	GtMacroSet *set = jeu_reference(), *relu, *autre;
+	GKeyFile *kf = g_key_file_new();
+
+	gt_macro_set_to_key_file(set, kf, "tab:3:");
+	g_assert_true(g_key_file_has_group(kf, "tab:3:macro:1"));
+	g_assert_true(g_key_file_has_group(kf, "tab:3:macro:4"));
+	g_assert_true(g_key_file_has_group(kf, "tab:3:list:1"));
+	g_assert_true(g_key_file_has_group(kf, "tab:3:list:2"));
+	g_assert_false(g_key_file_has_group(kf, "gtkterm-macros"));
+	g_key_file_set_string(kf, "tab:30:macro:1", "label", "intrus");
+	relu = gt_macro_set_from_key_file(kf, "tab:3:", "x");
+	g_assert_cmpuint(gt_macro_set_count(relu), ==, 4);
+	for(guint i = 0; i < 4; i++)
+		comparer_macro(gt_macro_set_get(set, i), gt_macro_set_get(relu, i));
+	g_assert_cmpint(gt_macro_lists_count(gt_macro_set_get_lists(relu)), ==, 2);
+	autre = gt_macro_set_from_key_file(kf, "tab:1:", "x");
+	g_assert_nonnull(autre);
+	g_assert_cmpuint(gt_macro_set_count(autre), ==, 0);
+	g_assert_cmpint(gt_macro_lists_count(gt_macro_set_get_lists(autre)), ==, 0);
+	gt_macro_set_free(autre);
+	gt_macro_set_free(relu);
+	gt_macro_set_free(set);
+	g_key_file_free(kf);
+}
+
+static void
+test_echappement_invalide_garde(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macro-file-XXXXXX", NULL);
+	gchar *path = test_write_file(dir, "m.ini",
+	                              "[gtkterm-macros]\nversion=2\n\n[macro:1]\nlabel=M\naction=A%s%s\nargs=a\\q;b\n\n[list:1]\nname=L\ndisplays=x\\q;y\nvalues=1;2\n");
+	GtMacroSet *set;
+	const GtMacroLists *l;
+
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*invalid escape*");
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*invalid escape*");
+	set = charger(path);
+	g_test_assert_expected_messages();
+	g_assert_cmpuint(gt_macro_set_count(set), ==, 1);
+	g_assert_nonnull(gt_macro_set_get(set, 0)->args);
+	g_assert_cmpstr(gt_macro_set_get(set, 0)->args[0], ==, "a\\q");
+	g_assert_cmpstr(gt_macro_set_get(set, 0)->args[1], ==, "b");
+	l = gt_macro_set_get_lists(set);
+	g_assert_cmpint(gt_macro_lists_entry_count(l, 0), ==, 2);
+	g_assert_cmpstr(gt_macro_lists_entry_display(l, 0, 0), ==, "x\\q");
+	g_assert_cmpstr(gt_macro_lists_entry_display(l, 0, 1), ==, "y");
+	gt_macro_set_free(set);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+static void
+test_liste_vide_relue(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macro-file-XXXXXX", NULL);
+	gchar *path = test_write_file(dir, "m.ini", "[gtkterm-macros]\nversion=2\n\n[list:1]\nname=Vide\ndisplays=\nvalues=\n");
+	GtMacroSet *set = charger(path), *relu;
+	GError *error = NULL;
+	gchar *texte;
+
+	g_assert_cmpint(gt_macro_lists_find(gt_macro_set_get_lists(set), "Vide"), >=, 0);
+	g_assert_cmpint(gt_macro_lists_entry_count(gt_macro_set_get_lists(set), 0), ==, 0);
+	g_assert_true(gt_macro_file_save(set, path, &error));
+	g_assert_no_error(error);
+	texte = lire(path);
+	g_assert_nonnull(strstr(texte, "[list:1]"));
+	g_free(texte);
+	relu = charger(path);
+	g_assert_cmpint(gt_macro_lists_find(gt_macro_set_get_lists(relu), "Vide"), >=, 0);
+	gt_macro_set_free(relu);
+	gt_macro_set_free(set);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+static void
+test_illisible_cause(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macro-file-XXXXXX", NULL);
+	gchar *path = test_write_file(dir, "m.ini", "[gtkterm-macros]\nversion=2\n");
+	GtMacroSet *set = NULL;
+	GError *error = NULL;
+
+	if(geteuid() == 0)
+		g_test_skip("root lit tout");
+	else
+	{
+		g_assert_cmpint(g_chmod(path, 0), ==, 0);
+		g_assert_false(gt_macro_file_load(path, &set, &error));
+		g_assert_error(error, G_FILE_ERROR, G_FILE_ERROR_ACCES);
+		g_assert_nonnull(strstr(error->message, path));
+		g_assert_nonnull(strstr(error->message, g_strerror(EACCES)));
+		{
+			gchar *attendu = g_strdup_printf("%s: %s", path, g_strerror(EACCES));
+
+			g_assert_cmpstr(error->message, ==, attendu);
+			g_free(attendu);
+		}
+		g_assert_null(set);
+		g_clear_error(&error);
+	}
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+static void
+test_refus_copie_remede(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macro-file-XXXXXX", NULL);
+	gchar *path = test_write_file(dir, "m.ini", "[[[\n");
+	gchar *copie = test_write_file(dir, "m.ini.avant-migration", "autre contenu\n");
+	GtMacroSet *set = gt_macro_set_new();
+	GError *error = NULL;
+
+	g_assert_false(gt_macro_file_save(set, path, &error));
+	g_assert_nonnull(error);
+	g_assert_nonnull(strstr(error->message, ".avant-migration"));
+	g_assert_nonnull(strstr(error->message, "ename or delete"));
+	g_clear_error(&error);
+	gt_macro_set_free(set);
+	test_rmdir(dir);
+	g_free(copie);
+	g_free(path);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -588,5 +813,11 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_file/refus-si-copie-differente", test_refus_si_copie_differente);
 	g_test_add_func("/macro_file/pas-de-copie-pour-vide", test_pas_de_copie_pour_vide);
 	g_test_add_func("/macro_file/echec-ecriture-copie", test_echec_ecriture_copie);
+	g_test_add_func("/macro_file/identique-6b", test_identique_6b);
+	g_test_add_func("/macro_file/prefixe", test_prefixe);
+	g_test_add_func("/macro_file/echappement-invalide-garde", test_echappement_invalide_garde);
+	g_test_add_func("/macro_file/liste-vide-relue", test_liste_vide_relue);
+	g_test_add_func("/macro_file/illisible-cause", test_illisible_cause);
+	g_test_add_func("/macro_file/refus-copie-remede", test_refus_copie_remede);
 	return g_test_run();
 }

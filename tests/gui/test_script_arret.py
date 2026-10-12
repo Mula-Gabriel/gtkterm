@@ -30,6 +30,8 @@ check(wait_until(lambda: e.state('show-script-panel') is True and e.find(name='s
 check((widget(e, 'script-editor').get('label') or '').startswith('-- GTKTerm Lua script'), 'modele par defaut dans l editeur')
 e.set_text('script-editor', BOUCLE)
 check(wait_until(lambda: widget(e, 'script-editor').get('label') == BOUCLE, 3), "script saisi dans l'editeur")
+check(wait_until(lambda: e.sessions()[0].get('script') == BOUCLE, 3), "texte de l'editeur tenu par la session (script-text)")
+check(e.sessions()[0].get('in_project') is False, 'onglet libre : pas en projet')
 
 check(sensible(e, 'script-run') and not sensible(e, 'script-stop'), 'au repos : Run actif, Stop inactif')
 e.activate('script-run')
