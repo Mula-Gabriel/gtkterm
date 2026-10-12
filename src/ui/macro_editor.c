@@ -9,12 +9,14 @@
 #include <gtk/gtk.h>
 
 #include "app.h"
-#include "app_config.h"
 #include "dialogs.h"
 #include "macro_accel.h"
+#include "macro_arg_widget.h"
 #include "macro_editor.h"
 #include "macro_row.h"
 #include "macros.h"
+#include "macros_format.h"
+#include "macros_save.h"
 
 enum { PAGE_MACROS, PAGE_LISTS };
 
@@ -28,10 +30,14 @@ typedef struct
 	GtMacroSet        *set;	/* jeu édité ; jamais déréférencé s'il n'est plus le jeu courant */
 	GListStore        *rows;	/* GtMacroRow */
 	GListStore        *list_rows;	/* GtMacroListRow */
-	GtkSelectionModel *selection;	/* GtkMultiSelection sur rows (possédée par sa vue) */
+	GtkSelectionModel *selection;	/* GtkMultiSelection sur rows (référence aussi tenue par la vue) */
 	GtkSelectionModel *list_selection;	/* GtkMultiSelection sur list_rows */
 	GtkWidget         *message;	/* « macro-editor-error » : consigne de capture ou refus */
 	GtMacroRow        *capture_row;	/* ligne qui attend son raccourci ; NULL hors capture */
+	GtkWidget         *defaults;	/* « macro-defaults » : valeurs par défaut de la seule ligne sélectionnée ; masquée sinon */
+	GtMacroRow        *defaults_row;	/* ligne affichée (référence), dont notify::action refait la zone ; NULL si aucune */
+	gulong             defaults_action_id;
+	gboolean           defaults_building;	/* reconstruction de la zone : ses champs n'écrivent pas dans la ligne */
 } MacroEditor;
 
 /* Cellule d'une colonne : propriété de la ligne, nom du widget, sélection de la vue */
@@ -46,7 +52,7 @@ typedef struct
 static const gchar *help_text = N_(
 	"Action: the data sent on the port. Plain text, plus the escapes \\r (carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, "
 	"\\\\ (backslash) and \\xHH (one byte in hexadecimal, e.g. \\x0D).\n\n"
-	"Arguments: each specifier gets a field in the macro panel; its value is remembered in the macros file. %d %i (integer), %u %o %x %X "
+	"Arguments: each specifier gets a field in the macro panel; the value typed there is used for sending but never saved; set default values below the table. %d %i (integer), %u %o %x %X "
 	"(unsigned), %f %e %g %a (decimal number), %c (character), %s (text), with optional flags, width, precision and length (e.g. %02X, %.3f, "
 	"%ld); %% sends a percent sign. %#Name picks a value from the list \"Name\" of the Lists page; a macro whose only argument is a list of "
 	"exactly two values shows two buttons.\n\n"
@@ -57,6 +63,10 @@ static const gchar *help_text = N_(
 	"Polling: right-click a macro button in the panel for \"Polling Mode\" and its period (1 to 86400000 ms); a click then starts or stops "
 	"the repeated sending. Right-click the tab bar to hide or show tabs; hiding a tab stops its polling.\n\n"
 	"Examples: \"Hello\\n\" sends Hello and a line feed; \"Hello\\x0A\" does the same; \"SPEED %d\\r\" asks for a number.");
+
+static void on_defaults_items_changed(GListModel *model, guint position, guint removed, guint added, gpointer data);
+static void on_defaults_selection_changed(GtkSelectionModel *model, guint position, guint n_items, gpointer data);
+static void defaults_unwatch(MacroEditor *editor);
 
 /* État de l'éditeur dont w fait partie (fenêtre racine) ; NULL si la fenêtre est en destruction */
 static MacroEditor *editor_of(GtkWidget *w)
@@ -198,12 +208,36 @@ static void shortcut_bind(GtkSignalListItemFactory *factory, GObject *cell, gpoi
 	g_object_set_data(cell, "binding", binding);
 }
 
+/* Largeur minimale d'une colonne : celle de son titre (marges de l'en-tête et poignée de redimensionnement comprises) */
+#define COLUMN_TITLE_PADDING 28
+
+static gint column_title_width(GtkColumnView *view, const gchar *title)
+{
+	PangoLayout *layout = gtk_widget_create_pango_layout(GTK_WIDGET(view), title);
+	gint w = 0;
+
+	pango_layout_get_pixel_size(layout, &w, NULL);
+	g_object_unref(layout);
+	return w + COLUMN_TITLE_PADDING;
+}
+
+/* Redimensionnement à la souris : jamais plus étroit que le titre (la nouvelle valeur ne renotifie pas au-delà du minimum) */
+static void on_column_fixed_width(GtkColumnViewColumn *column, GParamSpec *pspec, gpointer data)
+{
+	gint min = GPOINTER_TO_INT(data);
+	gint w = gtk_column_view_column_get_fixed_width(column);
+
+	if(w >= 0 && w < min)
+		gtk_column_view_column_set_fixed_width(column, min);
+}
+
 static void add_column(GtkColumnView *view, GtkSelectionModel *selection, const gchar *title, const gchar *prop, const gchar *cell_name, gboolean editable,
-           gboolean expand)
+           gint width)
 {
 	GtkListItemFactory *factory = gtk_signal_list_item_factory_new();
 	CellSpec *spec = g_new0(CellSpec, 1);
 	GtkColumnViewColumn *column;
+	gint min;
 
 	spec->prop = prop;
 	spec->cell_name = cell_name;
@@ -214,7 +248,13 @@ static void add_column(GtkColumnView *view, GtkSelectionModel *selection, const 
 	g_signal_connect(factory, "unbind", G_CALLBACK(cell_unbind), spec);
 	column = gtk_column_view_column_new(title, factory);	/* prend la fabrique */
 	gtk_column_view_column_set_resizable(column, TRUE);
-	gtk_column_view_column_set_expand(column, expand);
+	/* Largeur fixe de départ, seule la dernière colonne (width 0) prend la place restante : avec plusieurs colonnes « expand », GTK répartit
+	 * la largeur gagnée ou perdue par un redimensionnement entre elles, et les deux bords de la colonne tirée bougent à la fois */
+	min = column_title_width(view, title);
+	if(width > 0)
+		gtk_column_view_column_set_fixed_width(column, MAX(width, min));
+	gtk_column_view_column_set_expand(column, width == 0);
+	g_signal_connect(column, "notify::fixed-width", G_CALLBACK(on_column_fixed_width), GINT_TO_POINTER(min));
 	/* Aucun trieur : un clic sur l'en-tête ne trie pas, l'ordre est celui de l'utilisateur (§6.5) */
 	gtk_column_view_append_column(view, column);
 	g_object_unref(column);
@@ -412,14 +452,13 @@ static void apply_edits(MacroEditor *editor)
 	if(macros == NULL || gt_macros_get_set(macros) != editor->set)
 		return;
 	edits = gt_macro_rows_to_edits(G_LIST_MODEL(editor->rows), &n);
-	gt_macro_set_apply_edits(editor->set, edits, n, gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows)));
+	gt_macros_apply_edits(macros, edits, n, gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows)));	/* editor->set est le jeu courant */
 	g_free(edits);
 	gt_macro_poller_sync(gt_macros_get_poller(macros));
 	gt_macros_changed(macros);	/* raccourcis et panneau ; ce module voit le même jeu et ne ferme rien */
-	gt_macros_save_file(macros, NULL, TRUE);
 	s = g_weak_ref_get(&editor->session);
-	config_remember_macros_file(s);
-	g_object_unref(s);	/* non NULL : editor_macros l'a vue vivante, et rien ne la libère entre-temps */
+	gt_ui_macros_save(gtk_window_get_transient_for(GTK_WINDOW(editor->window)), s, NULL);	/* non NULL : editor_macros l'a vue vivante */
+	g_object_unref(s);
 }
 
 static void on_ok(GtkButton *button, gpointer data)
@@ -460,6 +499,10 @@ static void on_destroy(GtkWidget *window, gpointer data)
 
 	if(editor == NULL)
 		return;
+	/* Les modèles peuvent survivre à l'état : plus aucun rappel de la zone des valeurs par défaut */
+	g_signal_handlers_disconnect_by_func(editor->rows, on_defaults_items_changed, editor);
+	g_signal_handlers_disconnect_by_func(editor->list_rows, on_defaults_items_changed, editor);
+	g_signal_handlers_disconnect_by_func(editor->selection, on_defaults_selection_changed, editor);
 	s = g_weak_ref_get(&editor->session);
 	if(s != NULL && g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) == window)
 		g_object_set_data(G_OBJECT(s), SESSION_EDITOR_KEY, NULL);
@@ -472,6 +515,10 @@ static void editor_free(gpointer data)
 	MacroEditor *editor = data;
 
 	g_clear_object(&editor->capture_row);
+	defaults_unwatch(editor);
+	if(editor->defaults != NULL)
+		g_object_remove_weak_pointer(G_OBJECT(editor->defaults), (gpointer *)&editor->defaults);
+	g_clear_object(&editor->selection);
 	g_clear_object(&editor->rows);
 	g_clear_object(&editor->list_rows);
 	g_weak_ref_clear(&editor->session);
@@ -505,6 +552,176 @@ static GtkWidget *button_row(void)
 	return box;
 }
 
+/* --- Valeurs par défaut (spec 6c §3.2-6) : une zone sous la table, pour la seule ligne sélectionnée --- */
+
+/* Un champ a changé : vecteur complet des valeurs dans la ligne (une entrée invalide n'est pas retenue ; tout vide = aucune valeur par défaut) */
+static void defaults_commit(MacroEditor *editor)
+{
+	GPtrArray *values = g_ptr_array_new_with_free_func(g_free);
+	gboolean any = FALSE, valid = TRUE;
+
+	if(editor->defaults == NULL || editor->defaults_building || editor->defaults_row == NULL)
+	{
+		g_ptr_array_free(values, TRUE);
+		return;
+	}
+	for(GtkWidget *w = gtk_widget_get_first_child(editor->defaults); w != NULL; w = gtk_widget_get_next_sibling(w))
+	{
+		gchar *v;
+
+		if(g_object_get_data(G_OBJECT(w), "default-field") == NULL)
+			continue;	/* l'étiquette */
+		v = gt_macro_arg_widget_get_value(w);
+		if(GTK_IS_EDITABLE(w) && !macro_type_value_valid(g_object_get_data(G_OBJECT(w), "arg-type"), v))
+			valid = FALSE;
+		any |= v[0] != '\0';
+		g_ptr_array_add(values, v);
+	}
+	if(valid)
+	{
+		g_ptr_array_add(values, NULL);
+		gt_macro_row_set_args(editor->defaults_row, any ? (const gchar *const *)values->pdata : NULL);
+	}
+	g_ptr_array_free(values, TRUE);
+}
+
+static void on_default_entry_changed(GtkEditable *editable, gpointer data)
+{
+	MacroEditor *editor = editor_of(GTK_WIDGET(editable));
+	GtkWidget *w = GTK_WIDGET(editable);
+
+	gt_macro_arg_widget_validate(w);
+	if(editor != NULL)
+		defaults_commit(editor);
+}
+
+static void on_default_dropdown_selected(GObject *dropdown, GParamSpec *pspec, gpointer data)
+{
+	MacroEditor *editor = editor_of(GTK_WIDGET(dropdown));
+
+	if(editor != NULL)
+		defaults_commit(editor);
+}
+
+static void defaults_clear(MacroEditor *editor)
+{
+	GtkWidget *first = gtk_widget_get_first_child(editor->defaults);
+
+	while(gtk_widget_get_last_child(editor->defaults) != first)
+		gtk_box_remove(GTK_BOX(editor->defaults), gtk_widget_get_last_child(editor->defaults));
+}
+
+static void defaults_unwatch(MacroEditor *editor)
+{
+	if(editor->defaults_row != NULL)
+	{
+		g_signal_handler_disconnect(editor->defaults_row, editor->defaults_action_id);
+		g_clear_object(&editor->defaults_row);
+		editor->defaults_action_id = 0;
+	}
+}
+
+static void defaults_rebuild(MacroEditor *editor);
+
+static void on_defaults_row_action(GObject *row, GParamSpec *pspec, gpointer data)
+{
+	defaults_rebuild(data);
+}
+
+/* Zone refaite : sélection, action de la ligne affichée ou listes ont changé */
+static void defaults_rebuild(MacroEditor *editor)
+{
+	guint n = 0;
+	guint *pos = selected_positions(editor->selection, &n);
+	GtMacroRow *row = n == 1 ? g_list_model_get_item(G_LIST_MODEL(editor->rows), pos[0]) : NULL;
+	macro_arg_info_t *infos = NULL;
+	GtMacroLists *lists = NULL;
+	gint n_args = 0;
+
+	g_free(pos);
+	if(editor->defaults == NULL)	/* boîte détruite avant l'état (fenêtre en destruction) */
+	{
+		g_clear_object(&row);
+		return;
+	}
+	editor->defaults_building = TRUE;
+	defaults_clear(editor);
+	if(row != editor->defaults_row)
+	{
+		defaults_unwatch(editor);
+		if(row != NULL)
+		{
+			editor->defaults_row = g_object_ref(row);
+			editor->defaults_action_id = g_signal_connect(row, "notify::action", G_CALLBACK(on_defaults_row_action), editor);
+		}
+	}
+	if(row != NULL)
+	{
+		lists = gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows));
+		infos = macro_get_arg_infos(lists, gt_macro_row_get_action(row), &n_args);
+	}
+	for(gint k = 0; k < n_args; k++)
+	{
+		const gchar *const *args = gt_macro_row_get_args(row);
+		const gchar *initial = (args != NULL && (gint)g_strv_length((gchar **)args) == n_args) ? args[k] : "";
+		gchar *name = g_strdup_printf("macro-default-%d", k);
+		GtkWidget *w;
+
+		w = gt_macro_arg_widget_new(lists, &infos[k], initial);
+		if(GTK_IS_DROP_DOWN(w))
+			g_signal_connect(w, "notify::selected", G_CALLBACK(on_default_dropdown_selected), NULL);
+		else
+		{
+			gtk_editable_set_width_chars(GTK_EDITABLE(w), 10);
+			g_signal_connect(w, "changed", G_CALLBACK(on_default_entry_changed), NULL);
+		}
+		gtk_widget_set_name(w, name);
+		gtk_accessible_update_property(GTK_ACCESSIBLE(w), GTK_ACCESSIBLE_PROPERTY_LABEL, name, -1);
+		g_object_set_data(G_OBJECT(w), "default-field", GINT_TO_POINTER(1));
+		gtk_box_append(GTK_BOX(editor->defaults), w);
+		g_free(name);
+	}
+	gtk_widget_set_visible(editor->defaults, n_args > 0);
+	if(infos != NULL)
+		macro_arg_infos_free(infos, n_args);
+	if(lists != NULL)
+		gt_macro_lists_free(lists);
+	g_clear_object(&row);
+	editor->defaults_building = FALSE;
+}
+
+static void on_defaults_selection_changed(GtkSelectionModel *model, guint position, guint n_items, gpointer data)
+{
+	defaults_rebuild(data);
+}
+
+static void on_defaults_items_changed(GListModel *model, guint position, guint removed, guint added, gpointer data)
+{
+	defaults_rebuild(data);
+}
+
+/* Retour sur la page Macros : zone refaite (les listes ont pu changer sur la page Lists : valeurs et noms à jour) */
+static void on_stack_page(GObject *stack, GParamSpec *pspec, gpointer data)
+{
+	MacroEditor *editor = editor_of(GTK_WIDGET(stack));
+
+	if(editor != NULL && g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(stack)), "macros") == 0)
+		defaults_rebuild(editor);
+}
+
+static GtkWidget *build_defaults_box(MacroEditor *editor)
+{
+	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	GtkWidget *label = gtk_label_new(_("Default values:"));
+
+	gtk_widget_set_name(box, "macro-defaults");
+	gtk_accessible_update_property(GTK_ACCESSIBLE(box), GTK_ACCESSIBLE_PROPERTY_LABEL, _("Default values"), -1);
+	gtk_box_append(GTK_BOX(box), label);
+	gtk_widget_set_visible(box, FALSE);
+	g_object_add_weak_pointer(G_OBJECT(box), (gpointer *)&editor->defaults);	/* NULL dès que la boîte est détruite : les rappels ne la touchent plus */
+	return box;
+}
+
 static GtkWidget *build_page(MacroEditor *editor, gint page)
 {
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -517,12 +734,12 @@ static GtkWidget *build_page(MacroEditor *editor, gint page)
 	gtk_column_view_set_show_column_separators(GTK_COLUMN_VIEW(view), TRUE);
 	if(page == PAGE_MACROS)
 	{
-		editor->selection = selection;
+		editor->selection = g_object_ref(selection);	/* tenue aussi par l'état : la zone des valeurs par défaut s'en déconnecte à la destruction */
 		gtk_widget_set_name(view, "macro-list");
-		add_column(GTK_COLUMN_VIEW(view), selection, _("Label"), "label", "macro-cell-label", TRUE, TRUE);
-		add_column(GTK_COLUMN_VIEW(view), selection, _("Shortcut"), "shortcut", "macro-cell-shortcut", FALSE, FALSE);
-		add_column(GTK_COLUMN_VIEW(view), selection, _("Action"), "action", "macro-cell-action", TRUE, TRUE);
-		add_column(GTK_COLUMN_VIEW(view), selection, _("Tab"), "tab", "macro-cell-tab", TRUE, FALSE);
+		add_column(GTK_COLUMN_VIEW(view), selection, _("Label"), "label", "macro-cell-label", TRUE, 160);
+		add_column(GTK_COLUMN_VIEW(view), selection, _("Shortcut"), "shortcut", "macro-cell-shortcut", FALSE, 120);
+		add_column(GTK_COLUMN_VIEW(view), selection, _("Action"), "action", "macro-cell-action", TRUE, 280);
+		add_column(GTK_COLUMN_VIEW(view), selection, _("Tab"), "tab", "macro-cell-tab", TRUE, 0);
 		add_button(row1, _("_Add"), "macro-add", G_CALLBACK(on_add), page);
 		add_button(row1, _("_Delete"), "macro-delete", G_CALLBACK(on_delete), page);
 		add_button(row1, _("_Capture Shortcut"), "macro-capture", G_CALLBACK(on_capture), page);
@@ -534,9 +751,9 @@ static GtkWidget *build_page(MacroEditor *editor, gint page)
 	{
 		editor->list_selection = selection;
 		gtk_widget_set_name(view, "lists-list");
-		add_column(GTK_COLUMN_VIEW(view), selection, _("List"), "list", "list-cell-name", TRUE, FALSE);
-		add_column(GTK_COLUMN_VIEW(view), selection, _("Display"), "display", "list-cell-display", TRUE, TRUE);
-		add_column(GTK_COLUMN_VIEW(view), selection, _("Value"), "value", "list-cell-value", TRUE, TRUE);
+		add_column(GTK_COLUMN_VIEW(view), selection, _("List"), "list", "list-cell-name", TRUE, 160);
+		add_column(GTK_COLUMN_VIEW(view), selection, _("Display"), "display", "list-cell-display", TRUE, 240);
+		add_column(GTK_COLUMN_VIEW(view), selection, _("Value"), "value", "list-cell-value", TRUE, 0);
 		add_button(row1, _("_Add Entry"), "lists-add", G_CALLBACK(on_add), page);
 		add_button(row1, _("_Delete Entry"), "lists-delete", G_CALLBACK(on_delete), page);
 		add_button(row2, _("Move _Up"), "lists-up", G_CALLBACK(on_up), page);
@@ -547,6 +764,14 @@ static GtkWidget *build_page(MacroEditor *editor, gint page)
 	gtk_widget_set_vexpand(scrolled, TRUE);
 	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), view);
 	gtk_box_append(GTK_BOX(box), scrolled);
+	if(page == PAGE_MACROS)
+	{
+		editor->defaults = build_defaults_box(editor);	/* pointeur faible posé par build_defaults_box */
+		gtk_box_append(GTK_BOX(box), editor->defaults);
+		g_signal_connect(selection, "selection-changed", G_CALLBACK(on_defaults_selection_changed), editor);
+		g_signal_connect(editor->rows, "items-changed", G_CALLBACK(on_defaults_items_changed), editor);
+		g_signal_connect(editor->list_rows, "items-changed", G_CALLBACK(on_defaults_items_changed), editor);
+	}
 	gtk_box_append(GTK_BOX(box), row1);
 	gtk_box_append(GTK_BOX(box), row2);
 	return box;
@@ -580,7 +805,7 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	title = g_strdup_printf(_("Configure Macros — %s"), gt_session_get_short_name(s));
 	gtk_window_set_title(GTK_WINDOW(editor->window), title);
 	g_free(title);
-	gtk_window_set_default_size(GTK_WINDOW(editor->window), 520, 500);
+	gtk_window_set_default_size(GTK_WINDOW(editor->window), 720, 500);
 	if(parent != NULL)
 	{
 		gtk_window_set_transient_for(GTK_WINDOW(editor->window), parent);
@@ -603,6 +828,7 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	gtk_widget_set_vexpand(stack, TRUE);
 	gtk_stack_add_titled(GTK_STACK(stack), build_page(editor, PAGE_MACROS), "macros", _("Macros"));
 	gtk_stack_add_titled(GTK_STACK(stack), build_page(editor, PAGE_LISTS), "lists", _("Lists"));
+	g_signal_connect(stack, "notify::visible-child", G_CALLBACK(on_stack_page), NULL);
 	switcher = gtk_stack_switcher_new();
 	gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher), GTK_STACK(stack));
 	gtk_widget_set_halign(switcher, GTK_ALIGN_CENTER);

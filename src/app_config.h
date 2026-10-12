@@ -6,6 +6,7 @@
 
 #include <glib.h>
 
+#include "window_state.h"
 #include "profile.h"
 #include "config_store.h"
 #include "session.h"
@@ -37,11 +38,18 @@ void           config_remember_macros_file(GtSession *s);	/* clé macros_file du
 void           config_save_update_url(const gchar *url);
 void           config_save_skipped_revision(const gchar *rev);	/* [general] update_skipped_revision ; NULL efface */
 void           config_save_update_check_startup(gboolean enabled);	/* [general] update_check_startup, seulement si la valeur change */
+/* Dernier projet ouvert (6c) : [general] last_project ; NULL si absente ou vide. Le setter relit, écrit, enregistre (non interactif) ; NULL efface ; rien si inchangé. */
+gchar         *app_config_get_last_project(void);	/* relit ; à libérer */
+void           app_config_set_last_project(const gchar *path);
 /* Démarrage (spec §3.2-14) : défauts (profil de s et [general]), [general] ; fichier illisible : message, -1 ; aucun profil :
  * [profile:default] créé (message) ; « default » absent mais d'autres profils : défauts, sans message ni création ; sinon « default »
  * chargé dans s. */
 gint           Check_configuration_file(GtSession *s);
 gint           Load_configuration_from_file(GtSession *s, const gchar *name);	/* copie dans le profil de s (lock_port gardé), nom de profil de s, macros de s */
+/* Macros du profil de s, règle unique du chargement d'un profil (démarrage, Load profile, onglet libre de Close project) : onglet de projet,
+ * macros_file du profil oublié et jeu inchangé ; sinon macros_file du profil, à défaut le fichier courant de s, à défaut le fichier par défaut
+ * (non interactif). */
+void           app_config_load_profile_macros(GtSession *s);
 void           Verify_configuration(GtSession *s);	/* gt_profile_validate du profil de s + un seul gt_app_message ; n'applique rien à l'interface */
 gboolean       app_config_load_profile(GtSession *s, const gchar *name, GError **error);	/* Load + Verify + crochet profile_applied(s) */
 /* Options de s et auto-reconnect de sa liaison recopiés dans son profil (gt_term_options_store_profile), macros_file = chemin des macros de s,
@@ -50,14 +58,6 @@ gboolean       app_config_save_profile(GtSession *s, const gchar *name, GError *
 gboolean       app_config_delete_profile(const gchar *name, GError **error);
 gchar        **app_config_list_profiles(void);	/* relit d'abord ; g_strfreev */
 gboolean       app_config_has_profile(const gchar *name);	/* sans casse, après relecture */
-
-typedef struct
-{
-	gint width, height;	/* ≤ 0 : taille par défaut */
-	gboolean maximized;
-	gint h_paned, v_paned;	/* < 0 : position par défaut */
-	gboolean macro_panel_visible, script_panel_visible, hex_bar_visible;
-} GtWindowState;
 
 /* Clés [window] : width, height, maximized, paned_position (= h_paned), v_paned_position, macro_panel_visible, script_panel_visible,
  * hex_bar_visible ; x et y ne sont plus lus (spec §3.2-7). */

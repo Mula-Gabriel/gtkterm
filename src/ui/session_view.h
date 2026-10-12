@@ -7,6 +7,7 @@
 #include <gtk/gtk.h>
 
 #include "app_config.h"
+#include "project_file.h"
 #include "session.h"
 
 G_BEGIN_DECLS
@@ -25,6 +26,10 @@ void       gt_session_view_set_slot(GtkWidget *view, const char *slot, GtkWidget
 GtkWidget *gt_session_view_get_slot(GtkWidget *view, const char *slot);
 /* Remplit h_paned, v_paned et les trois visibilités seulement ; un emplacement vide garde la valeur initiale (st) */
 void       gt_session_view_get_state(GtkWidget *view, GtWindowState *out);
+/* Onglet de projet : h_paned, v_paned et visibilités (gt_session_view_get_state) et disposition du panneau de script ("topbottom" | "leftright") */
+void       gt_session_view_fill_project_tab(GtkWidget *view, GtProjectTab *tab);
+/* Disposition du panneau de script seulement : séparateurs et visibilités sont déjà passés à gt_session_view_new */
+void       gt_session_view_apply_project_tab(GtkWidget *view, const GtProjectTab *tab);
 void       gt_session_view_apply_profile(GtkWidget *view);	/* terminal ← profil de la session, couleurs du panneau de script */
 /* Plan, décision 3, étape a : envoi de fichier et journal arrêtés, panneau de macros, raccourcis et panneau de script arrêtés, barre d'état
  * détachée, actions de page retirées du groupe de la session.

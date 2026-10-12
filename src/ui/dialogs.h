@@ -23,10 +23,13 @@ typedef void (*GtUiConfirmCb)(gboolean accepted, gpointer user_data);
 /* question en texte principal, detail (ou NULL) dessous ; boutons « Cancel » et accept_label (par défaut) ; Échap, fermeture ou parent
  * détruit = refus. Le rappel vérifie lui-même que sa cible existe encore. */
 void gt_ui_confirm(GtkWindow *parent, const char *question, const char *detail, const char *accept_label, GtUiConfirmCb cb, gpointer user_data);
-/* Boîte à plusieurs choix (labels terminés par NULL, sans mnémonique obligatoire ; le premier est le bouton par défaut) : rappel avec l'indice du
- * bouton cliqué, ou -1 si la boîte est fermée sans choix (Échap, fermeture, parent détruit) ; mêmes garanties de rappel que gt_ui_confirm. */
+/* Boîte à plusieurs choix (labels terminés par NULL, sans mnémonique obligatoire) : default_choice, indice du bouton par défaut (focus, Entrée) ;
+ * destructive_choice, indice du bouton « destructive-action » (-1 : aucun ; le bouton par défaut est alors « suggested-action »). Une question
+ * qui peut écraser le travail d'un autre (conflit) met Cancel par défaut et Overwrite en destructeur. Rappel avec l'indice du bouton cliqué, ou -1
+ * si la boîte est fermée sans choix (Échap, fermeture, parent détruit) ; mêmes garanties de rappel que gt_ui_confirm. */
 typedef void (*GtUiChooseCb)(gint choice, gpointer user_data);
-void gt_ui_choose(GtkWindow *parent, const char *text, const char *detail, const char *const *labels, GtUiChooseCb cb, gpointer user_data);
+void gt_ui_choose(GtkWindow *parent, const char *text, const char *detail, const char *const *labels, gint default_choice, gint destructive_choice,
+                  GtUiChooseCb cb, gpointer user_data);
 typedef void (*GtUiFileCb)(GFile *file, gpointer user_data);	/* NULL si annulé */
 /* initial : fichier présélectionné, ou dossier de départ s'il en est un ; filters : GListModel de GtkFileFilter ou NULL */
 void gt_ui_open_file(GtkWindow *parent, const char *title, GFile *initial, GListModel *filters, GtUiFileCb cb, gpointer user_data);

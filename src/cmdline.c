@@ -50,6 +50,7 @@ static const struct option long_options[] =
 	{"transport", 1, 0, 'T'},
 	{"host", 1, 0, 'H'},
 	{"tcp-port", 1, 0, 'P'},
+	{"project", 1, 0, 'j'},	/* option longue seule : pas dans SHORT_OPTIONS */
 	{0, 0, 0, 0}
 };
 
@@ -81,6 +82,7 @@ void display_help(void)
 	i18n_printf(_("--transport <serial|tcp-client|tcp-server> or -T: transport type\n"));
 	i18n_printf(_("--host <hostname> or -H: TCP host\n"));
 	i18n_printf(_("--tcp-port <port> or -P: TCP port\n"));
+	i18n_printf(_("--project <file>: open this project\n"));
 	i18n_printf("\n");
 }
 
@@ -136,6 +138,9 @@ gboolean gt_cmdline_parse(int argc, char **argv, GtCmdlineOptions *out, GError *
 			break;
 		case 'f':
 			gt_profile_set_string(&out->send_file, optarg);
+			break;
+		case 'j':
+			gt_profile_set_string(&out->project, optarg);
 			break;
 		case 's':
 			if(!g_ascii_string_to_unsigned(optarg, 10, 1, G_MAXUINT, &u, NULL))
@@ -224,6 +229,12 @@ gboolean gt_cmdline_parse(int argc, char **argv, GtCmdlineOptions *out, GError *
 			return FALSE;
 		}
 	}
+	/* Un projet porte ses propres réglages : ni profil nommé, ni option de profil (-L et -f restent permis) */
+	if(out->project != NULL && (out->config_name != NULL || (out->set & ~GT_CMDLINE_NO_LOCK) != 0))
+	{
+		g_set_error_literal(error, GT_CMDLINE_ERROR, GT_CMDLINE_ERROR_INVALID_VALUE, _("--project cannot be combined with --config or port settings"));
+		return FALSE;
+	}
 	return TRUE;
 }
 
@@ -267,6 +278,7 @@ void gt_cmdline_options_clear(GtCmdlineOptions *o)
 {
 	g_clear_pointer(&o->config_name, g_free);
 	g_clear_pointer(&o->send_file, g_free);
+	g_clear_pointer(&o->project, g_free);
 	gt_profile_clear(&o->values);
 	o->set = 0;
 	o->help = FALSE;
@@ -304,12 +316,16 @@ void read_command_line(GtSession *s, int argc, char **argv, GtCmdline *out)
 	gt_cmdline_apply(&o, gt_session_get_profile(s));
 	Verify_configuration(s);
 	out->send_file = g_steal_pointer(&o.send_file);
+	out->project = o.project != NULL ? g_canonicalize_filename(o.project, NULL) : NULL;
+	out->profile_given = o.config_name != NULL || (o.set & ~GT_CMDLINE_NO_LOCK) != 0;
 	gt_cmdline_options_clear(&o);
 }
 
 void gt_cmdline_clear(GtCmdline *c)
 {
 	g_clear_pointer(&c->send_file, g_free);
+	g_clear_pointer(&c->project, g_free);
+	c->profile_given = FALSE;
 	c->exit_now = FALSE;
 	c->exit_code = 0;
 }

@@ -131,12 +131,45 @@ void config_save_update_check_startup(gboolean enabled)
 	config_save_store(TRUE);
 }
 
+gchar *app_config_get_last_project(void)
+{
+	gchar *path;
+
+	config_reload_store();
+	path = gt_config_store_get_general_string(store, "last_project", NULL);
+	if(path != NULL && path[0] == '\0')
+		g_clear_pointer(&path, g_free);
+	return path;
+}
+
+void app_config_set_last_project(const gchar *path)
+{
+	gchar *actuel;
+	gboolean change;
+
+	if(path != NULL && path[0] == '\0')
+		path = NULL;
+	actuel = app_config_get_last_project();	/* relit */
+	change = g_strcmp0(actuel, path) != 0;
+	g_free(actuel);
+	if(!change)
+		return;
+	if(path != NULL)
+		gt_config_store_set_general_string(store, "last_project", path);
+	else
+		g_key_file_remove_key(gt_config_store_get_key_file(store), "general", "last_project", NULL);
+	config_save_store(FALSE);
+}
+
 void config_remember_macros_file(GtSession *s)
 {
 	GtProfile *profile = gt_session_get_profile(s);
 	const gchar *path = gt_macros_get_path(gt_session_get_macros(s));
 	const gchar *name = gt_session_get_profile_name(s);
 
+	/* Onglet de projet : les macros sont celles du projet, le profil garde son fichier */
+	if(gt_session_get_in_project(s))
+		return;
 	/* Fichier de macros inchangé (perte de focus d'un argument, même fichier rechoisi) : rien à écrire */
 	if(g_strcmp0(path, profile->macros_file) == 0)
 		return;
@@ -172,6 +205,14 @@ static gboolean load_profile(GtSession *s, const gchar *name, GError **error)
 	config_reload_store();
 	if(!gt_config_store_get_profile(store, name, &loaded))
 	{
+		const GError *read_error = gt_config_store_get_read_error(store);
+
+		/* Fichier devenu illisible en cours de session : la vraie cause plutôt que « No section » */
+		if(read_error != NULL)
+		{
+			g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_PERM, _("Cannot read the configuration file: %s"), read_error->message);
+			return FALSE;
+		}
 		g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_GROUP_NOT_FOUND, _("No section \"%s\" in configuration file\n"), name);
 		return FALSE;
 	}
@@ -181,10 +222,22 @@ static gboolean load_profile(GtSession *s, const gchar *name, GError **error)
 	profile->lock_port = lock_port;
 	/* Le nom actif n'est retenu qu'une fois le profil trouvé : un nom inconnu ne crée pas de profil à l'enregistrement (C13) */
 	gt_session_set_profile_name(s, name);
-	/* Fichier de macros du profil ; sans fichier, celui en cours est relu (non interactif : avertissement seulement) */
-	gt_macros_load_file(gt_session_get_macros(s), profile->macros_file, FALSE);
+	app_config_load_profile_macros(s);
 	/* Pas d'application à l'interface ici : les valeurs ne sont pas encore validées (Verify_configuration) */
 	return TRUE;
+}
+
+void app_config_load_profile_macros(GtSession *s)
+{
+	GtProfile *profile = gt_session_get_profile(s);
+
+	/* Onglet de projet : le profil ne charge pas ses macros (celles du projet restent) et n'en garde pas le fichier en mémoire */
+	if(gt_session_get_in_project(s))
+		gt_profile_set_string(&profile->macros_file, NULL);
+	else
+		/* Fichier de macros du profil ; sans fichier (clé absente ou vide), celui en cours est relu, à défaut le fichier par défaut
+		 * (non interactif : avertissement seulement) */
+		gt_macros_load_file(gt_session_get_macros(s), profile->macros_file != NULL && profile->macros_file[0] != '\0' ? profile->macros_file : NULL, FALSE);
 }
 
 gint Load_configuration_from_file(GtSession *s, const gchar *name)
@@ -282,8 +335,20 @@ gboolean app_config_save_profile(GtSession *s, const gchar *name, GError **error
 	gt_term_options_store_profile(gt_session_get_options(s), profile);
 	g_object_get(gt_session_get_link(s), "auto-reconnect", &auto_reconnect, NULL);
 	profile->auto_reconnect = auto_reconnect;
-	gt_profile_set_string(&profile->macros_file, gt_macros_get_path(gt_session_get_macros(s)));
 	config_reload_store();
+	if(gt_session_get_in_project(s))
+	{
+		/* Onglet de projet : le profil garde le fichier de macros qu'il a déjà dans le magasin (NULL s'il n'existe pas) */
+		GtProfile existant = { 0 };
+
+		if(gt_config_store_get_profile(store, normalized, &existant))
+			gt_profile_set_string(&profile->macros_file, existant.macros_file);
+		else
+			gt_profile_set_string(&profile->macros_file, NULL);
+		gt_profile_clear(&existant);
+	}
+	else
+		gt_profile_set_string(&profile->macros_file, gt_macros_get_path(gt_session_get_macros(s)));
 	gt_config_store_put_profile(store, normalized, profile);
 	if(!gt_config_store_save(store, &save_error))
 	{
