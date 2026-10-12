@@ -52,7 +52,10 @@ Corriger un bogue = rendre le cas conforme **et** remplacer son identifiant par 
   les octets ≥ 0x80 et retire les autres contrôles, DEL compris ; CR/LF auto et horodatage ; erreur d'écriture), `test_file_sender` (fonction d'écriture
   injectée et boucle GLib : envoi intact, écritures partielles, « port plein », erreur, délai de fin de ligne et attente d'un caractère jusqu'après le dernier
   LF, fichier vide, annulation, perte de liaison), `test_rx_logger` (transformation, pause sans ligne coupée, erreur
-  d'écriture), `test_update_check` (comparaison de révisions, « unknown », révision ignorée, commande en liste d'arguments), `test_serial_ports` (motifs de
+  d'écriture), `test_update_check` (commande de lancement en liste d'arguments, tag passé au script), `test_update_versions` (versions et sortie de `git describe`, ordre numérique, tags
+  publiés, `NEWS` : éléments, prolongements, CRLF, en-tête non-version, section en double ou sans tag, titre de niveau 1 qui clôt la section, sélection dans les deux sens, verdict de
+  démarrage), `test_update_fetch` (cache des versions sur de vrais dépôts locaux `file://` : clone, actualisation, cas limites (URL refusée, dépôt sans tag ou sans `NEWS`, changement d'URL),
+  dossier de cache vide ou qui n'est pas un dépôt, emplacement du cache), `test_serial_ports` (motifs de
   `/proc/tty/drivers`, découverte des ports, ordre semi-numérique), `test_port_form` (validation du dialogue Port, série et TCP), `test_macro_view` (règles
   d'affichage du panneau de macros : onglets, séparateurs, listes à deux valeurs), `test_action_relay` (relais d'action du sous-projet 6b : délégation
   d'activation et d'état, reflet de l'état et de la sensibilité de la cible, ajout et retrait d'action dans la cible, changement de cible qui ne notifie que
@@ -71,6 +74,11 @@ Corriger un bogue = rendre le cas conforme **et** remplacer son identifiant par 
   propres fonctions d'enregistrement. Les bouchons de `tests/stubs/` remplacent des modules de la couche application (`stub_link.c` la liaison,
   `stub_journal.c`, `stub_macros.c` l'état des macros) ; un bouchon enregistre l'appel (`stub_record`) et ne
   contient aucune logique métier.
+- Scripts de mise à jour et de publication (suite `unit`, protocole TAP, `sh` ; `git`, `meson` et `ninja` requis, aucun réseau ni root) : `update_script` (`tests/test_update_script.sh` :
+  `data/gtkterm-update.sh` sur un dépôt amont local à versions taguées, préfixe et cache jetables, `pkexec` remplacé par un compteur via `GTKTERM_UPDATE_SUDO`, dépendances sautées par
+  `GTKTERM_UPDATE_DEPS=0` : jamais de demande de mot de passe ; montée, retour, relance sur le script de la version visée, registre et ménage, une seule autorisation par mise à jour, refus,
+  verrou), `publier_version` (`tests/test_publier_version.sh` : `tools/publier-version.sh` sur un dépôt jetable). Le test refuse de lancer un script qui n'a pas l'échappatoire
+  `GTKTERM_UPDATE_SUDO` (sinon pkexec demanderait un mot de passe).
 - Style : celui de `.clang-format` (tabulations, Allman, `if(`).
 
 ## Sanitizers et valgrind
@@ -136,7 +144,7 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
   ≤ 108 octets), `HOME` et `XDG_*` dans `build/tests/gui/runs/<scénario>/`, aucune variable AT-SPI ; processus tués par groupe à la fin (pas d'orphelin),
   y compris quand meson interrompt le scénario (Ctrl+C, délai dépassé : le signal est relayé au groupe de `timeout`, puis `run-gui-test.sh` attend sa fin).
 - Garde-fou : `guard.c`, chargé par `LD_PRELOAD`, refuse les vrais ports série et la configuration réelle de l'utilisateur (message `EMGUARD` dans stderr, qui
-  fait échouer le scénario). Ports : paires pty seulement (et `127.0.0.1`). Faux `git` (`bin/git`, aucun réseau) et faux `xterm` (`bin/xterm`, n'exécute
+  fait échouer le scénario). Ports : paires pty seulement (et `127.0.0.1`). Faux `git` (`bin/git`, aucun réseau ; sert `tags`, `news` et `delay`) et faux `xterm` (`bin/xterm`, n'exécute
   rien) pour la fenêtre « Updates ». Si `GTKTERM_GUARD_FAKE_MODEM` est posée (bits `TIOCM_*`), `guard.c` simule aussi `TIOCMGET` sur une pty, pour les voyants des signaux
   de contrôle de la barre d'état.
 
@@ -166,7 +174,8 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
 - Macros : `macros_v2_text(*libellés)`, `write_macros_v2(path, macros, lists=None)`, `write_macros_v1(path, macros, lists=None)`, `macro_config(env, fichier)`,
   `classes(w)`, `macro_buttons(env)`, `macro_id(env, label)` ; éditeur : `open_editor(env)`, `editor_rows(env)`, `editor_select(env, index)`,
   `close_by_titlebar(env, nom)`.
-- Mise à jour : `local_revision()`, `e.fake_git(sha=None, delay=0)`, `e.fake_calls(prog='git')`.
+- Mise à jour : `local_revision()` (révision git de la construction), `local_describe()` (GIT_DESCRIBE de la construction), `e.fake_git(tags=None, news=None, delay=0)` (tags servis, texte de
+  `NEWS`, délai ; `tags=None` : clone et fetch échouent), `e.fake_calls(prog='git')`.
 - Vérifications : `check(condition, libellé, detail='')` (note l'échec et continue), `wait_until(prédicat, timeout=5)`, `conclude()` (bilan, code de sortie) ;
   jamais d'attente fixe.
 

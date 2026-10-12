@@ -1,20 +1,40 @@
 #!/bin/sh
-# Faux git de la suite gui : aucune connexion réseau, aucun dépôt touché.
+# Faux git de la suite gui : aucune connexion réseau, aucun dépôt réel touché.
 # Journalise chaque appel dans $EM_FAKEGIT_LOG : une ligne « FAKEGIT » suivie de chaque argument précédé d'une tabulation.
-# « ls-remote » : attend $EM_FAKEGIT_DIR/delay secondes (si ce fichier existe), puis répond « <sha>\tHEAD » avec le contenu de
-# $EM_FAKEGIT_DIR/sha ; sans ce fichier, échoue comme une URL injoignable (code 128). Toute autre commande (merge-base…) échoue (code 1).
+# Versions servies depuis $EM_FAKEGIT_DIR : « tags » (un nom de tag par ligne), « news » (texte de NEWS), « delay » (secondes avant de répondre à
+# clone et fetch). Sans « tags », clone et fetch échouent comme une URL injoignable (code 128).
+# clone : crée le dossier cible (dernier argument) avec un fichier HEAD ; remote, fetch : succès ; for-each-ref : contenu de « tags » ;
+# show : contenu de « news » (code 128 sans ce fichier) ; toute autre commande échoue (code 1).
 {
 	printf 'FAKEGIT'
 	for a in "$@"; do printf '\t%s' "$a"; done
 	printf '\n'
 } >> "${EM_FAKEGIT_LOG:-/dev/null}"
-ls_remote=0
-for a in "$@"; do
-	if [ "$a" = ls-remote ]; then ls_remote=1; fi
-done
-[ "$ls_remote" = 1 ] || exit 1
 d="${EM_FAKEGIT_DIR:-/nonexistent}"
-if [ -r "$d/delay" ]; then sleep "$(cat "$d/delay")"; fi
-if [ -r "$d/sha" ]; then printf '%s\tHEAD\n' "$(cat "$d/sha")"; exit 0; fi
-echo "fatal: repository not found (faux git)" >&2
-exit 128
+cmd=""
+last=""
+for a in "$@"; do
+	last="$a"
+	if [ -z "$cmd" ]; then
+		case "$a" in
+			clone|remote|fetch|for-each-ref|show) cmd="$a" ;;
+		esac
+	fi
+done
+case "$cmd" in
+	clone|fetch)
+		if [ -r "$d/delay" ]; then sleep "$(cat "$d/delay")"; fi
+		if [ ! -r "$d/tags" ]; then
+			echo "fatal: repository not found (faux git)" >&2
+			exit 128
+		fi
+		if [ "$cmd" = clone ]; then mkdir -p "$last" && : > "$last/HEAD"; fi
+		exit 0 ;;
+	remote) exit 0 ;;
+	for-each-ref) cat "$d/tags" 2>/dev/null; exit 0 ;;
+	show)
+		if [ -r "$d/news" ]; then cat "$d/news"; exit 0; fi
+		echo "fatal: path 'NEWS' does not exist (faux git)" >&2
+		exit 128 ;;
+esac
+exit 1

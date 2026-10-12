@@ -5,6 +5,27 @@ Une section par version publiée (tag vX.Y.Z), de la plus récente à la plus an
 une ligne qui commence par deux espaces prolonge l'élément précédent. Une section sans tag publié n'est jamais affichée.
 Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusqu'à la prochaine section, n'est pas affiché.
 
+## v2.0.0 — 2026-10-12
+- Interface GTK 4.
+- Onglets : un port par onglet, chacun avec sa liaison, ses options, son profil, ses macros et son script Lua.
+- Projets : un fichier .gtkterm enregistre tous les onglets (port, réglages, macros, script) et se rouvre au démarrage.
+- Macros : valeurs par défaut des arguments, éditeur réorganisé, protection contre l'écrasement d'un fichier modifié ailleurs.
+- Menus réorganisés ; les commandes de GTKTerm passent par Ctrl+Maj, Ctrl+lettre va au port.
+! Ctrl+B n'envoie plus de break : il envoie l'octet 0x02 au port, comme toute combinaison Ctrl+lettre. Le break est désormais sur Ctrl+Maj+B.
+! GTKTerm 2 demande GTK 4 (Ubuntu 24.04 ou plus récent) : la mise à jour installe les paquets nécessaires (GTK 4, VTE pour GTK 4, GtkSourceView 5).
+  Sur une distribution plus ancienne, la construction échoue et la version en place reste installée.
+! ~/.config/.gtktermrc passe au nouveau format à la première écriture de la configuration (au plus tard à la fermeture), après une copie
+  dans ~/.config/.gtktermrc.avant-migration. v1.3.2 ne sait pas lire le fichier converti : elle affiche « Erreur de lecture du fichier
+  de configuration », démarre avec ses réglages par défaut et n'enregistre plus ni profil ni réglage. Pour revenir à v1.3.2 avec vos
+  réglages : quittez GTKTerm, mettez .gtktermrc de côté (pour le remettre en revenant à v2), renommez .gtktermrc.avant-migration
+  en .gtktermrc, puis relancez GTKTerm.
+! Un fichier de macros (.ini) de v1.3.2 est lu tel quel, puis réécrit au nouveau format à son premier enregistrement, après une copie
+  dans <fichier>.avant-migration. v1.3.2 n'affiche aucune macro d'un fichier au nouveau format et l'écrase, sans copie, dès que la fenêtre
+  « Configuration des Macros » se ferme, même sans modification : avant d'ouvrir cette fenêtre sous v1.3.2, mettez de côté le fichier
+  au nouveau format et renommez <fichier>.avant-migration en <fichier> (s'il existe). Les macros enregistrées dans un projet ne risquent rien.
+! Le lanceur devient eu.mulagabriel.gtkterm.desktop (v1.3.2 : gtkterm.desktop) ; la mise à jour retire l'ancien, dans un sens comme dans
+  l'autre : un raccourci épinglé dans le dock est à épingler de nouveau.
+
 ## v1.3.2 — 2026-10-12
 - Mises à jour par versions publiées : Aide › Rechercher des mises à jour… liste les versions, affiche leurs nouveautés et
   avertissements, et installe celle que vous choisissez, y compris une plus ancienne pour revenir en arrière.

@@ -503,6 +503,8 @@ static const gchar ancien_fichier[] =
 	"update_url\t= https://exemple.invalid/fork.git\n"
 	"update_check_startup\t= False\n"
 	"update_prefix\t= /opt/gtkterm\n"
+	"update_skipped_version\t= v1.2.0\n"
+	"update_skipped_revision\t= 0123456789abcdef\n"
 	"\n"
 	"[atelier]\n"
 	"port\t= /dev/ttyACM0\n"
@@ -587,8 +589,14 @@ test_migration_ancien_format(void)
 	g_assert_cmpstr(v, ==, "/opt/gtkterm");
 	g_free(v);
 	g_assert_false(gt_config_store_get_general_boolean(s, "update_check_startup", TRUE));
+	v = gt_config_store_get_general_string(s, "update_skipped_version", NULL);
+	g_assert_cmpstr(v, ==, "v1.2.0");
+	g_free(v);
 
 	kf = gt_config_store_get_key_file(s);
+	g_assert_false(g_key_file_has_key(kf, "general", "update_skipped_revision", NULL));
+	g_assert_false(g_key_file_has_key(kf, "profile:default", "update_skipped_revision", NULL));
+	g_assert_false(g_key_file_has_key(kf, "profile:default", "update_skipped_version", NULL));
 	g_assert_false(g_key_file_has_key(kf, "profile:default", "update_url", NULL));
 	g_assert_false(g_key_file_has_key(kf, "profile:atelier", "update_url", NULL));
 	g_assert_false(g_key_file_has_key(kf, "profile:default", "show_rxtx", NULL));
