@@ -39,6 +39,16 @@ if git_prog.found()
 endif
 conf.set_quoted('GIT_REVISION', git_revision)
 
+# Version installée (mise à jour par versions taguées) : tag vX.Y.Z exact, ou vX.Y.Z-N-g<hash> après lui ; version de meson.build sans tag joignable (copie de travail sans tags).
+git_describe = meson.project_version()
+if git_prog.found()
+	git_desc_result = run_command(git_prog, 'describe', '--tags', '--match', 'v[0-9]*', '--abbrev=7', check : false)
+	if git_desc_result.returncode() == 0
+		git_describe = git_desc_result.stdout().strip()
+	endif
+endif
+conf.set_quoted('GIT_DESCRIBE', git_describe)
+
 # Path where the update script is installed (used by src/update.c).
 conf.set_quoted('PACKAGE_DATA_DIR', join_paths(datadir, 'gtkterm'))
 

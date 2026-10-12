@@ -41,7 +41,7 @@ extern GtkWidget *Fenetre;
 static gboolean startup_update_check(gpointer data)
 {
 	(void)data;
-	update_check(GTK_WINDOW(Fenetre), FALSE);
+	update_startup_check(GTK_WINDOW(Fenetre));
 	return G_SOURCE_REMOVE;
 }
 

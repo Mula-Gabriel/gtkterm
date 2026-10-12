@@ -1,0 +1,1 @@
+option('tests', type : 'boolean', value : false, description : 'Construire les tests (aucun sur cette ligne ; option attendue par data/gtkterm-update.sh)')

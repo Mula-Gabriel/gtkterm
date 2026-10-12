@@ -1,23 +1,23 @@
 # SOME DESCRIPTIVE TITLE.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
+# This file is distributed under the same license as the gtkterm package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: gtkterm\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-05-01 20:11-0300\n"
+"POT-Creation-Date: 2026-10-12 16:19+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "Language: \n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=CHARSET\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/buffer.c:172
+#: src/buffer.c:170
 msgid "ERROR: Buffer is not initialized!\n"
 msgstr ""
 
@@ -121,226 +121,301 @@ msgid ""
 "terminal\n"
 msgstr ""
 
-#: src/cmdline.c:167
+#: src/cmdline.c:58
+msgid "--transport <serial|tcp-client|tcp-server> or -T: transport type\n"
+msgstr ""
+
+#: src/cmdline.c:59
+msgid "--host <hostname> or -H: TCP host\n"
+msgstr ""
+
+#: src/cmdline.c:60
+msgid "--tcp-port <port> or -P: TCP port\n"
+msgstr ""
+
+#: src/cmdline.c:188
 msgid "Undefined command line option\n"
 msgstr ""
 
-#: src/files.c:77
+#: src/files.c:78
 msgid "Send RAW File"
 msgstr ""
 
-#: src/files.c:96
+#: src/files.c:81 src/files.c:140 src/files.c:326 src/files.c:377
+#: src/macros.c:1160 src/term_config.c:1000
+msgid "Cancel"
+msgstr ""
+
+#: src/files.c:82 src/macros.c:1155 src/term_config.c:996
+msgid "OK"
+msgstr ""
+
+#: src/files.c:96 src/files.c:342 src/files.c:393
+msgid "File error\n"
+msgstr ""
+
+#: src/files.c:106
 msgid "Error opening file\n"
 msgstr ""
 
-#: src/files.c:110
+#: src/files.c:120
 #, c-format
 msgid "%s: transfer in progress..."
 msgstr ""
 
-#: src/files.c:128 src/term_config.c:513
-msgid "Cancel"
-msgstr ""
-
-#: src/files.c:143
+#: src/files.c:155
 #, c-format
 msgid "Cannot read file %s: %s\n"
 msgstr ""
 
-#: src/files.c:178
+#: src/files.c:190
 msgid "Error sending file\n"
 msgstr ""
 
-#: src/files.c:206
+#: src/files.c:218
 #, c-format
 msgid "Error sending file: %s\n"
 msgstr ""
 
-#: src/files.c:311
+#: src/files.c:323
 msgid "Save RAW File"
 msgstr ""
 
-#: src/files.c:330 src/files.c:381
-msgid "File error\n"
+#: src/files.c:327 src/files.c:378 src/script_panel.c:613
+msgid "Save"
 msgstr ""
 
-#: src/files.c:341 src/files.c:392 src/logging.c:68 src/logging.c:123
+#: src/files.c:353 src/files.c:404 src/logging.c:68 src/logging.c:124
 #, c-format
 msgid "Cannot open file %s: %s\n"
 msgstr ""
 
-#: src/files.c:362
+#: src/files.c:374
 msgid "Save ASCII File"
 msgstr ""
 
-#. Toplevel
-#: src/interface.c:150
-msgid "_File"
+#: src/interface.c:314
+msgid "Pause"
 msgstr ""
 
-#: src/interface.c:151
-msgid "_Edit"
-msgstr ""
-
-#: src/interface.c:152
-msgid "_Log"
-msgstr ""
-
-#: src/interface.c:153
-msgid "_Configuration"
-msgstr ""
-
-#: src/interface.c:154
-msgid "Control _signals"
-msgstr ""
-
-#: src/interface.c:155
-msgid "_View"
-msgstr ""
-
-#: src/interface.c:156
-msgid "Hexadecimal _chars"
-msgstr ""
-
-#: src/interface.c:157
-msgid "_Help"
-msgstr ""
-
-#: src/interface.c:161
-msgid "_Clear screen"
-msgstr ""
-
-#: src/interface.c:162
-msgid "_Clear scrollback"
-msgstr ""
-
-#: src/interface.c:163
-msgid "Send _RAW file"
-msgstr ""
-
-#: src/interface.c:164
-msgid "_Save RAW file"
-msgstr ""
-
-#: src/interface.c:165
-msgid "Save _ASCII file"
-msgstr ""
-
-#. Log Menu
-#: src/interface.c:174
-msgid "To file..."
-msgstr ""
-
-#. Confuguration Menu
-#: src/interface.c:180
-msgid "_Port"
-msgstr ""
-
-#: src/interface.c:181
-msgid "_Main window"
-msgstr ""
-
-#: src/interface.c:182
-msgid "_Macros"
-msgstr ""
-
-#: src/interface.c:183
-msgid "_Load configuration"
-msgstr ""
-
-#: src/interface.c:184
-msgid "_Save configuration"
-msgstr ""
-
-#: src/interface.c:185
-msgid "_Delete configuration"
-msgstr ""
-
-#. Signals Menu
-#: src/interface.c:188
-msgid "Send break"
-msgstr ""
-
-#: src/interface.c:189
-msgid "_Open Port"
-msgstr ""
-
-#: src/interface.c:190
-msgid "_Close Port"
-msgstr ""
-
-#: src/interface.c:191
-msgid "Toggle DTR"
-msgstr ""
-
-#: src/interface.c:192
-msgid "Toggle RTS"
-msgstr ""
-
-#. Configuration Menu
-#: src/interface.c:201
-msgid "Local _echo"
-msgstr ""
-
-#: src/interface.c:202
-msgid "Autoreconnect"
-msgstr ""
-
-#: src/interface.c:203
-msgid "_CR LF auto"
-msgstr ""
-
-#: src/interface.c:204
-msgid "ESC clear scree_n"
-msgstr ""
-
-#: src/interface.c:205
-msgid "Timestamp"
-msgstr ""
-
-#. View Menu
-#: src/interface.c:208
-msgid "Show _index"
-msgstr ""
-
-#: src/interface.c:209
-msgid "_Send hexadecimal data"
-msgstr ""
-
-#: src/interface.c:214
-msgid "_ASCII"
-msgstr ""
-
-#: src/interface.c:215
-msgid "_Hexadecimal"
-msgstr ""
-
-#: src/interface.c:470
+#: src/interface.c:316
 msgid "Resume"
 msgstr ""
 
-#: src/interface.c:618
+#: src/interface.c:392
+msgid "Clear screen"
+msgstr ""
+
+#: src/interface.c:397
+msgid "Clear scrollback"
+msgstr ""
+
+#: src/interface.c:402
+msgid "Send RAW file"
+msgstr ""
+
+#: src/interface.c:407
+msgid "Save RAW file"
+msgstr ""
+
+#: src/interface.c:411
+msgid "Save ASCII file"
+msgstr ""
+
+#: src/interface.c:417
+msgid "Quit"
+msgstr ""
+
+#: src/interface.c:426 src/interface.c:653
+msgid "Copy"
+msgstr ""
+
+#: src/interface.c:432 src/interface.c:658
+msgid "Paste"
+msgstr ""
+
+#: src/interface.c:437 src/interface.c:662
+msgid "Find"
+msgstr ""
+
+#: src/interface.c:444 src/interface.c:668
+msgid "Select All"
+msgstr ""
+
+#: src/interface.c:453
+msgid "To file..."
+msgstr ""
+
+#: src/interface.c:458
+msgid "Pause/Resume"
+msgstr ""
+
+#: src/interface.c:463 src/script_panel.c:628
+msgid "Stop"
+msgstr ""
+
+#: src/interface.c:468
+msgid "Clear"
+msgstr ""
+
+#: src/interface.c:477
+msgid "Port"
+msgstr ""
+
+#: src/interface.c:482
+msgid "Main window"
+msgstr ""
+
+#: src/interface.c:486
+msgid "Local echo"
+msgstr ""
+
+#: src/interface.c:490
+msgid "Autoreconnect"
+msgstr ""
+
+#: src/interface.c:494
+msgid "CR LF auto"
+msgstr ""
+
+#: src/interface.c:498
+msgid "ESC clear screen"
+msgstr ""
+
+#: src/interface.c:502
+msgid "Timestamp"
+msgstr ""
+
+#: src/interface.c:506 src/macros.c:1134
+msgid "Macros"
+msgstr ""
+
+#: src/interface.c:510
+msgid "Load macros file..."
+msgstr ""
+
+#: src/interface.c:514 src/term_config.c:1230
+msgid "Save macros file"
+msgstr ""
+
+#: src/interface.c:520 src/term_config.c:1130
+msgid "Load configuration"
+msgstr ""
+
+#: src/interface.c:524 src/term_config.c:1357
+msgid "Save configuration"
+msgstr ""
+
+#: src/interface.c:528 src/term_config.c:1195
+msgid "Delete configuration"
+msgstr ""
+
+#: src/interface.c:536
+msgid "Send break"
+msgstr ""
+
+#: src/interface.c:543
+msgid "Open Port"
+msgstr ""
+
+#: src/interface.c:548
+msgid "Close Port"
+msgstr ""
+
+#: src/interface.c:553
+msgid "Toggle DTR"
+msgstr ""
+
+#: src/interface.c:559
+msgid "Toggle RTS"
+msgstr ""
+
+#: src/interface.c:572
+msgid "ASCII"
+msgstr ""
+
+#: src/interface.c:577
+msgid "Hexadecimal"
+msgstr ""
+
+#: src/interface.c:585
+msgid "Hexadecimal chars"
+msgstr ""
+
+#: src/interface.c:617
+msgid "Show index"
+msgstr ""
+
+#: src/interface.c:623
+msgid "Send hexadecimal data"
+msgstr ""
+
+#: src/interface.c:627
+msgid "Macro panel"
+msgstr ""
+
+#: src/interface.c:632
+msgid "Script panel"
+msgstr ""
+
+#: src/interface.c:641
+msgid "Check for updates…"
+msgstr ""
+
+#: src/interface.c:645
+msgid "About"
+msgstr ""
+
+#: src/interface.c:724
+msgid "File"
+msgstr ""
+
+#: src/interface.c:725
+msgid "Edit"
+msgstr ""
+
+#: src/interface.c:726
+msgid "Log"
+msgstr ""
+
+#: src/interface.c:727 src/term_config.c:686
+msgid "Configuration"
+msgstr ""
+
+#: src/interface.c:728
+msgid "Control signals"
+msgstr ""
+
+#: src/interface.c:729
+msgid "View"
+msgstr ""
+
+#: src/interface.c:730 src/macros.c:1151
+msgid "Help"
+msgstr ""
+
+#: src/interface.c:830
 msgid "Hexadecimal data to send (separator: ';' or space): "
 msgstr ""
 
-#: src/interface.c:778
+#: src/interface.c:892
 msgid ""
 "GTKTerm is a simple GTK+ terminal used to communicate with the serial port."
 msgstr ""
 
-#: src/interface.c:830
+#: src/interface.c:952
 msgid "Break signal sent!"
 msgstr ""
 
-#: src/interface.c:936
+#: src/interface.c:1075
 msgid "0 byte(s) sent!"
 msgstr ""
 
-#: src/interface.c:950
+#: src/interface.c:1091
 msgid "Improper formatted hex input, 0 bytes sent!"
 msgstr ""
 
-#: src/interface.c:961
+#: src/interface.c:1103
 #, c-format
 msgid "%d byte(s) sent!"
 msgstr ""
@@ -349,24 +424,62 @@ msgstr ""
 msgid "Filename error\n"
 msgstr ""
 
-#: src/logging.c:88
+#: src/logging.c:89
 msgid "Log file selection"
 msgstr ""
 
-#: src/logging.c:184
+#: src/logging.c:188
 msgid "Failed to log data\n"
 msgstr ""
 
-#: src/macros.c:144
+#: src/macro_panel.c:341
+msgid "Polling Mode"
+msgstr ""
+
+#: src/macro_panel.c:353
+msgid "Period (ms)"
+msgstr ""
+
+#: src/macro_panel.c:592 src/macro_panel.c:623 src/macro_panel.c:657
+#: src/macro_panel.c:986 src/macros.c:388
+msgid "General"
+msgstr ""
+
+#: src/macro_panel.c:616
+msgid ""
+"No macros defined\n"
+"with labels"
+msgstr ""
+
+#: src/macro_panel.c:674
+#, c-format
+msgid ""
+"Shortcut: %s\n"
+"Action: %s"
+msgstr ""
+
+#: src/macros.c:85 src/macros.c:120
 #, c-format
 msgid "Macro \"%s\" sent!"
 msgstr ""
 
-#: src/macros.c:275
+#: src/macros.c:319
+msgid "Label"
+msgstr ""
+
+#: src/macros.c:326
 msgid "Shortcut"
 msgstr ""
 
-#: src/macros.c:432
+#: src/macros.c:335
+msgid "Action"
+msgstr ""
+
+#: src/macros.c:346
+msgid "Tab"
+msgstr ""
+
+#: src/macros.c:786
 msgid ""
 "The \"action\" field of a macro is the data to be sent on the port. Text can "
 "be entered, but also special chars, like \\n, \\t, \\r, etc. You can also "
@@ -377,268 +490,375 @@ msgid ""
 "\t\"Hello\\0A\" does the same thing but the LF is entered in hexadecimal"
 msgstr ""
 
-#: src/macros.c:452
+#: src/macros.c:885
+msgid "List"
+msgstr ""
+
+#: src/macros.c:894
+msgid "Display"
+msgstr ""
+
+#: src/macros.c:903
+msgid "Value"
+msgstr ""
+
+#: src/macros.c:1037
+msgid "_Add Entry"
+msgstr ""
+
+#: src/macros.c:1041
+msgid "_Delete Entry"
+msgstr ""
+
+#: src/macros.c:1049 src/macros.c:1126
+msgid "Move _Up"
+msgstr ""
+
+#: src/macros.c:1053 src/macros.c:1130
+msgid "Move _Down"
+msgstr ""
+
+#: src/macros.c:1072
 msgid "Configure Macros"
 msgstr ""
 
-#: src/macros.c:489
+#: src/macros.c:1106
 msgid "_Add"
 msgstr ""
 
-#: src/macros.c:493
+#: src/macros.c:1110
 msgid "_Delete"
 msgstr ""
 
-#: src/macros.c:497
+#: src/macros.c:1114
 msgid "_Capture Shortcut"
 msgstr ""
 
-#: src/parsecfg.c:355
-#, c-format
-msgid "Cannot open configuration file `%s'.\n"
-msgstr ""
-
-#: src/parsecfg.c:358
-#, c-format
-msgid "Cannot create configuration file `%s'.\n"
+#: src/macros.c:1138
+msgid "Lists"
 msgstr ""
 
 #: src/parsecfg.c:361
 #, c-format
-msgid ""
-"%s(%d): %s\n"
-"Syntax error\n"
+msgid "Cannot open configuration file `%s'.\n"
 msgstr ""
 
 #: src/parsecfg.c:364
 #, c-format
-msgid ""
-"%s(%d): %s\n"
-"Unrecognized parameter\n"
+msgid "Cannot create configuration file `%s'.\n"
 msgstr ""
 
 #: src/parsecfg.c:367
 #, c-format
 msgid ""
 "%s(%d): %s\n"
-"Internal error\n"
+"Syntax error\n"
 msgstr ""
 
 #: src/parsecfg.c:370
 #, c-format
 msgid ""
 "%s(%d): %s\n"
-"Invalid number\n"
+"Unrecognized parameter\n"
 msgstr ""
 
 #: src/parsecfg.c:373
 #, c-format
 msgid ""
 "%s(%d): %s\n"
-"Out of range\n"
+"Internal error\n"
 msgstr ""
 
 #: src/parsecfg.c:376
 #, c-format
 msgid ""
 "%s(%d): %s\n"
-"Cannot allocate memory.\n"
+"Invalid number\n"
 msgstr ""
 
 #: src/parsecfg.c:379
 #, c-format
 msgid ""
 "%s(%d): %s\n"
-"It must be specified TRUE or FALSE.\n"
+"Out of range\n"
 msgstr ""
 
 #: src/parsecfg.c:382
 #, c-format
 msgid ""
 "%s(%d): %s\n"
-"The section name is already used.\n"
+"Cannot allocate memory.\n"
 msgstr ""
 
 #: src/parsecfg.c:385
+#, c-format
+msgid ""
+"%s(%d): %s\n"
+"It must be specified TRUE or FALSE.\n"
+msgstr ""
+
+#: src/parsecfg.c:388
+#, c-format
+msgid ""
+"%s(%d): %s\n"
+"The section name is already used.\n"
+msgstr ""
+
+#: src/parsecfg.c:391
 #, c-format
 msgid ""
 "%s(%d)\n"
 "There is no closing bracket.\n"
 msgstr ""
 
-#: src/parsecfg.c:390
+#: src/parsecfg.c:396
 #, c-format
 msgid ""
 "%s(%d): %s\n"
 "Unexplained error\n"
 msgstr ""
 
-#: src/serial.c:154
+#: src/script_panel.c:227
+msgid "Horizontal  (éditeur en haut)"
+msgstr ""
+
+#: src/script_panel.c:228
+msgid "Vertical  (éditeur à gauche)"
+msgstr ""
+
+#: src/script_panel.c:368
+msgid "Couleurs de l'éditeur de script"
+msgstr ""
+
+#: src/script_panel.c:371
+msgid "_Réinitialiser"
+msgstr ""
+
+#: src/script_panel.c:372
+msgid "_Annuler"
+msgstr ""
+
+#: src/script_panel.c:373
+msgid "_Appliquer"
+msgstr ""
+
+#: src/script_panel.c:384
+msgid "Fond de l'éditeur"
+msgstr ""
+
+#: src/script_panel.c:385
+msgid "Texte (défaut)"
+msgstr ""
+
+#: src/script_panel.c:386
+msgid "Commentaires"
+msgstr ""
+
+#: src/script_panel.c:387
+msgid "Mots-clés"
+msgstr ""
+
+#: src/script_panel.c:388
+msgid "Chaînes de caractères"
+msgstr ""
+
+#: src/script_panel.c:389
+msgid "Nombres"
+msgstr ""
+
+#: src/script_panel.c:390
+msgid "Fonctions"
+msgstr ""
+
+#: src/script_panel.c:391
+msgid "N° de ligne — texte"
+msgstr ""
+
+#: src/script_panel.c:392
+msgid "N° de ligne — fond"
+msgstr ""
+
+#: src/script_panel.c:460
+msgid "[Script finished]\n"
+msgstr ""
+
+#: src/script_panel.c:506
+msgid "Cannot read file"
+msgstr ""
+
+#: src/script_panel.c:518
+msgid "Open Lua Script"
+msgstr ""
+
+#: src/script_panel.c:520 src/script_panel.c:552
+msgid "_Cancel"
+msgstr ""
+
+#: src/script_panel.c:521
+msgid "_Open"
+msgstr ""
+
+#: src/script_panel.c:525
+msgid "Lua scripts (*.lua)"
+msgstr ""
+
+#: src/script_panel.c:530
+msgid "All files"
+msgstr ""
+
+#: src/script_panel.c:550
+msgid "Save Lua Script"
+msgstr ""
+
+#: src/script_panel.c:553
+msgid "_Save"
+msgstr ""
+
+#: src/script_panel.c:607
+msgid "Open"
+msgstr ""
+
+#: src/script_panel.c:621
+msgid "Run"
+msgstr ""
+
+#: src/script_panel.c:638
+msgid "Couleurs..."
+msgstr ""
+
+#: src/term_config.c:671
 #, c-format
-msgid "Cannot open %s: %s\n"
-msgstr ""
-
-#: src/serial.c:167
-msgid ""
-"Cannot lock port! The serial port may currently be in use by another "
-"program.\n"
-msgstr ""
-
-#: src/serial.c:238
-msgid "Arbitrary baud rates not supported"
-msgstr ""
-
-#: src/serial.c:365
-msgid "Control signals read set signals"
-msgstr ""
-
-#: src/serial.c:377
-msgid "DTR write"
-msgstr ""
-
-#: src/serial.c:387
-msgid "RTS write"
-msgstr ""
-
-#: src/serial.c:411
-msgid "Control signals read lis_sig"
-msgstr ""
-
-#: src/serial.c:465
-msgid "No open port"
-msgstr ""
-
-#: src/term_config.c:216
 msgid ""
 "No serial devices found!\n"
 "\n"
 "Searched the following device path patterns:\n"
-"\t/dev/ttyS*\n"
-"\t/dev/tts/*\n"
-"\t/dev/ttyUSB*\n"
-"\t/dev/ttyACM*\n"
-"\t/dev/usb/tts/*\n"
-"\n"
+"%s\n"
 "Enter a different device path in the 'Port' box.\n"
 msgstr ""
 
-#: src/term_config.c:226
-msgid "Configuration"
+#: src/term_config.c:691
+msgid "Transport"
 msgstr ""
 
-#: src/term_config.c:230
-msgid "Serial port"
+#: src/term_config.c:699
+msgid "Type:"
 msgstr ""
 
-#: src/term_config.c:236
+#: src/term_config.c:703
+msgid "Serial"
+msgstr ""
+
+#: src/term_config.c:704
+msgid "TCP Client"
+msgstr ""
+
+#: src/term_config.c:705
+msgid "TCP Server"
+msgstr ""
+
+#: src/term_config.c:711
+msgid "TCP"
+msgstr ""
+
+#: src/term_config.c:719
+msgid "Host:"
+msgstr ""
+
+#: src/term_config.c:721 src/term_config.c:757
 msgid "Port:"
 msgstr ""
 
-#: src/term_config.c:238
+#: src/term_config.c:749
+msgid "Serial port"
+msgstr ""
+
+#: src/term_config.c:759
 msgid "Baud Rate:"
 msgstr ""
 
-#: src/term_config.c:240
+#: src/term_config.c:761
 msgid "Parity:"
 msgstr ""
 
-#: src/term_config.c:387
+#: src/term_config.c:853
 msgid "Bits:"
 msgstr ""
 
-#: src/term_config.c:389
+#: src/term_config.c:855
 msgid "Stopbits:"
 msgstr ""
 
-#: src/term_config.c:391
+#: src/term_config.c:857
 msgid "Flow control:"
 msgstr ""
 
-#. create an expander widget to hide the 'Advanced features'
-#: src/term_config.c:442
+#: src/term_config.c:914
 msgid "Advanced Configuration Options"
 msgstr ""
 
-#: src/term_config.c:447
+#: src/term_config.c:919
 msgid "ASCII file transfer"
 msgstr ""
 
-#: src/term_config.c:453
+#: src/term_config.c:927
 msgid "End of line delay (milliseconds):"
 msgstr ""
 
-#: src/term_config.c:469
+#: src/term_config.c:947
 msgid "Wait for this special character before passing to next line:"
 msgstr ""
 
-#: src/term_config.c:482
+#: src/term_config.c:960
 msgid "RS-485 half-duplex parameters (RTS signal used to send)"
 msgstr ""
 
-#: src/term_config.c:489
+#: src/term_config.c:968
 msgid "Time with RTS 'on' before transmit (milliseconds):"
 msgstr ""
 
-#: src/term_config.c:491
+#: src/term_config.c:970
 msgid "Time with RTS 'on' after transmit (milliseconds):"
 msgstr ""
 
-#: src/term_config.c:509
-msgid "OK"
-msgstr ""
-
-#: src/term_config.c:616
-msgid "Load configuration"
-msgstr ""
-
-#: src/term_config.c:626
-msgid "Delete configuration"
-msgstr ""
-
-#: src/term_config.c:656 src/term_config.c:921
-msgid ""
-"Cannot read configuration file!\n"
-"Config file may contain invalid parameter.\n"
-msgstr ""
-
-#: src/term_config.c:662
-msgid "Configurations"
-msgstr ""
-
-#: src/term_config.c:729
-msgid "Save configuration"
-msgstr ""
-
-#: src/term_config.c:741
-msgid "Configuration name: "
-msgstr ""
-
-#: src/term_config.c:775
+#: src/term_config.c:1146 src/term_config.c:1407
 msgid ""
 "Cannot save configuration file!\n"
 "Config file may contain invalid parameter.\n"
 msgstr ""
 
-#: src/term_config.c:795
+#: src/term_config.c:1168 src/term_config.c:1429
 msgid "Cannot overwrite section!"
 msgstr ""
 
-#: src/term_config.c:800
+#: src/term_config.c:1175 src/term_config.c:1436
 msgid "Cannot read configuration file!"
 msgstr ""
 
-#: src/term_config.c:810
-#, c-format
-msgid "Configuration [%s] saved\n"
+#: src/term_config.c:1200
+msgid "Load macros file"
 msgstr ""
 
-#: src/term_config.c:829
+#: src/term_config.c:1284 src/term_config.c:1554
+msgid ""
+"Cannot read configuration file!\n"
+"Config file may contain invalid parameter.\n"
+msgstr ""
+
+#: src/term_config.c:1290
+msgid "Configurations"
+msgstr ""
+
+#: src/term_config.c:1369
+msgid "Configuration name: "
+msgstr ""
+
+#: src/term_config.c:1463
 msgid ""
 "Cannot write configuration file!\n"
 "Config file may contain invalid parameter.\n"
 msgstr ""
 
-#: src/term_config.c:844
+#: src/term_config.c:1478
 #, c-format
 msgid ""
 "<b>Section [%s] already exists.</b>\n"
@@ -646,53 +866,284 @@ msgid ""
 "Do you want to overwrite it ?"
 msgstr ""
 
-#: src/term_config.c:904
+#: src/term_config.c:1538
 msgid "Cannot delete section!"
 msgstr ""
 
-#: src/term_config.c:1095
+#: src/term_config.c:1724
 #, c-format
 msgid "No section \"%s\" in configuration file\n"
 msgstr ""
 
-#: src/term_config.c:1140
+#: src/term_config.c:1755
 #, c-format
-msgid "Baudrate %d may not be supported by all hardware"
+msgid "Baud rate %u may not be supported by all hardware"
 msgstr ""
 
-#: src/term_config.c:1147
+#: src/term_config.c:1762
 #, c-format
 msgid ""
 "Invalid number of stop-bits: %d\n"
 "Falling back to default number of stop-bits number: %d\n"
 msgstr ""
 
-#: src/term_config.c:1155
+#: src/term_config.c:1770
 #, c-format
 msgid ""
 "Invalid number of bits: %d\n"
 "Falling back to default number of bits: %d\n"
 msgstr ""
 
-#: src/term_config.c:1163
+#: src/term_config.c:1778
 #, c-format
 msgid ""
 "Invalid delay: %d ms\n"
 "Falling back to default delay: %d ms\n"
 msgstr ""
 
-#: src/term_config.c:1193
+#: src/term_config.c:1808
 #, c-format
 msgid ""
 "Configuration file (%s) with\n"
 "[default] configuration has been created.\n"
 msgstr ""
 
-#: src/term_config.c:1467
+#: src/term_config.c:2108
 #, c-format
 msgid "Cannot find section %s\n"
 msgstr ""
 
-#: src/term_config.c:1507
+#: src/term_config.c:2151
 msgid "Main Window"
+msgstr ""
+
+#: src/transport.c:244
+#, c-format
+msgid "Cannot open %s: %s\n"
+msgstr ""
+
+#: src/transport.c:254
+#, c-format
+msgid "%s is not a valid serial port\n"
+msgstr ""
+
+#: src/transport.c:266
+msgid ""
+"Cannot lock port! The serial port may currently be in use by another "
+"program.\n"
+msgstr ""
+
+#: src/transport.c:280
+#, c-format
+msgid "Unable to set baud rate %u"
+msgstr ""
+
+#: src/transport.c:375 src/transport.c:450
+#, c-format
+msgid "Cannot connect to %s:%s: %s\n"
+msgstr ""
+
+#: src/transport.c:414
+#, c-format
+msgid "Cannot resolve %s: %s\n"
+msgstr ""
+
+#: src/transport.c:489
+#, c-format
+msgid "Accept error: %s\n"
+msgstr ""
+
+#: src/transport.c:543
+#, c-format
+msgid "Cannot resolve port %s: %s\n"
+msgstr ""
+
+#: src/transport.c:555
+#, c-format
+msgid "Cannot resolve %s:%s: %s\n"
+msgstr ""
+
+#: src/transport.c:567
+#, c-format
+msgid "Cannot create socket: %s\n"
+msgstr ""
+
+#: src/transport.c:591
+msgid ""
+"\n"
+"Use: sudo setcap cap_net_bind_service=+ep gtkterm"
+msgstr ""
+
+#: src/transport.c:592
+#, c-format
+msgid "Cannot bind to %s:%s: %s%s\n"
+msgstr ""
+
+#: src/transport.c:607
+#, c-format
+msgid "Cannot listen: %s\n"
+msgstr ""
+
+#: src/transport.c:792
+msgid "Control signals read lis_sig"
+msgstr ""
+
+#: src/transport.c:819
+msgid "Control signals read set signals"
+msgstr ""
+
+#: src/transport.c:830
+msgid "DTR write"
+msgstr ""
+
+#: src/transport.c:839
+msgid "RTS write"
+msgstr ""
+
+#: src/transport.c:851 src/transport.c:872 src/transport.c:886
+msgid "No open port"
+msgstr ""
+
+#: src/update.c:106
+msgid "No terminal emulator found. Please install xterm or similar."
+msgstr ""
+
+#: src/update.c:123
+#, c-format
+msgid ""
+"Failed to launch update terminal:\n"
+"%s"
+msgstr ""
+
+#: src/update.c:130
+msgid ""
+"The update is running in a terminal window.\n"
+"Follow the instructions there and restart GTKTerm when done."
+msgstr ""
+
+#: src/update.c:217
+msgid "This version is installed."
+msgstr ""
+
+#: src/update.c:220
+msgid "Warnings"
+msgstr ""
+
+#: src/update.c:240
+msgid "You are leaving these versions:"
+msgstr ""
+
+#: src/update.c:256
+#, c-format
+msgid "Update to %s"
+msgstr ""
+
+#: src/update.c:258
+#, c-format
+msgid "Roll back to %s"
+msgstr ""
+
+#: src/update.c:260
+#, c-format
+msgid "Reinstall %s"
+msgstr ""
+
+#: src/update.c:292
+#, c-format
+msgid "%s — latest, installed"
+msgstr ""
+
+#: src/update.c:294
+#, c-format
+msgid "%s — latest"
+msgstr ""
+
+#: src/update.c:296
+#, c-format
+msgid "%s — installed"
+msgstr ""
+
+#: src/update.c:315
+msgid "No published version found."
+msgstr ""
+
+#: src/update.c:318
+#, c-format
+msgid "A new version is available (%s)."
+msgstr ""
+
+#: src/update.c:324
+msgid "GTKTerm is up to date."
+msgstr ""
+
+#: src/update.c:343
+#, c-format
+msgid "Could not check for updates: %s"
+msgstr ""
+
+#: src/update.c:369
+msgid "Please enter the URL of the source repository."
+msgstr ""
+
+#: src/update.c:385
+msgid "Checking…"
+msgstr ""
+
+#: src/update.c:423
+#, c-format
+msgid "Install %s?"
+msgstr ""
+
+#: src/update.c:425
+msgid "See the warnings above."
+msgstr ""
+
+#: src/update.c:497
+msgid "Updates"
+msgstr ""
+
+#: src/update.c:506
+msgid "Installed version:"
+msgstr ""
+
+#: src/update.c:513
+msgid "Update source:"
+msgstr ""
+
+#: src/update.c:521
+msgid "Check for updates at startup"
+msgstr ""
+
+#: src/update.c:524
+msgid "Check now"
+msgstr ""
+
+#: src/update.c:529
+msgid "Version:"
+msgstr ""
+
+#: src/update.c:548
+msgid "Skip this version"
+msgstr ""
+
+#: src/update.c:549
+msgid "Install"
+msgstr ""
+
+#: src/update.c:551
+msgid "Close"
+msgstr ""
+
+#: src/update_fetch.c:205
+#, c-format
+msgid "git failed (exit status %d)"
+msgstr ""
+
+#: src/update_fetch.c:247
+msgid "No update source URL."
+msgstr ""
+
+#: src/update_fetch.c:253
+#, c-format
+msgid "Invalid update source URL: %s"
 msgstr ""

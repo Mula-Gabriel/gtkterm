@@ -98,6 +98,7 @@ gchar **socket_port;
 gchar **update_url_cfg;
 gint *update_check_startup_cfg;
 gchar **update_prefix_cfg;
+gchar **update_skipped_version_cfg;
 
 
 cfgStruct cfg[] =
@@ -139,6 +140,7 @@ cfgStruct cfg[] =
 	{"update_url", CFG_STRING, &update_url_cfg},
 	{"update_check_startup", CFG_BOOL, &update_check_startup_cfg},
 	{"update_prefix", CFG_STRING, &update_prefix_cfg},
+	{"update_skipped_version", CFG_STRING, &update_skipped_version_cfg},
 	{NULL, CFG_END, NULL}
 };
 
@@ -1655,6 +1657,11 @@ gint Load_configuration_from_file(gchar *config_name)
 			else
 				g_strlcpy(config.update_prefix, "/usr/local", sizeof(config.update_prefix));
 
+			if(update_skipped_version_cfg != NULL && update_skipped_version_cfg[i] != NULL)
+				g_strlcpy(config.update_skipped_version, update_skipped_version_cfg[i], sizeof(config.update_skipped_version));
+			else
+				config.update_skipped_version[0] = '\0';
+
 		g_free(term_conf.font);
 			term_conf.font = (font[i] != NULL) ? g_strdup(font[i]) : g_strdup(DEFAULT_FONT);
 
@@ -1833,6 +1840,7 @@ void Hard_default_configuration(void)
 	g_strlcpy(config.update_url, "https://github.com/Mula-Gabriel/gtkterm.git", sizeof(config.update_url));
 	config.update_check_startup = TRUE;
 	g_strlcpy(config.update_prefix, "/usr/local", sizeof(config.update_prefix));
+	config.update_skipped_version[0] = '\0';
 
 	term_conf.font = g_strdup_printf(DEFAULT_FONT);
 
@@ -2034,6 +2042,7 @@ void Copy_configuration(int pos)
 	g_free(string);
 
 	cfgStoreValue(cfg, "update_prefix", config.update_prefix, CFG_INI, pos);
+	cfgStoreValue(cfg, "update_skipped_version", config.update_skipped_version, CFG_INI, pos);
 
 	const gchar *mfp = macros_file_get_path();
 	if (mfp)
