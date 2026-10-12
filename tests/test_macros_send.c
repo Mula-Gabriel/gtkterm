@@ -262,8 +262,8 @@ test_enregistrement_echec_une_seule_boite(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_false(gt_macros_save_file(macros, path, TRUE));
-	g_assert_false(gt_macros_save_file(macros, path, TRUE));
+	g_assert_cmpint(gt_macros_save_file(macros, path, TRUE, FALSE), ==, GT_MACROS_FAILED);
+	g_assert_cmpint(gt_macros_save_file(macros, path, TRUE, FALSE), ==, GT_MACROS_FAILED);
 	g_assert_cmpint(stub_count("message"), ==, 1);
 	desinstaller();
 	test_rmdir(dir);
@@ -280,11 +280,11 @@ test_enregistrement_explicite_reaffiche(void)
 
 	installer_macros();
 	stub_reset();
-	g_assert_false(gt_macros_save_file(macros, path, TRUE));
-	g_assert_false(gt_macros_save_file(macros, path, TRUE));
+	g_assert_cmpint(gt_macros_save_file(macros, path, TRUE, FALSE), ==, GT_MACROS_FAILED);
+	g_assert_cmpint(gt_macros_save_file(macros, path, TRUE, FALSE), ==, GT_MACROS_FAILED);
 	g_assert_cmpint(stub_count("message"), ==, 1);
 	gt_macros_forget_save_error(macros);
-	g_assert_false(gt_macros_save_file(macros, path, TRUE));
+	g_assert_cmpint(gt_macros_save_file(macros, path, TRUE, FALSE), ==, GT_MACROS_FAILED);
 	g_assert_cmpint(stub_count("message"), ==, 2);
 	desinstaller();
 	test_rmdir(dir);
@@ -321,7 +321,7 @@ test_chargement_profil_abime(void)
 	iterer_boucle();
 	g_assert_cmpint(stub_count("message"), ==, 1);
 	g_assert_nonnull(strstr(stub_last("message"), "m.ini"));
-	g_assert_true(gt_macros_save_file(macros, NULL, TRUE));
+	g_assert_cmpint(gt_macros_save_file(macros, NULL, TRUE, FALSE), ==, GT_MACROS_SAVED);
 	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
 	g_assert_true(g_file_get_contents(copie, &texte, NULL, NULL));
 	g_assert_cmpstr(texte, ==, original);
@@ -343,7 +343,7 @@ test_enregistrement_puis_relecture(void)
 	gchar *path = g_build_filename(dir, "m.ini", NULL);
 
 	installer_macros();
-	g_assert_true(gt_macros_save_file(macros, path, FALSE));
+	g_assert_cmpint(gt_macros_save_file(macros, path, FALSE, FALSE), ==, GT_MACROS_SAVED);
 	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
 	desinstaller();
 	g_assert_true(gt_macros_load_file(macros, path, FALSE));
@@ -408,10 +408,283 @@ test_deux_instances(void)
 	g_object_unref(l2);
 }
 
+static gint compteur_edited;
+
+static void
+rappel_edited(gpointer data)
+{
+	compteur_edited++;
+}
+
+/* Macro « N%d; » avec la valeur par défaut « 5 » */
+static guint
+installer_macro_n(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint id = gt_macro_set_append(set, "N", NULL, "N%d;", "");
+
+	g_assert_true(gt_macro_set_set_arg(set, id, 0, "5"));
+	gt_macros_replace_set(macros, set);
+	return id;
+}
+
+static void
+verifier_envoi(guint id, const gchar *attendu)
+{
+	gchar *s;
+
+	stub_reset();
+	g_assert_true(gt_macros_send(macros, id, NULL, -1));
+	s = envoye();
+	g_assert_cmpstr(s, ==, attendu);
+	g_free(s);
+}
+
+static void
+test_usage_prioritaire(void)
+{
+	guint id = installer_macro_n();
+
+	verifier_envoi(id, "N5;");
+	g_assert_false(gt_macros_has_usage(macros, id));
+	gt_macros_set_usage_arg(macros, id, 0, "9");
+	g_assert_true(gt_macros_has_usage(macros, id));
+	verifier_envoi(id, "N9;");
+	g_assert_cmpstr(gt_macro_set_find(gt_macros_get_set(macros), id)->args[0], ==, "5");
+	gt_macros_reset_usage(macros, id);
+	verifier_envoi(id, "N5;");
+	/* Indice hors limites : rien */
+	gt_macros_set_usage_arg(macros, id, 3, "x");
+	g_assert_false(gt_macros_has_usage(macros, id));
+	desinstaller();
+}
+
+static void
+test_usage_jamais_enregistre(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macros-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	gchar *texte = NULL;
+	guint id = installer_macro_n();
+
+	g_assert_cmpint(gt_macros_save_file(macros, path, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	g_assert_true(gt_macros_load_file(macros, path, FALSE));
+	id = gt_macro_set_get(gt_macros_get_set(macros), 0)->id;
+	gt_macros_set_usage_arg(macros, id, 0, "9");
+	g_assert_true(gt_macros_has_usage(macros, id));
+	g_assert_cmpint(gt_macros_save_file(macros, NULL, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	g_assert_true(g_file_get_contents(path, &texte, NULL, NULL));
+	g_assert_nonnull(strstr(texte, "args=5;"));
+	g_assert_null(strstr(texte, "args=9"));
+	g_free(texte);
+	desinstaller();
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+static void
+test_usage_efface_au_remplacement(void)
+{
+	guint id = installer_macro_n();
+
+	gt_macros_set_usage_arg(macros, id, 0, "9");
+	g_assert_true(gt_macros_has_usage(macros, id));
+	gt_macros_replace_set(macros, gt_macro_set_copy(gt_macros_get_set(macros)));
+	g_assert_false(gt_macros_has_usage(macros, id));
+	g_assert_false(gt_macros_has_usage(macros, gt_macro_set_get(gt_macros_get_set(macros), 0)->id));
+	desinstaller();
+}
+
+static void
+test_usage_nombre_change(void)
+{
+	guint id = installer_macro_n();
+	GtMacroEdit ligne = { .id = id, .label = "N", .shortcut = "", .action = "N%d %d", .tab = "", .args = NULL };
+	const gchar *const *args;
+
+	gt_macros_set_usage_arg(macros, id, 0, "9");
+	args = gt_macros_get_args(macros, id);
+	g_assert_nonnull(args);
+	g_assert_cmpstr(args[0], ==, "9");
+	gt_macro_set_apply_edits(gt_macros_get_set(macros), &ligne, 1, NULL);
+	g_assert_null(gt_macros_get_args(macros, id));
+	desinstaller();
+}
+
+/* Application des modifications de l'éditeur (OK de Configure Macros) : une macro dont les valeurs par défaut changent perd ses valeurs d'usage
+ * (sinon elles masqueraient la nouvelle valeur par défaut) ; une macro dont les valeurs par défaut ne changent pas les garde. */
+static void
+test_editeur_efface_usage(void)
+{
+	guint id = installer_macro_n();
+	guint id2 = gt_macro_set_append(gt_macros_get_set(macros), "M", NULL, "M%d;", "");
+	const gchar *const sept[] = { "7", NULL }, *const un[] = { "1", NULL };
+	GtMacroEdit lignes[] = {
+		{ .id = id, .label = "N", .shortcut = "", .action = "N%d;", .tab = "", .args = sept },
+		{ .id = id2, .label = "M", .shortcut = "", .action = "M%d;", .tab = "", .args = un },
+	};
+
+	g_assert_true(gt_macro_set_set_arg(gt_macros_get_set(macros), id2, 0, "1"));
+	gt_macros_set_usage_arg(macros, id, 0, "9");
+	gt_macros_set_usage_arg(macros, id2, 0, "4");
+	gt_macros_apply_edits(macros, lignes, G_N_ELEMENTS(lignes), NULL);
+	g_assert_false(gt_macros_has_usage(macros, id));
+	verifier_envoi(id, "N7;");
+	g_assert_true(gt_macros_has_usage(macros, id2));
+	verifier_envoi(id2, "M4;");
+	desinstaller();
+}
+
+static void
+test_integre_aucune_ecriture(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macros-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	gchar *autre = g_build_filename(dir, "autre.ini", NULL);
+
+	installer_macro_n();
+	g_assert_cmpint(gt_macros_save_file(macros, path, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	g_assert_true(gt_macros_load_file(macros, path, FALSE));
+	g_assert_nonnull(gt_macros_get_path(macros));
+	gt_macros_set_embedded(macros, TRUE);
+	g_assert_true(gt_macros_is_embedded(macros));
+	g_assert_null(gt_macros_get_path(macros));
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*no macros file*");
+	g_assert_cmpint(gt_macros_save_file(macros, NULL, FALSE, FALSE), ==, GT_MACROS_FAILED);
+	g_test_assert_expected_messages();
+	g_assert_cmpint(gt_macros_save_file(macros, autre, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	g_assert_true(g_file_test(autre, G_FILE_TEST_EXISTS));
+	g_assert_null(gt_macros_get_path(macros));
+	desinstaller();
+	g_assert_true(gt_macros_load_file(macros, autre, FALSE));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, 1);
+	g_assert_null(gt_macros_get_path(macros));
+	gt_macros_set_embedded(macros, FALSE);
+	desinstaller();
+	test_rmdir(dir);
+	g_free(path);
+	g_free(autre);
+	g_free(dir);
+}
+
+static void
+test_conflit(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macros-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	gchar *texte = NULL;
+
+	installer_macro_n();
+	g_assert_cmpint(gt_macros_save_file(macros, path, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	g_assert_cmpint(gt_macros_save_file(macros, NULL, FALSE, FALSE), ==, GT_MACROS_SAVED);	/* identité reprise après l'écriture */
+	g_assert_true(g_file_set_contents(path, "[gtkterm-macros]\nversion=2\n# tiers\n", -1, NULL));
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*changed on disk*");
+	g_assert_cmpint(gt_macros_save_file(macros, NULL, FALSE, FALSE), ==, GT_MACROS_CONFLICT);
+	g_test_assert_expected_messages();
+	g_assert_true(g_file_get_contents(path, &texte, NULL, NULL));
+	g_assert_nonnull(strstr(texte, "# tiers"));
+	g_free(texte);
+	g_assert_cmpint(gt_macros_save_file(macros, NULL, FALSE, TRUE), ==, GT_MACROS_SAVED);
+	g_assert_true(g_file_get_contents(path, &texte, NULL, NULL));
+	g_assert_null(strstr(texte, "# tiers"));
+	g_free(texte);
+	/* Nouveau tiers, puis relecture : l'identité est reprise */
+	g_assert_true(g_file_set_contents(path, "[gtkterm-macros]\nversion=2\n[macro:1]\naction=ZZ\n", -1, NULL));
+	g_assert_true(gt_macros_reload(macros));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, 1);
+	g_assert_cmpstr(gt_macro_set_get(gt_macros_get_set(macros), 0)->action, ==, "ZZ");
+	g_assert_cmpint(gt_macros_save_file(macros, NULL, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	desinstaller();
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+/* Aucun fichier courant (onglet dont le profil n'a pas chargé de macros) : la cible est le fichier par défaut ; présent et non vide, il n'est jamais
+ * réécrit en silence (conflit, comme un fichier changé sur le disque) ; Reload le lit et en fait le fichier courant ; forcé (Overwrite), il est écrit ;
+ * absent ou vide, il est écrit sans question. */
+static void
+test_defaut_existant_conflit(void)
+{
+	GtMacros *m = gt_macros_new(stub_link_default(), NULL);
+	gchar *defaut = macros_file_default_path();
+	gchar *dossier = g_path_get_dirname(defaut);
+	const gchar *tiers = "[gtkterm-macros]\nversion=2\n\n[macro:1]\nlabel=A\naction=A\n";
+	gchar *texte = NULL;
+
+	g_assert_cmpint(g_mkdir_with_parents(dossier, 0700), ==, 0);
+	g_assert_true(g_file_set_contents(defaut, tiers, -1, NULL));
+	gt_macro_set_append(gt_macros_get_set(m), "B", NULL, "B", "");
+	g_assert_null(gt_macros_get_path(m));
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*not overwritten*");
+	g_assert_cmpint(gt_macros_save_file(m, NULL, FALSE, FALSE), ==, GT_MACROS_CONFLICT);
+	g_test_assert_expected_messages();
+	g_assert_true(g_file_get_contents(defaut, &texte, NULL, NULL));
+	g_assert_cmpstr(texte, ==, tiers);
+	g_clear_pointer(&texte, g_free);
+	g_assert_null(gt_macros_get_path(m));
+	/* Reload : le fichier par défaut est lu et devient le fichier courant */
+	g_assert_true(gt_macros_reload(m));
+	g_assert_cmpstr(gt_macros_get_path(m), ==, defaut);
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(m)), ==, 1);
+	g_assert_cmpstr(gt_macro_set_get(gt_macros_get_set(m), 0)->label, ==, "A");
+	gt_macros_free(m);
+	/* Overwrite (forcé) : écrit, devient le fichier courant */
+	m = gt_macros_new(stub_link_default(), NULL);
+	gt_macro_set_append(gt_macros_get_set(m), "B", NULL, "B", "");
+	g_assert_cmpint(gt_macros_save_file(m, NULL, TRUE, TRUE), ==, GT_MACROS_SAVED);
+	g_assert_cmpstr(gt_macros_get_path(m), ==, defaut);
+	g_assert_true(g_file_get_contents(defaut, &texte, NULL, NULL));
+	g_assert_nonnull(strstr(texte, "label=B"));
+	g_assert_null(strstr(texte, "label=A"));
+	g_clear_pointer(&texte, g_free);
+	gt_macros_free(m);
+	/* Fichier par défaut vide, puis absent : écrit sans question */
+	g_assert_true(g_file_set_contents(defaut, "", -1, NULL));
+	m = gt_macros_new(stub_link_default(), NULL);
+	gt_macro_set_append(gt_macros_get_set(m), "C", NULL, "C", "");
+	g_assert_cmpint(gt_macros_save_file(m, NULL, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	gt_macros_free(m);
+	g_assert_cmpint(g_unlink(defaut), ==, 0);
+	m = gt_macros_new(stub_link_default(), NULL);
+	gt_macro_set_append(gt_macros_get_set(m), "D", NULL, "D", "");
+	g_assert_cmpint(gt_macros_save_file(m, NULL, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	g_assert_true(g_file_get_contents(defaut, &texte, NULL, NULL));
+	g_assert_nonnull(strstr(texte, "label=D"));
+	g_free(texte);
+	gt_macros_free(m);
+	g_unlink(defaut);
+	g_free(dossier);
+	g_free(defaut);
+}
+
+static void
+test_edited(void)
+{
+	compteur_edited = 0;
+	gt_macros_set_edited_func(macros, rappel_edited, NULL);
+	gt_macros_changed(macros);
+	g_assert_cmpint(compteur_edited, ==, 1);
+	gt_macros_edited(macros);
+	g_assert_cmpint(compteur_edited, ==, 2);
+	gt_macros_replace_set(macros, gt_macro_set_new());
+	g_assert_cmpint(compteur_edited, ==, 3);
+	gt_macros_set_edited_func(macros, NULL, NULL);
+	gt_macros_edited(macros);
+	g_assert_cmpint(compteur_edited, ==, 3);
+}
+
 int
 main(int argc, char **argv)
 {
+	gchar *racine;
+	gint ret;
+
 	g_test_init(&argc, &argv, NULL);
+	racine = test_private_dirs();	/* HOME et XDG privés : le fichier de macros par défaut n'est jamais le vrai */
+	/* Garde-fou : le fichier de macros par défaut (écrit puis supprimé par un cas) ne doit jamais viser le vrai ~/.config */
+	g_assert_true(g_str_has_prefix(g_get_user_config_dir(), racine));
 	gt_app_ui_set(&table_enregistrement);
 	macros = gt_macros_new(stub_link_default(), NULL);
 	g_test_add_func("/macros_send/arguments-enregistres", test_arguments_enregistres);
@@ -430,5 +703,18 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_send/enregistrement-puis-relecture", test_enregistrement_puis_relecture);
 	g_test_add_func("/macros_send/polling-arrete-au-chargement", test_polling_arrete_au_chargement);
 	g_test_add_func("/macros_send/deux-instances", test_deux_instances);
-	return g_test_run();
+	g_test_add_func("/macros_send/usage-prioritaire", test_usage_prioritaire);
+	g_test_add_func("/macros_send/usage-jamais-enregistre", test_usage_jamais_enregistre);
+	g_test_add_func("/macros_send/usage-efface-au-remplacement", test_usage_efface_au_remplacement);
+	g_test_add_func("/macros_send/usage-nombre-change", test_usage_nombre_change);
+	g_test_add_func("/macros_send/editeur-efface-usage", test_editeur_efface_usage);
+	g_test_add_func("/macros_send/integre-aucune-ecriture", test_integre_aucune_ecriture);
+	g_test_add_func("/macros_send/conflit", test_conflit);
+	g_test_add_func("/macros_send/defaut-existant-conflit", test_defaut_existant_conflit);
+	g_test_add_func("/macros_send/edited", test_edited);
+	ret = g_test_run();
+	gt_macros_free(macros);
+	test_rmdir_recursive(racine);
+	g_free(racine);
+	return ret;
 }

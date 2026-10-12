@@ -69,7 +69,7 @@
   - Second click: stops the periodic sending
 - While actively polling, the button blinks to provide a visual indicator
 - For macros with format arguments, the argument values entered at start time are captured and reused for every subsequent send
-- The polling configuration (enabled state and period) is saved automatically to the macros file and restored at startup
+- The polling configuration (enabled state and period) is saved with the macros (macros file or project) and restored at startup
 
 10. Visual Separators in the Macro Panel
 - In the **action** field of a macro, use `[Label]%&` to insert a decorative separator in the panel instead of a button
@@ -87,7 +87,7 @@
 11. Input Validation with Visual Feedback
 - Numeric macro arguments (integer and float types) are validated on focus-out or Enter
 - If the value exceeds the type's range or contains invalid characters, the entry field turns red, bold, with a red border
-- Saved argument values are validated at startup and when loading a macros file
+- Default argument values are validated at startup and when loading a macros file or a project
 - Empty fields and string/list fields are always considered valid
 
 12. Lua Script Panel
@@ -95,7 +95,7 @@
 - Syntax highlighting powered by GtkSourceView 5 (Lua keywords, strings, numbers, comments, functions)
 - Toolbar buttons: **Open**, **Save**, **Run**, **Stop**, **Colors…**
 - **Run** executes the script in a background thread; **Stop** interrupts it at the next `gtkterm.sleep()` or `gtkterm.wait_for()` call
-- The last opened script file is saved and reloaded automatically at startup
+- Without a project, the last opened script file is saved and reloaded automatically at startup; in a project, the script text is part of the project
 - **Layout** — right-click anywhere on the divider or toolbar to toggle between:
   - *Horizontal* — editor on top, console on bottom
   - *Vertical* — editor on the left, console on the right
@@ -160,10 +160,38 @@ GTKTerm is a simple, graphical serial port terminal emulator for Linux and possi
 ### Tabs
 Each tab is a complete, independent GTKTerm session: its own port (serial or TCP), history, options (echo, CR/LF, timestamps, view), macros file and
 macro panel (polling keeps sending on the tab's own port while another tab is shown), Lua script panel (port 0 is the tab's port), log and file transfer.
-File › New tab (`<ctrl><shift>T`) opens the port dialog pre-filled with the active tab's settings; Cancel creates nothing. The tab bar only appears with
+Port › New port… (`<ctrl><shift>T`) opens the port dialog pre-filled with the active tab's settings; Cancel creates nothing. The tab bar only appears with
 two tabs or more; tabs can be reordered by dragging them. Closing a tab (its close button or `<ctrl><shift>W`) asks for confirmation only when a script is
 running or a file is being sent in it; the last tab cannot be closed. Menus, shortcuts and the Port, Terminal, profile and macro dialogs act on the active
-tab. The same serial port cannot be opened in two tabs (port lock, unless `--disable-port-lock`). Tabs are not restored at the next start.
+tab. The same serial port cannot be opened in two tabs (port lock, unless `--disable-port-lock`). Tabs are restored only through a project (see below); without one, GTKTerm starts with a single tab.
+
+### Projects
+A project is a single `.gtkterm` file that holds a whole workstation: every tab with its port and terminal settings, the layout of its page (panel visibility and separator positions), **a copy** of
+its macros and lists and **a copy** of the text of its Lua script. Nothing in the file points to a `.ini` or a `.lua`: copy or send the file and the whole workstation comes with it.
+
+- **Create:** File › New project starts a single tab with the `default` profile, no macros and no script, as « Untitled project ». Port › New port… then adds tabs (a new tab gets a copy of the active
+  tab's macros). File › Save project as… writes the file wherever you want; from ordinary tabs it turns them all into the tabs of the new project. The `.gtkterm` extension is added when the name typed
+  lacks it, and GTKTerm then asks before replacing an existing file of that name.
+- **Save:** File › Save project (without a file yet, it asks for one). Saving is always explicit. The window title shows `name • - tab` while the project has unsaved changes, `name - tab` otherwise.
+  Moving a separator, switching tab or typing in the terminal does not count as a change; changing a setting, a macro, a polling period, the script or the set of tabs does.
+- **Open:** File › Open project… (`<ctrl><shift>O`) replaces all the tabs by those of the file and opens their ports (a missing port keeps its tab; with auto-reconnect, the tab reconnects when the
+  device appears). A file that is unreadable, written by a newer version or damaged is refused as a whole and nothing is closed. If a script is running or a file is being sent, or if the current
+  project has unsaved changes, GTKTerm asks first (Save / Don't save / Cancel).
+- **Close:** File › Close project goes back to a single ordinary tab with the `default` profile and its macros file (or the default macros file). Closing the window with unsaved
+  changes asks the same question.
+- **Last project:** GTKTerm reopens the last project opened or saved when it starts, unless the command line gives a profile (`-c`) or port settings. A file that no longer exists is reported once and
+  forgotten; a file refused for another reason (permissions, damaged) is reported and kept. In both cases GTKTerm starts normally. `gtkterm --project FILE` opens that project (it cannot be combined
+  with `-c` or port settings).
+- **Macros in a project:** they live in the project, not in a `.ini`. Configure macros… edits them in the project; Load macros file… imports a copy of a `.ini` into the tab; Save macros file… exports
+  them to a `.ini` without linking the tab to it. The script editor works the same way: Open… loads a file into the editor, Save exports to a `.lua`, and the text itself is saved with the project.
+- **Arguments:** what you type or pick in the argument fields of the macro panel is used for sending but never saved (« Reset arguments », in the right-click menu of a button, goes back to the default
+  values). The default values of a macro are set in Configure macros…, in the « Default values » area under the table, and saved with the macro (in the project or in the `.ini`); changing them there
+  also drops the values typed in the panel for that macro.
+- **Without a project:** tabs work as before (profiles in `.gtktermrc`, one `.ini` of macros per tab). If a `.ini` was rewritten by someone else (another tab or another GTKTerm) since it was read,
+  GTKTerm asks Overwrite / Reload / Cancel before saving over it, and a tab that has read no macros file asks the same before writing over an existing default macros file. A project file changed on
+  disk is handled the same way; Reload replaces the tabs, after a confirmation if a script is running or a file is being sent. In these questions Cancel is the default button: Enter never overwrites.
+- **Not in a project:** the window size, the default script colours and layout (`[colors]`, `[layout]`), the update settings and the named profiles of `.gtktermrc` (Port › Load profile…, Save
+  profile…, Delete profile… still work: loading a profile into a project tab changes the tab, hence the project).
 
 ### Keyboard Shortcuts 
 As GTKTerm is often used like a terminal emulator,
@@ -174,6 +202,7 @@ Key Combination | Effect
 `<ctrl><shift>L` | Clear screen
 `<ctrl><shift>R` | Send file
 `<ctrl><shift>Q` | Quit
+`<ctrl><shift>O` | Open project
 `<ctrl><shift>S` | Configure port
 `<ctrl><shift>V` | Paste
 `<ctrl><shift>C` | Copy
@@ -181,7 +210,7 @@ Key Combination | Effect
 `<ctrl><shift>K` | Clear Scrollback
 `<ctrl><shift>A` | Select All
 `<ctrl><shift>B` | Send Break
-`<ctrl><shift>T` | New tab
+`<ctrl><shift>T` | New port (new tab)
 `<ctrl><shift>W` | Close tab
 `<ctrl><shift>Page Down` | Next tab
 `<ctrl><shift>Page Up` | Previous tab

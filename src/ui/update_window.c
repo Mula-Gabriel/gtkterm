@@ -106,7 +106,7 @@ gt_update_offer(GtkWindow *parent, const gchar *remote_rev)
 	if(parent != NULL)
 		g_object_add_weak_pointer(G_OBJECT(parent), (gpointer *)&d->parent);
 	d->remote = g_strdup(remote_rev);
-	gt_ui_choose(parent, _("A new version of GTKTerm is available."), detail, labels, on_offer_chosen, d);
+	gt_ui_choose(parent, _("A new version of GTKTerm is available."), detail, labels, 0, -1, on_offer_chosen, d);
 	g_free(detail);
 }
 

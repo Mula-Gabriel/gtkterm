@@ -62,9 +62,10 @@ static GtkWidget *alert_label(const gchar *text, gboolean heading)
 	return label;
 }
 
-/* buttons : libellés à mnémonique, terminés par NULL ; default_button : indice du bouton par défaut (focus et Entrée) */
+/* buttons : libellés à mnémonique, terminés par NULL ; default_button : indice du bouton par défaut (focus et Entrée), « suggested-action »
+ * sauf s'il y a un bouton destructeur ; destructive_button : indice du bouton « destructive-action » (-1 : aucun) */
 static GtkWindow *alert_show(GtkWindow *parent, const gchar *text, const gchar *detail, const gchar *const *buttons, gint default_button,
-                             AlertDone done, gpointer user_data)
+                             gint destructive_button, AlertDone done, gpointer user_data)
 {
 	GtkWindow *win = GTK_WINDOW(gtk_window_new());
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
@@ -103,12 +104,15 @@ static GtkWindow *alert_show(GtkWindow *parent, const gchar *text, const gchar *
 		gtk_box_append(GTK_BOX(row), b);
 		if(i == default_button)
 			def = b;
+		if(i == destructive_button)
+			gtk_widget_add_css_class(b, "destructive-action");
 	}
 	gtk_box_append(GTK_BOX(box), row);
 	gtk_window_set_child(win, box);
 	if(def != NULL)
 	{
-		gtk_widget_add_css_class(def, "suggested-action");
+		if(destructive_button < 0)
+			gtk_widget_add_css_class(def, "suggested-action");
 		gtk_window_set_default_widget(win, def);
 		gtk_window_set_focus(win, def);	/* pas le texte sélectionnable */
 	}
@@ -172,7 +176,7 @@ static void show_next(void)
 	if(parent == NULL && main_window != NULL)
 		parent = g_object_ref(main_window);
 	showing = TRUE;
-	showing_window = alert_show(parent, kind_title(m->kind), m->text, buttons, 0, on_message_done, NULL);
+	showing_window = alert_show(parent, kind_title(m->kind), m->text, buttons, 0, -1, on_message_done, NULL);
 	g_object_add_weak_pointer(G_OBJECT(showing_window), (gpointer *)&showing_window);
 	g_clear_object(&parent);
 	pending_free(m);
@@ -254,7 +258,7 @@ void gt_ui_confirm(GtkWindow *parent, const char *question, const char *detail, 
 
 	cd->cb = cb;
 	cd->user_data = user_data;
-	alert_show(parent != NULL ? parent : gt_app_get_main_window(), question, detail, buttons, 1, on_confirm_done, cd);
+	alert_show(parent != NULL ? parent : gt_app_get_main_window(), question, detail, buttons, 1, -1, on_confirm_done, cd);
 }
 
 /* ---------- Choix ---------- */
@@ -274,13 +278,14 @@ static void on_choose_done(gint response, gpointer user_data)
 	g_free(cd);
 }
 
-void gt_ui_choose(GtkWindow *parent, const char *text, const char *detail, const char *const *labels, GtUiChooseCb cb, gpointer user_data)
+void gt_ui_choose(GtkWindow *parent, const char *text, const char *detail, const char *const *labels, gint default_choice, gint destructive_choice,
+                  GtUiChooseCb cb, gpointer user_data)
 {
 	ChooseData *cd = g_new0(ChooseData, 1);
 
 	cd->cb = cb;
 	cd->user_data = user_data;
-	alert_show(parent != NULL ? parent : gt_app_get_main_window(), text, detail, labels, 0, on_choose_done, cd);
+	alert_show(parent != NULL ? parent : gt_app_get_main_window(), text, detail, labels, default_choice, destructive_choice, on_choose_done, cd);
 }
 
 /* ---------- Sélecteurs de fichiers ---------- */

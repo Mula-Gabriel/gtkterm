@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 22:47+0200\n"
+"POT-Creation-Date: 2026-10-12 14:34+0200\n"
 "PO-Revision-Date: 2024-05-01 20:13-0300\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -17,20 +17,25 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Poedit 3.4.2\n"
 
-#: src/app_config.c:175
+#: src/app_config.c:213
+#, fuzzy, c-format
+msgid "Cannot read the configuration file: %s"
+msgstr "Não foi possível criar o arquivo de configuração `%s'.\n"
+
+#: src/app_config.c:216
 #, c-format
 msgid "No section \"%s\" in configuration file\n"
 msgstr "A seção \"%s\" não foi encontrada no arquivo de configuração\n"
 
 #. Le message de lecture contient déjà le chemin du fichier
-#: src/app_config.c:233
+#: src/app_config.c:286
 #, c-format
 msgid ""
 "Cannot read configuration file: %s\n"
 "The default configuration is used and nothing will be written to this file."
 msgstr ""
 
-#: src/app_config.c:247
+#: src/app_config.c:300
 #, c-format
 msgid ""
 "Configuration file (%s) with\n"
@@ -39,7 +44,7 @@ msgstr ""
 "Arquivo de configuração com (%s)\n"
 "[padrão] configuração foi criada.\n"
 
-#: src/app_config.c:307
+#: src/app_config.c:372
 msgid "Cannot delete section!"
 msgstr "Não foi possível deletar a seção!"
 
@@ -53,7 +58,7 @@ msgstr "Não foi possível abrir o arquivo %s: %s\n"
 msgid "Cannot write file %s: %s"
 msgstr "Não foi possível ler o arquivo %s: %s\n"
 
-#: src/cmdline.c:60
+#: src/cmdline.c:61
 #, c-format
 msgid ""
 "\n"
@@ -62,11 +67,11 @@ msgstr ""
 "\n"
 "GTKTerm versão %s\n"
 
-#: src/cmdline.c:61
+#: src/cmdline.c:62
 msgid "\t (c) Julien Schmitt\n"
 msgstr "\t (c) Julien Schmitt\n"
 
-#: src/cmdline.c:62
+#: src/cmdline.c:63
 msgid ""
 "\n"
 "This program is released under the terms of the GPL V.2\n"
@@ -74,11 +79,11 @@ msgstr ""
 "\n"
 "Este programa é distribuído sob termos da GPL V.2\n"
 
-#: src/cmdline.c:63
+#: src/cmdline.c:64
 msgid "\t ** Use at your own risks! **\n"
 msgstr "\t **Use por sua conta e risco! **\n"
 
-#: src/cmdline.c:64
+#: src/cmdline.c:65
 msgid ""
 "\n"
 "Command line options\n"
@@ -86,62 +91,62 @@ msgstr ""
 "\n"
 "Opções de linha de comando\n"
 
-#: src/cmdline.c:65
+#: src/cmdline.c:66
 msgid "--help or -h: this help screen\n"
 msgstr "--help ou -h: esta tela de ajuda\n"
 
-#: src/cmdline.c:66
+#: src/cmdline.c:67
 msgid "--config <configuration> or -c: load configuration\n"
 msgstr "--config <configuração> ou -c: carrega uma configuração\n"
 
-#: src/cmdline.c:67
+#: src/cmdline.c:68
 msgid "--port <device> or -p: serial port device (default /dev/ttyS0)\n"
 msgstr ""
 "--port <porta> ou -p: dispositivo da porta serial (padrão /dev/ttyS0)\n"
 
-#: src/cmdline.c:68
+#: src/cmdline.c:69
 msgid "--speed <speed> or -s: serial port speed (default 9600)\n"
 msgstr "--speed <velocidade> ou -s: velocidade da porta serial (padrão 9600)\n"
 
-#: src/cmdline.c:69
+#: src/cmdline.c:70
 msgid "--bits <bits> or -b: number of bits (default 8)\n"
 msgstr "--bits <bits> ou -b: número de bits (padrão 8)\n"
 
-#: src/cmdline.c:70
+#: src/cmdline.c:71
 msgid "--stopbits <stopbits> or -t: number of stopbits (default 1)\n"
 msgstr ""
 "--stopbits <bits_de_parada> ou -t: número de bits de parada (padrão 1)\n"
 
-#: src/cmdline.c:71
+#: src/cmdline.c:72
 #, fuzzy
 msgid "--parity <none | odd | even> or -a: parity (default none)\n"
 msgstr ""
 "--parity <odd | even> ou -a: paridade (padrão none), pode ser none=nenhuma|"
 "odd=ímpar|even=par\n"
 
-#: src/cmdline.c:72
+#: src/cmdline.c:73
 #, fuzzy
 msgid "--flow <none | Xon | RTS | RS485> or -w: flow control (default none)\n"
 msgstr "--flow <Xon | RTS | RS485> ou -w: controle de fluxo (padrão none)\n"
 
-#: src/cmdline.c:73
+#: src/cmdline.c:74
 msgid "--delay <ms> or -d: end of line delay in ms (default none)\n"
 msgstr ""
 "--delay <ms> ou -d: tempo de espera pelo fim de linha em ms (padrão none)\n"
 
-#: src/cmdline.c:74
+#: src/cmdline.c:75
 msgid ""
 "--char <char> or -r: wait for a special char at end of line (default none)\n"
 msgstr ""
 "--char <caractere> ou -r: esperar por um caractere especial no final da "
 "linha (padrão none)\n"
 
-#: src/cmdline.c:75
+#: src/cmdline.c:76
 msgid "--file <filename> or -f: default file to send (default none)\n"
 msgstr ""
 "--file <nome_do_arquivo> ou -f: arquivo padrão para enviar (padrão none)\n"
 
-#: src/cmdline.c:76
+#: src/cmdline.c:77
 msgid ""
 "--rts_time_before <ms> or -x: for RS-485, time in ms before transmit with "
 "rts on\n"
@@ -149,7 +154,7 @@ msgstr ""
 "--rts_time_before <ms> ou -x: para RS-485, tempo em ms antes de transmitir "
 "com RTS 'on'\n"
 
-#: src/cmdline.c:77
+#: src/cmdline.c:78
 msgid ""
 "--rts_time_after <ms> or -y: for RS-485, time in ms after transmit with rts "
 "on\n"
@@ -157,11 +162,11 @@ msgstr ""
 "--rts_time_after <ms> ou -y: para RS-485, tempo em ms depois de transmitir "
 "com RTS 'on'\n"
 
-#: src/cmdline.c:78
+#: src/cmdline.c:79
 msgid "--echo or -e: switch on local echo\n"
 msgstr "--echo ou -e: ativa eco local\n"
 
-#: src/cmdline.c:79
+#: src/cmdline.c:80
 msgid ""
 "--disable-port-lock or -L: does not lock serial port. Allows to send to "
 "serial port from different terminals\n"
@@ -169,7 +174,7 @@ msgstr ""
 "--disable-port-lock ou -L: não trava a porta. Será permitido a outros "
 "programas enviarem dados para a porta serial\n"
 
-#: src/cmdline.c:80
+#: src/cmdline.c:81
 msgid ""
 "                      Note: incoming data are displayed randomly on only one "
 "terminal\n"
@@ -177,41 +182,49 @@ msgstr ""
 "                      Nota: os dados recebidos serão exibidos aleatoriamente "
 "em apenas um terminal\n"
 
-#: src/cmdline.c:81
+#: src/cmdline.c:82
 msgid "--transport <serial|tcp-client|tcp-server> or -T: transport type\n"
 msgstr ""
 
-#: src/cmdline.c:82
+#: src/cmdline.c:83
 msgid "--host <hostname> or -H: TCP host\n"
 msgstr ""
 
-#: src/cmdline.c:83
+#: src/cmdline.c:84
 msgid "--tcp-port <port> or -P: TCP port\n"
 msgstr ""
 
-#: src/cmdline.c:100
+#: src/cmdline.c:85
+msgid "--project <file>: open this project\n"
+msgstr ""
+
+#: src/cmdline.c:102
 #, c-format
 msgid "Invalid value for option %s: \"%s\""
 msgstr ""
 
-#: src/cmdline.c:217
+#: src/cmdline.c:222
 #, c-format
 msgid "Missing value for option %s"
 msgstr ""
 
 #. Élément fautif tel qu'écrit (« --nimporte », « -Z », « --echo=1 »)
-#: src/cmdline.c:222
+#: src/cmdline.c:227
 #, fuzzy, c-format
 msgid "Unknown command line option: %s"
 msgstr "Opção de linha de comando não definida\n"
 
-#: src/config_store.c:717
+#: src/cmdline.c:235
+msgid "--project cannot be combined with --config or port settings"
+msgstr ""
+
+#: src/config_store.c:585
 #, c-format
 msgid ""
 "The configuration file %s could not be read: nothing has been written to it."
 msgstr ""
 
-#: src/config_store.c:726
+#: src/config_store.c:594
 #, fuzzy, c-format
 msgid "Cannot create directory %s: %s"
 msgstr "Não foi possível ler o arquivo %s: %s\n"
@@ -277,25 +290,31 @@ msgstr ""
 msgid "device removed"
 msgstr ""
 
-#: src/macro_file.c:54
+#: src/macro_file.c:62
+#, c-format
+msgid "%s: [%s] %s: invalid escape, value kept as written"
+msgstr ""
+
+#: src/macro_file.c:176
 #, c-format
 msgid "Unsupported macros file version (written by a newer GTKTerm?)"
 msgstr ""
 
 #. Des groupes, aucun de connu : fichier étranger refusé, jamais lu comme un jeu vide qui l'écraserait ensuite
-#: src/macro_file.c:245
+#: src/macro_file.c:323
 #, c-format
 msgid "%s is not a GTKTerm macros file"
 msgstr ""
 
-#: src/macro_file.c:302
+#: src/macro_file.c:380
 #, c-format
 msgid ""
 "%s was not overwritten: it is not in the current macros format and its "
-"backup %s already exists with a different content"
+"backup %s already exists with a different content. Rename or delete %s, then "
+"save again."
 msgstr ""
 
-#: src/macros.c:138
+#: src/macros.c:156
 #, c-format
 msgid "Macro \"%s\" sent!"
 msgstr "Macro \"%s\" enviada!"
@@ -304,12 +323,29 @@ msgstr "Macro \"%s\" enviada!"
 #. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
 #. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
 #. et l'utilisateur sait que ses macros n'ont pas été lues.
-#: src/macros.c:231 src/macros.c:246
+#: src/macros.c:379 src/macros.c:394
 #, fuzzy, c-format
 msgid "Cannot load macros file: %s"
 msgstr "Não foi possível ler o arquivo %s: %s\n"
 
-#: src/macros.c:283
+#: src/macros.c:431
+msgid "This tab has no macros file: its macros are saved with the project."
+msgstr ""
+
+#: src/macros.c:439
+#, c-format
+msgid "%s changed on disk: not overwritten"
+msgstr ""
+
+#: src/macros.c:453
+#, fuzzy, c-format
+msgid "%s already exists: not overwritten"
+msgstr ""
+"<b>Seção [%s] já existe.</b>\n"
+"\n"
+"Você gostaria de sobrescrevê-la?"
+
+#: src/macros.c:466
 #, fuzzy, c-format
 msgid "Cannot save macros file: %s"
 msgstr "Não foi possível ler o arquivo %s: %s\n"
@@ -396,6 +432,43 @@ msgstr ""
 msgid "\"%s\" is a reserved name."
 msgstr ""
 
+#: src/project.c:180
+msgid "Untitled project"
+msgstr ""
+
+#: src/project.c:308
+msgid "No project is open"
+msgstr ""
+
+#: src/project.c:313
+msgid "The project has no file"
+msgstr ""
+
+#: src/project_file.c:149
+#, c-format
+msgid "%s: [%s] %s is not valid UTF-8: invalid bytes replaced"
+msgstr ""
+
+#: src/project_file.c:170
+#, c-format
+msgid "%s: tab %u has no valid port settings"
+msgstr ""
+
+#: src/project_file.c:229
+#, c-format
+msgid "%s is not a GTKTerm project"
+msgstr ""
+
+#: src/project_file.c:238
+#, c-format
+msgid "%s: unsupported project version (written by a newer GTKTerm?)"
+msgstr ""
+
+#: src/project_file.c:262
+#, c-format
+msgid "%s: the project has no tab"
+msgstr ""
+
 #: src/rx_logger.c:53
 #, fuzzy, c-format
 msgid "Cannot clear file %s: %s"
@@ -436,7 +509,7 @@ msgstr ""
 msgid "Script already running."
 msgstr ""
 
-#: src/session.c:113
+#: src/session.c:115
 msgid "Break signal sent!"
 msgstr "Sinal break enviado!"
 
@@ -533,40 +606,124 @@ msgstr ""
 msgid "About GTKTerm"
 msgstr ""
 
-#: src/ui/app.c:441
+#: src/ui/app.c:509
 msgid "Close this tab?"
 msgstr ""
 
-#: src/ui/app.c:441
+#: src/ui/app.c:509
 msgid "A script is running or a file is being sent in this tab."
 msgstr ""
 
-#: src/ui/app.c:441 src/ui/menus.ui:14 src/ui/tab_label.c:57
+#: src/ui/app.c:509 src/ui/menus.ui:152 src/ui/tab_label.c:57
 #: src/ui/tab_label.c:58
 #, fuzzy
 msgid "Close tab"
 msgstr "_Fechar a porta"
 
-#: src/ui/dialogs.c:140
+#: src/ui/app.c:761 src/ui/app.c:938
+#, fuzzy
+msgid "Close all tabs?"
+msgstr "_Fechar a porta"
+
+#: src/ui/app.c:761 src/ui/app.c:938
+msgid "A script is running or a file is being sent."
+msgstr ""
+
+#: src/ui/app.c:761 src/ui/app.c:938
+#, fuzzy
+msgid "Close tabs"
+msgstr "_Fechar a porta"
+
+#: src/ui/app.c:821
+msgid "A project file with this name already exists. Replace it?"
+msgstr ""
+
+#: src/ui/app.c:821
+msgid "Replace"
+msgstr ""
+
+#: src/ui/app.c:854 src/ui/menus.ui:19
+msgid "Save project"
+msgstr ""
+
+#: src/ui/app.c:862 src/ui/macros_save.c:55 src/ui/profile_dialogs.c:209
+msgid "Overwrite"
+msgstr ""
+
+#: src/ui/app.c:862 src/ui/macros_save.c:55
+msgid "Reload"
+msgstr ""
+
+#: src/ui/app.c:862 src/ui/app.c:893 src/ui/macro_editor.c:842
+#: src/ui/macros_save.c:55
+msgid "Cancel"
+msgstr "Cancelar"
+
+#. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
+#: src/ui/app.c:865
+msgid "The project file changed on disk."
+msgstr ""
+
+#: src/ui/app.c:893 src/ui/script_panel.c:951
+msgid "Save"
+msgstr ""
+
+#: src/ui/app.c:893
+msgid "Don't save"
+msgstr ""
+
+#: src/ui/app.c:896
+msgid "Save changes to the project?"
+msgstr ""
+
+#: src/ui/app.c:1093
+#, c-format
+msgid ""
+"Cannot open the project: %s\n"
+"It is no longer reopened at start-up."
+msgstr ""
+
+#: src/ui/app.c:1096
+#, fuzzy, c-format
+msgid "Cannot open the project: %s"
+msgstr "Não foi possível abrir o arquivo %s: %s\n"
+
+#: src/ui/app.c:1203
+#, fuzzy
+msgid "GTKTerm projects"
+msgstr ""
+"\n"
+"GTKTerm versão %s\n"
+
+#: src/ui/app.c:1208 src/ui/script_panel.c:464
+msgid "All files"
+msgstr ""
+
+#: src/ui/app.c:1212
+#, fuzzy
+msgid "Open project"
+msgstr "_Abrir a porta"
+
+#: src/ui/dialogs.c:144
 #, fuzzy
 msgid "Information"
 msgstr "Configuração"
 
-#: src/ui/dialogs.c:142
+#: src/ui/dialogs.c:146
 msgid "Warning"
 msgstr ""
 
-#: src/ui/dialogs.c:144
+#: src/ui/dialogs.c:148
 msgid "Error"
 msgstr ""
 
-#: src/ui/dialogs.c:165 src/ui/port_dialog.c:543 src/ui/profile_dialogs.c:343
+#: src/ui/dialogs.c:169 src/ui/port_dialog.c:543 src/ui/profile_dialogs.c:344
 #, fuzzy
 msgid "_OK"
 msgstr "Ok"
 
-#: src/ui/dialogs.c:252 src/ui/file_send_window.c:47 src/ui/port_dialog.c:540
-#: src/ui/profile_dialogs.c:340 src/ui/script_panel.c:797
+#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:540
+#: src/ui/profile_dialogs.c:341 src/ui/script_panel.c:805
 #, fuzzy
 msgid "_Cancel"
 msgstr "Cancelar"
@@ -620,18 +777,19 @@ msgstr ""
 msgid "%d byte(s) sent!"
 msgstr "%d byte(s) enviado(s)!"
 
-#: src/ui/macro_editor.c:47
+#: src/ui/macro_editor.c:53
 msgid ""
 "Action: the data sent on the port. Plain text, plus the escapes \\r "
 "(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
 "(backslash) and \\xHH (one byte in hexadecimal, e.g. \\x0D).\n"
 "\n"
-"Arguments: each specifier gets a field in the macro panel; its value is "
-"remembered in the macros file. %d %i (integer), %u %o %x %X (unsigned), %f "
-"%e %g %a (decimal number), %c (character), %s (text), with optional flags, "
-"width, precision and length (e.g. %02X, %.3f, %ld); %% sends a percent sign. "
-"%#Name picks a value from the list \"Name\" of the Lists page; a macro whose "
-"only argument is a list of exactly two values shows two buttons.\n"
+"Arguments: each specifier gets a field in the macro panel; the value typed "
+"there is used for sending but never saved; set default values below the "
+"table. %d %i (integer), %u %o %x %X (unsigned), %f %e %g %a (decimal "
+"number), %c (character), %s (text), with optional flags, width, precision "
+"and length (e.g. %02X, %.3f, %ld); %% sends a percent sign. %#Name picks a "
+"value from the list \"Name\" of the Lists page; a macro whose only argument "
+"is a list of exactly two values shows two buttons.\n"
 "\n"
 "Separators: the action %& draws a line in the panel, [Title] %& a line with "
 "a title.\n"
@@ -652,373 +810,409 @@ msgid ""
 "same; \"SPEED %d\\r\" asks for a number."
 msgstr ""
 
-#: src/ui/macro_editor.c:178 src/ui/macro_panel.c:311 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:188 src/ui/macro_panel.c:258 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr ""
 
-#: src/ui/macro_editor.c:317
+#: src/ui/macro_editor.c:357
 msgid "Select a macro first."
 msgstr ""
 
-#: src/ui/macro_editor.c:323
+#: src/ui/macro_editor.c:363
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr ""
 
-#: src/ui/macro_editor.c:347
+#: src/ui/macro_editor.c:387
 msgid "(no label)"
 msgstr ""
 
-#: src/ui/macro_editor.c:353
+#: src/ui/macro_editor.c:393
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
 "Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:355
+#: src/ui/macro_editor.c:395
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
 "cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:379
+#: src/ui/macro_editor.c:419
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:522
+#: src/ui/macro_editor.c:715
+msgid "Default values:"
+msgstr ""
+
+#: src/ui/macro_editor.c:718
+msgid "Default values"
+msgstr ""
+
+#: src/ui/macro_editor.c:739
 msgid "Label"
 msgstr ""
 
-#: src/ui/macro_editor.c:523
+#: src/ui/macro_editor.c:740
 msgid "Shortcut"
 msgstr "Atalho"
 
-#: src/ui/macro_editor.c:524
+#: src/ui/macro_editor.c:741
 msgid "Action"
 msgstr ""
 
-#: src/ui/macro_editor.c:525
+#: src/ui/macro_editor.c:742
 msgid "Tab"
 msgstr ""
 
-#: src/ui/macro_editor.c:526
+#: src/ui/macro_editor.c:743
 msgid "_Add"
 msgstr "_Adicionar"
 
-#: src/ui/macro_editor.c:527 src/ui/profile_dialogs.c:343
+#: src/ui/macro_editor.c:744 src/ui/profile_dialogs.c:344
 msgid "_Delete"
 msgstr "_Deletar"
 
-#: src/ui/macro_editor.c:528
+#: src/ui/macro_editor.c:745
 msgid "_Capture Shortcut"
 msgstr "_Capturar atalho"
 
-#: src/ui/macro_editor.c:529
+#: src/ui/macro_editor.c:746
 #, fuzzy
 msgid "Delete Shortcut"
 msgstr "Atalho"
 
-#: src/ui/macro_editor.c:530 src/ui/macro_editor.c:542
+#: src/ui/macro_editor.c:747 src/ui/macro_editor.c:759
 msgid "Move _Up"
 msgstr ""
 
-#: src/ui/macro_editor.c:531 src/ui/macro_editor.c:543
+#: src/ui/macro_editor.c:748 src/ui/macro_editor.c:760
 msgid "Move _Down"
 msgstr ""
 
-#: src/ui/macro_editor.c:537
+#: src/ui/macro_editor.c:754
 msgid "List"
 msgstr ""
 
-#: src/ui/macro_editor.c:538
+#: src/ui/macro_editor.c:755
 msgid "Display"
 msgstr ""
 
-#: src/ui/macro_editor.c:539
+#: src/ui/macro_editor.c:756
 msgid "Value"
 msgstr ""
 
-#: src/ui/macro_editor.c:540
+#: src/ui/macro_editor.c:757
 msgid "_Add Entry"
 msgstr ""
 
-#: src/ui/macro_editor.c:541
+#: src/ui/macro_editor.c:758
 #, fuzzy
 msgid "_Delete Entry"
 msgstr "_Deletar"
 
 #. Titre au nom court de l'onglet (fixé à l'ouverture)
-#: src/ui/macro_editor.c:580
+#: src/ui/macro_editor.c:805
 #, c-format
 msgid "Configure Macros — %s"
 msgstr "Configurar Macros — %s"
 
-#: src/ui/macro_editor.c:604 src/ui/menus.ui:129
+#: src/ui/macro_editor.c:829 src/ui/menus.ui:229
 #, fuzzy
 msgid "Macros"
 msgstr "_Macros"
 
-#: src/ui/macro_editor.c:605
+#: src/ui/macro_editor.c:830
 msgid "Lists"
 msgstr ""
 
-#: src/ui/macro_editor.c:615 src/ui/menus.ui:243
+#: src/ui/macro_editor.c:841 src/ui/menus.ui:267
 #, fuzzy
 msgid "Help"
 msgstr "A_juda"
 
-#: src/ui/macro_editor.c:616
-msgid "Cancel"
-msgstr "Cancelar"
-
-#: src/ui/macro_editor.c:617
+#: src/ui/macro_editor.c:843
 msgid "OK"
 msgstr "Ok"
 
-#: src/ui/macro_panel.c:67
+#: src/ui/macro_panel.c:70
 msgid "General"
 msgstr ""
 
-#: src/ui/macro_panel.c:311
+#: src/ui/macro_panel.c:258
 #, c-format
 msgid ""
 "Shortcut: %s\n"
 "Action: %s"
 msgstr ""
 
-#: src/ui/macro_panel.c:545
+#: src/ui/macro_panel.c:489
 msgid ""
 "No macros defined\n"
 "with labels"
 msgstr ""
 
-#: src/ui/macro_panel.c:601
+#: src/ui/macro_panel.c:545
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 
-#: src/ui/macro_panel.c:763
+#: src/ui/macro_panel.c:723
 msgid "Period (ms)"
 msgstr ""
 
-#: src/ui/macro_panel.c:771
+#: src/ui/macro_panel.c:731
 msgid "Polling Mode"
 msgstr ""
 
-#: src/ui/menus.ui:7
+#: src/ui/macro_panel.c:750 src/ui/macro_panel.c:752
+msgid "Reset arguments"
+msgstr ""
+
+#. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
+#: src/ui/macros_save.c:62
+msgid "The macros file changed on disk."
+msgstr ""
+
+#: src/ui/macros_save.c:62
+msgid "The macros file already exists."
+msgstr ""
+
+#: src/ui/menus.ui:8
 #, fuzzy
 msgid "File"
 msgstr "_Arquivo"
 
-#: src/ui/menus.ui:10 src/ui/port_dialog.c:499
-msgid "New tab"
+#: src/ui/menus.ui:11
+msgid "New project"
 msgstr ""
 
-#: src/ui/menus.ui:20
-#, fuzzy
-msgid "Clear screen"
-msgstr "Apagar a _tela"
+#: src/ui/menus.ui:15
+msgid "Open project…"
+msgstr ""
 
-#: src/ui/menus.ui:24
-#, fuzzy
-msgid "Clear scrollback"
-msgstr "A_pagar a rolagem"
+#: src/ui/menus.ui:23
+msgid "Save project as…"
+msgstr ""
 
-#: src/ui/menus.ui:30
+#: src/ui/menus.ui:27
 #, fuzzy
-msgid "Send RAW file"
+msgid "Close project"
+msgstr "_Fechar a porta"
+
+#: src/ui/menus.ui:33
+#, fuzzy
+msgid "Send RAW file…"
 msgstr "Enviar arquivo _RAW"
 
-#: src/ui/menus.ui:34
+#: src/ui/menus.ui:37
 #, fuzzy
-msgid "Save RAW file"
+msgid "Save RAW file…"
 msgstr "_Salvar arquivo RAW"
 
-#: src/ui/menus.ui:38
+#: src/ui/menus.ui:41
 #, fuzzy
-msgid "Save ASCII file"
+msgid "Save ASCII file…"
 msgstr "Salvar arquivo _ASCII"
 
-#: src/ui/menus.ui:44
+#: src/ui/menus.ui:47
 msgid "Quit"
 msgstr ""
 
-#: src/ui/menus.ui:50
+#: src/ui/menus.ui:53
 #, fuzzy
 msgid "Edit"
 msgstr "_Editar"
 
-#: src/ui/menus.ui:53 src/ui/menus.ui:259
+#: src/ui/menus.ui:56 src/ui/menus.ui:283
 msgid "Copy"
 msgstr ""
 
-#: src/ui/menus.ui:57 src/ui/menus.ui:263
+#: src/ui/menus.ui:60 src/ui/menus.ui:287
 msgid "Paste"
 msgstr ""
 
-#: src/ui/menus.ui:61 src/ui/menus.ui:267
-msgid "Find"
-msgstr ""
-
-#: src/ui/menus.ui:67 src/ui/menus.ui:273
+#: src/ui/menus.ui:64 src/ui/menus.ui:297
 msgid "Select All"
 msgstr ""
 
-#: src/ui/menus.ui:73
-#, fuzzy
-msgid "Log"
-msgstr "_Log"
-
-#: src/ui/menus.ui:76
-msgid "To file..."
-msgstr "Para o arquivo..."
-
-#: src/ui/menus.ui:80
-msgid "Pause"
+#: src/ui/menus.ui:68 src/ui/menus.ui:291
+msgid "Find"
 msgstr ""
 
-#: src/ui/menus.ui:84 src/ui/script_panel.c:926
+#: src/ui/menus.ui:74
 #, fuzzy
-msgid "Stop"
-msgstr "Bits de parada:"
+msgid "Clear screen"
+msgstr "Apagar a _tela"
 
-#: src/ui/menus.ui:88
-msgid "Clear"
-msgstr ""
-
-#: src/ui/menus.ui:94
-msgid "Configuration"
-msgstr "Configuração"
-
-#: src/ui/menus.ui:97
+#: src/ui/menus.ui:78
 #, fuzzy
-msgid "Port"
-msgstr "_Porta"
+msgid "Clear scrollback"
+msgstr "A_pagar a rolagem"
 
-#: src/ui/menus.ui:101
-#, fuzzy
-msgid "Main window"
-msgstr "_Janela principal"
-
-#: src/ui/menus.ui:107
-#, fuzzy
-msgid "Local echo"
-msgstr "_Eco local"
-
-#: src/ui/menus.ui:111
-msgid "Autoreconnect"
-msgstr "Auto reconectar"
-
-#: src/ui/menus.ui:115
-#, fuzzy
-msgid "CR LF auto"
-msgstr "_CR LF automático"
-
-#: src/ui/menus.ui:119
-#, fuzzy
-msgid "ESC clear screen"
-msgstr "ESC apaga_ndo a tela"
-
-#: src/ui/menus.ui:123
-msgid "Timestamp"
-msgstr "Timestamp"
-
-#: src/ui/menus.ui:133
-#, fuzzy
-msgid "Load macros file..."
-msgstr "Para o arquivo..."
-
-#: src/ui/menus.ui:137 src/ui/profile_dialogs.c:474
-#, fuzzy
-msgid "Save macros file"
-msgstr "_Salvar arquivo RAW"
-
-#: src/ui/menus.ui:143 src/ui/profile_dialogs.c:279
-msgid "Load configuration"
-msgstr "Carregar configuração"
-
-#: src/ui/menus.ui:147 src/ui/profile_dialogs.c:279
-msgid "Save configuration"
-msgstr "Salvar configuração"
-
-#: src/ui/menus.ui:151 src/ui/profile_dialogs.c:279
-msgid "Delete configuration"
-msgstr "Deletar configuração"
-
-#: src/ui/menus.ui:157
-#, fuzzy
-msgid "Control signals"
-msgstr "_Sinais de controle"
-
-#: src/ui/menus.ui:160
-msgid "Send break"
-msgstr "Enviar break"
-
-#: src/ui/menus.ui:164
-#, fuzzy
-msgid "Open Port"
-msgstr "_Abrir a porta"
-
-#: src/ui/menus.ui:168
-#, fuzzy
-msgid "Close Port"
-msgstr "_Fechar a porta"
-
-#: src/ui/menus.ui:172
-msgid "Toggle DTR"
-msgstr "Alternar DTR"
-
-#: src/ui/menus.ui:176
-msgid "Toggle RTS"
-msgstr "Alternar RTS"
-
-#: src/ui/menus.ui:182
+#: src/ui/menus.ui:84
 #, fuzzy
 msgid "View"
 msgstr "_Ver"
 
-#: src/ui/menus.ui:185
+#: src/ui/menus.ui:87
 #, fuzzy
 msgid "ASCII"
 msgstr "_ASCII"
 
-#: src/ui/menus.ui:190
+#: src/ui/menus.ui:92
 #, fuzzy
 msgid "Hexadecimal"
 msgstr "_Hexadecimal"
 
-#: src/ui/menus.ui:195
+#: src/ui/menus.ui:97
 #, fuzzy
 msgid "Hexadecimal chars"
 msgstr "_Caracteres hexadecimais"
 
-#: src/ui/menus.ui:223
+#: src/ui/menus.ui:125
 #, fuzzy
 msgid "Show index"
 msgstr "Mostrar _índice"
 
-#: src/ui/menus.ui:229
+#: src/ui/menus.ui:131
 #, fuzzy
 msgid "Send hexadecimal data"
 msgstr "_Enviar dados hexadecimais"
 
-#: src/ui/menus.ui:233
+#: src/ui/menus.ui:135
 msgid "Macro panel"
 msgstr ""
 
-#: src/ui/menus.ui:237
+#: src/ui/menus.ui:139
 msgid "Script panel"
 msgstr ""
 
+#: src/ui/menus.ui:145
+#, fuzzy
+msgid "Port"
+msgstr "_Porta"
+
+#: src/ui/menus.ui:148
+#, fuzzy
+msgid "New port…"
+msgstr "Porta não aberta"
+
+#: src/ui/menus.ui:158 src/ui/menus.ui:207
+msgid "Settings…"
+msgstr ""
+
+#: src/ui/menus.ui:162
+#, fuzzy
+msgid "Open Port"
+msgstr "_Abrir a porta"
+
+#: src/ui/menus.ui:166
+#, fuzzy
+msgid "Close Port"
+msgstr "_Fechar a porta"
+
+#: src/ui/menus.ui:170
+msgid "Autoreconnect"
+msgstr "Auto reconectar"
+
+#: src/ui/menus.ui:176
+msgid "Send break"
+msgstr "Enviar break"
+
+#: src/ui/menus.ui:180
+msgid "Toggle DTR"
+msgstr "Alternar DTR"
+
+#: src/ui/menus.ui:184
+msgid "Toggle RTS"
+msgstr "Alternar RTS"
+
+#: src/ui/menus.ui:190
+#, fuzzy
+msgid "Load profile…"
+msgstr "Para o arquivo..."
+
+#: src/ui/menus.ui:194
+#, fuzzy
+msgid "Save profile…"
+msgstr "_Salvar arquivo RAW"
+
+#: src/ui/menus.ui:198
+msgid "Delete profile…"
+msgstr ""
+
+#: src/ui/menus.ui:204 src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
+msgid "Terminal"
+msgstr ""
+
+#: src/ui/menus.ui:211
+#, fuzzy
+msgid "Local echo"
+msgstr "_Eco local"
+
+#: src/ui/menus.ui:215
+#, fuzzy
+msgid "CR LF auto"
+msgstr "_CR LF automático"
+
+#: src/ui/menus.ui:219
+#, fuzzy
+msgid "ESC clear screen"
+msgstr "ESC apaga_ndo a tela"
+
+#: src/ui/menus.ui:223
+msgid "Timestamp"
+msgstr "Timestamp"
+
+#: src/ui/menus.ui:232
+#, fuzzy
+msgid "Configure macros…"
+msgstr "Configurar Macros — %s"
+
+#: src/ui/menus.ui:236
+#, fuzzy
+msgid "Load macros file…"
+msgstr "Para o arquivo..."
+
+#: src/ui/menus.ui:240
+#, fuzzy
+msgid "Save macros file…"
+msgstr "_Salvar arquivo RAW"
+
 #: src/ui/menus.ui:246
+#, fuzzy
+msgid "Log"
+msgstr "_Log"
+
+#: src/ui/menus.ui:249
+msgid "To file..."
+msgstr "Para o arquivo..."
+
+#: src/ui/menus.ui:253
+msgid "Pause"
+msgstr ""
+
+#: src/ui/menus.ui:257 src/ui/script_panel.c:954
+#, fuzzy
+msgid "Stop"
+msgstr "Bits de parada:"
+
+#: src/ui/menus.ui:261
+msgid "Clear"
+msgstr ""
+
+#: src/ui/menus.ui:270
 msgid "Check for updates…"
 msgstr ""
 
-#: src/ui/menus.ui:250
+#: src/ui/menus.ui:274
 msgid "About"
 msgstr ""
 
@@ -1162,6 +1356,10 @@ msgstr "Parâmetros RS-485 half-duplex  (sinal RTS usado para enviar)"
 msgid "Port configuration"
 msgstr "Carregar configuração"
 
+#: src/ui/port_dialog.c:499
+msgid "New tab"
+msgstr ""
+
 #: src/ui/port_dialog.c:520
 msgid "_Type:"
 msgstr ""
@@ -1171,54 +1369,62 @@ msgstr ""
 msgid "Transport"
 msgstr "Porta serial"
 
-#: src/ui/profile_dialogs.c:153
+#: src/ui/profile_dialogs.c:154
 #, fuzzy
 msgid "Cannot delete this configuration."
 msgstr "Não foi possível deletar a seção!"
 
-#: src/ui/profile_dialogs.c:179 src/ui/profile_dialogs.c:192
+#: src/ui/profile_dialogs.c:180 src/ui/profile_dialogs.c:193
 #, fuzzy
 msgid "Select a configuration."
 msgstr "Deletar configuração"
 
-#: src/ui/profile_dialogs.c:184
+#: src/ui/profile_dialogs.c:185
 #, fuzzy
 msgid "Cannot load this configuration."
 msgstr "Não foi possível ler o arquivo de configuração!"
 
-#: src/ui/profile_dialogs.c:195
+#: src/ui/profile_dialogs.c:196
 #, fuzzy, c-format
 msgid "Delete the configuration \"%s\"?"
 msgstr "Deletar configuração"
 
-#: src/ui/profile_dialogs.c:196
+#: src/ui/profile_dialogs.c:197
 msgid "This cannot be undone."
 msgstr ""
 
-#: src/ui/profile_dialogs.c:196
+#: src/ui/profile_dialogs.c:197
 #, fuzzy
 msgid "Delete"
 msgstr "_Deletar"
 
-#: src/ui/profile_dialogs.c:207
+#: src/ui/profile_dialogs.c:208
 #, c-format
 msgid "A configuration named \"%s\" already exists."
 msgstr ""
 
-#: src/ui/profile_dialogs.c:208
+#: src/ui/profile_dialogs.c:209
 msgid "Do you want to overwrite it?"
 msgstr ""
 
-#: src/ui/profile_dialogs.c:208
-msgid "Overwrite"
-msgstr ""
-
-#: src/ui/profile_dialogs.c:254
+#: src/ui/profile_dialogs.c:255
 #, fuzzy
 msgid "No saved configuration."
 msgstr "Carregar configuração"
 
-#: src/ui/profile_dialogs.c:313
+#: src/ui/profile_dialogs.c:280
+msgid "Load configuration"
+msgstr "Carregar configuração"
+
+#: src/ui/profile_dialogs.c:280
+msgid "Save configuration"
+msgstr "Salvar configuração"
+
+#: src/ui/profile_dialogs.c:280
+msgid "Delete configuration"
+msgstr "Deletar configuração"
+
+#: src/ui/profile_dialogs.c:314
 #, fuzzy
 msgid "Configuration _name:"
 msgstr "Nome da configuração: "
@@ -1226,6 +1432,11 @@ msgstr "Nome da configuração: "
 #: src/ui/profile_dialogs.c:462
 msgid "Load macros file"
 msgstr ""
+
+#: src/ui/profile_dialogs.c:474
+#, fuzzy
+msgid "Save macros file"
+msgstr "_Salvar arquivo RAW"
 
 #: src/ui/script_panel.c:24
 msgid "Editor background"
@@ -1280,60 +1491,52 @@ msgstr ""
 msgid "Cannot read file"
 msgstr "Não foi possível ler o arquivo %s: %s\n"
 
-#: src/ui/script_panel.c:454
+#: src/ui/script_panel.c:459
 msgid "Lua scripts (*.lua)"
 msgstr ""
 
-#: src/ui/script_panel.c:459
-msgid "All files"
-msgstr ""
-
-#: src/ui/script_panel.c:463
+#: src/ui/script_panel.c:468
 msgid "Open Lua Script"
 msgstr ""
 
-#: src/ui/script_panel.c:495
+#: src/ui/script_panel.c:503
 #, fuzzy
 msgid "Cannot write file"
 msgstr "Não foi possível ler o arquivo %s: %s\n"
 
-#: src/ui/script_panel.c:519
+#: src/ui/script_panel.c:527
 msgid "Save Lua Script"
 msgstr ""
 
-#: src/ui/script_panel.c:651
+#: src/ui/script_panel.c:659
 msgid "Editor on top"
 msgstr ""
 
-#: src/ui/script_panel.c:657
+#: src/ui/script_panel.c:665
 msgid "Editor on the left"
 msgstr ""
 
-#: src/ui/script_panel.c:759
+#: src/ui/script_panel.c:767
 msgid "Script Editor Colors"
 msgstr ""
 
-#: src/ui/script_panel.c:794
+#: src/ui/script_panel.c:802
 msgid "_Reset"
 msgstr ""
 
-#: src/ui/script_panel.c:800
+#: src/ui/script_panel.c:808
 msgid "_Apply"
 msgstr ""
 
-#: src/ui/script_panel.c:922
+#: src/ui/script_panel.c:950
 msgid "Open"
 msgstr ""
 
-#: src/ui/script_panel.c:923
-msgid "Save"
-msgstr ""
-
-#: src/ui/script_panel.c:925
+#: src/ui/script_panel.c:953
 msgid "Run"
 msgstr ""
 
-#: src/ui/script_panel.c:931
+#: src/ui/script_panel.c:959
 msgid "Colors..."
 msgstr ""
 
@@ -1347,10 +1550,6 @@ msgstr ""
 
 #: src/ui/search_bar.c:148
 msgid "Invalid regular expression"
-msgstr ""
-
-#: src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
-msgid "Terminal"
 msgstr ""
 
 #: src/ui/terminal_dialog.ui:35
@@ -1500,6 +1699,17 @@ msgstr ""
 msgid "No update source URL."
 msgstr ""
 
+#~ msgid "Configuration"
+#~ msgstr "Configuração"
+
+#, fuzzy
+#~ msgid "Main window"
+#~ msgstr "_Janela principal"
+
+#, fuzzy
+#~ msgid "Control signals"
+#~ msgstr "_Sinais de controle"
+
 #, fuzzy, c-format
 #~ msgid "Cannot save file %s: %s"
 #~ msgstr "Não foi possível ler o arquivo %s: %s\n"
@@ -1554,10 +1764,6 @@ msgstr ""
 #, c-format
 #~ msgid "Cannot open configuration file `%s'.\n"
 #~ msgstr "Não foi possível abrir o arquivo de configuração `%s'.\n"
-
-#, c-format
-#~ msgid "Cannot create configuration file `%s'.\n"
-#~ msgstr "Não foi possível criar o arquivo de configuração `%s'.\n"
 
 #, c-format
 #~ msgid ""
@@ -1678,16 +1884,6 @@ msgstr ""
 #~ msgstr ""
 #~ "Não foi possível escrever no arquivo de configuração!\n"
 #~ "O arquivo de configuração pode conter parâmetros inválidos.\n"
-
-#, c-format
-#~ msgid ""
-#~ "<b>Section [%s] already exists.</b>\n"
-#~ "\n"
-#~ "Do you want to overwrite it ?"
-#~ msgstr ""
-#~ "<b>Seção [%s] já existe.</b>\n"
-#~ "\n"
-#~ "Você gostaria de sobrescrevê-la?"
 
 #, c-format
 #~ msgid "Cannot find section %s\n"

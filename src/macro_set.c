@@ -248,6 +248,25 @@ gt_macro_set_set_polling(GtMacroSet *set, guint id, gboolean polling, guint peri
 	return TRUE;
 }
 
+GtMacroSet *
+gt_macro_set_copy(const GtMacroSet *set)
+{
+	GtMacroSet *copy = gt_macro_set_new();
+
+	/* Les listes d'abord : « %#Nom » n'est un argument que si la liste existe */
+	gt_macro_set_take_lists(copy, gt_macro_lists_copy(set->lists));
+	for(guint i = 0; i < set->macros->len; i++)
+	{
+		const GtMacro *m = g_ptr_array_index(set->macros, i);
+		guint id = gt_macro_set_append(copy, m->label, m->shortcut, m->action, m->tab);
+
+		if(m->args != NULL)
+			gt_macro_set_set_args(copy, id, (const gchar *const *)m->args, (gint)g_strv_length(m->args));
+		gt_macro_set_set_polling(copy, id, m->polling, m->polling_period_ms);
+	}
+	return copy;
+}
+
 void
 gt_macro_set_apply_edits(GtMacroSet *set, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists)
 {
@@ -280,6 +299,10 @@ gt_macro_set_apply_edits(GtMacroSet *set, const GtMacroEdit *rows, guint n_rows,
 			m = macro_new(rows[i].label, rows[i].shortcut, rows[i].action, rows[i].tab);
 		else
 			set_fields(m, rows[i].label, rows[i].shortcut, rows[i].action, rows[i].tab);
+		/* Les valeurs par défaut sont celles de la ligne (vérifiées après, avec les listes définitives) */
+		g_clear_pointer(&m->args, g_strfreev);
+		if(rows[i].args != NULL && rows[i].args[0] != NULL)
+			m->args = g_strdupv((gchar **)rows[i].args);
 		g_ptr_array_add(fresh, m);
 	}
 	set->macros = fresh;

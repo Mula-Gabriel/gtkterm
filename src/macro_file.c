@@ -1,6 +1,7 @@
 /* macro_file.c — fichier de macros (voir macro_file.h et le §5 de la spec du sous-projet 4). */
 
 #include <config.h>
+#include <errno.h>
 #include <glib/gi18n.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,23 +40,69 @@ get_period(GKeyFile *kf, const gchar *group)
 	return period;
 }
 
-static GtMacroSet *
-load_v2(GKeyFile *kf, const gchar *path, GError **error)
+/* Liste « a;b;c » : g_key_file_get_string_list, sinon (échappement inconnu) éléments bruts coupés aux « ; » non échappés, « \; » → « ; » */
+static gchar **
+get_list_tolerant(GKeyFile *kf, const gchar *group, const gchar *key, const gchar *origin, gsize *n_out)
 {
-	gchar *version = g_key_file_get_value(kf, HEADER_GROUP, "version", NULL);
-	gboolean known = version != NULL && strcmp(g_strstrip(version), "2") == 0;
-	gchar **groups;
+	GError *local = NULL;
+	gchar **v;
+	gchar *raw, *msg;
+	GPtrArray *items;
+	GString *cur;
+
+	*n_out = 0;
+	v = g_key_file_get_string_list(kf, group, key, n_out, &local);
+	if(local == NULL || !g_error_matches(local, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_INVALID_VALUE))
+	{
+		g_clear_error(&local);
+		return v;
+	}
+	g_clear_error(&local);
+	raw = g_key_file_get_value(kf, group, key, NULL);
+	msg = g_strdup_printf(_("%s: [%s] %s: invalid escape, value kept as written"), origin, group, key);
+	g_warning("%s", msg);
+	g_free(msg);
+	items = g_ptr_array_new();
+	cur = g_string_new(NULL);
+	for(const gchar *c = raw != NULL ? raw : ""; *c != '\0'; c++)
+	{
+		if(c[0] == '\\' && c[1] == ';')
+		{
+			g_string_append_c(cur, ';');
+			c++;
+		}
+		else if(c[0] == ';')
+		{
+			g_ptr_array_add(items, g_string_free(cur, FALSE));
+			cur = g_string_new(NULL);
+		}
+		else
+			g_string_append_c(cur, c[0]);
+	}
+	if(cur->len > 0)
+		g_ptr_array_add(items, g_string_free(cur, FALSE));
+	else
+		g_string_free(cur, TRUE);
+	*n_out = items->len;
+	g_ptr_array_add(items, NULL);
+	g_free(raw);
+	return (gchar **)g_ptr_array_free(items, FALSE);
+}
+
+/* Le groupe « <prefix><kind> » (kind : « macro: » ou « list: ») ? */
+static gboolean
+group_is(const gchar *group, const gchar *prefix, const gchar *kind)
+{
+	return g_str_has_prefix(group, prefix) && g_str_has_prefix(group + strlen(prefix), kind);
+}
+
+GtMacroSet *
+gt_macro_set_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar *origin)
+{
+	gchar **groups = g_key_file_get_groups(kf, NULL);
 	GtMacroLists *lists;
 	GtMacroSet *set;
 
-	g_free(version);
-	if(!known)
-	{
-		g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_INVALID_VALUE, _("Unsupported macros file version (written by a newer GTKTerm?)"));
-		g_prefix_error(error, "%s: ", path);
-		return NULL;
-	}
-	groups = g_key_file_get_groups(kf, NULL);
 	/* Les listes d'abord : « %#Nom » n'est un argument que si la liste existe (décompte des arguments enregistrés) */
 	lists = gt_macro_lists_new();
 	for(guint g = 0; groups[g] != NULL; g++)
@@ -64,11 +111,14 @@ load_v2(GKeyFile *kf, const gchar *path, GError **error)
 		gchar **displays, **values;
 		gsize n_displays = 0, n_values = 0;
 
-		if(!g_str_has_prefix(groups[g], "list:"))
+		if(!group_is(groups[g], prefix, "list:"))
 			continue;
 		name = get_string_or_empty(kf, groups[g], "name");
-		displays = g_key_file_get_string_list(kf, groups[g], "displays", &n_displays, NULL);
-		values = g_key_file_get_string_list(kf, groups[g], "values", &n_values, NULL);
+		displays = get_list_tolerant(kf, groups[g], "displays", origin, &n_displays);
+		values = get_list_tolerant(kf, groups[g], "values", origin, &n_values);
+		/* Une liste sans entrée existe quand même */
+		if(name[0] != '\0')
+			gt_macro_lists_add_list(lists, name);
 		for(gsize k = 0; name[0] != '\0' && k < n_displays; k++)
 			gt_macro_lists_add(lists, name, displays[k], k < n_values ? values[k] : NULL);
 		g_strfreev(displays);
@@ -86,14 +136,14 @@ load_v2(GKeyFile *kf, const gchar *path, GError **error)
 		gboolean polling;
 		guint id;
 
-		if(!g_str_has_prefix(groups[g], "macro:"))
+		if(!group_is(groups[g], prefix, "macro:"))
 			continue;
 		label = get_string_or_empty(kf, groups[g], "label");
 		shortcut = get_string_or_empty(kf, groups[g], "shortcut");
 		action = get_string_or_empty(kf, groups[g], "action");
 		tab = get_string_or_empty(kf, groups[g], "tab");
 		id = gt_macro_set_append(set, label, shortcut, action, tab);
-		args = g_key_file_get_string_list(kf, groups[g], "args", &n_args, NULL);
+		args = get_list_tolerant(kf, groups[g], "args", origin, &n_args);
 		/* Refusé (arguments abandonnés) si leur nombre ne correspond pas aux spécificateurs */
 		if(args != NULL)
 			gt_macro_set_set_args(set, id, (const gchar *const *)args, (gint)n_args);
@@ -112,6 +162,22 @@ load_v2(GKeyFile *kf, const gchar *path, GError **error)
 	}
 	g_strfreev(groups);
 	return set;
+}
+
+static GtMacroSet *
+load_v2(GKeyFile *kf, const gchar *path, GError **error)
+{
+	gchar *version = g_key_file_get_value(kf, HEADER_GROUP, "version", NULL);
+	gboolean known = version != NULL && strcmp(g_strstrip(version), "2") == 0;
+
+	g_free(version);
+	if(!known)
+	{
+		g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_INVALID_VALUE, _("Unsupported macros file version (written by a newer GTKTerm?)"));
+		g_prefix_error(error, "%s: ", path);
+		return NULL;
+	}
+	return gt_macro_set_from_key_file(kf, "", path);
 }
 
 /* Ancien format, ligne de [macros] : « libellé::raccourci::action::onglet::arg1|arg2::polling(0/1)::période », les champs de
@@ -221,8 +287,20 @@ gt_macro_file_load(const gchar *path, GtMacroSet **set_out, GError **error)
 	gchar **groups;
 	gboolean no_group;
 
-	if(!g_file_get_contents(path, &data, &len, error))
+	if(!g_file_get_contents(path, &data, &len, &local))
+	{
+		/* Droits insuffisants : la cause réelle (chemin et motif du système) plutôt que le texte générique de GLib */
+		if(g_error_matches(local, G_FILE_ERROR, G_FILE_ERROR_ACCES) || g_error_matches(local, G_FILE_ERROR, G_FILE_ERROR_PERM))
+		{
+			gint err = g_error_matches(local, G_FILE_ERROR, G_FILE_ERROR_ACCES) ? EACCES : EPERM;
+
+			g_set_error(error, G_FILE_ERROR, local->code, "%s: %s", path, g_strerror(err));
+			g_clear_error(&local);
+		}
+		else
+			g_propagate_error(error, local);
 		return FALSE;
+	}
 	kf = g_key_file_new();
 	if(len > 0 && !g_key_file_load_from_data(kf, data, len, G_KEY_FILE_NONE, &local))
 	{
@@ -299,8 +377,8 @@ backup_before_overwrite(const gchar *path, GError **error)
 	else if(!g_file_get_contents(backup, &old, &old_len, NULL) || old_len != len || memcmp(old, data, len) != 0)
 	{
 		g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_EXIST,
-		            _("%s was not overwritten: it is not in the current macros format and its backup %s already exists with a different content"),
-		            path, backup);
+		            _("%s was not overwritten: it is not in the current macros format and its backup %s already exists with a different content. Rename or delete %s, then save again."),
+		            path, backup, backup);
 		ok = FALSE;
 	}
 	g_free(old);
@@ -309,24 +387,18 @@ backup_before_overwrite(const gchar *path, GError **error)
 	return ok;
 }
 
-gboolean
-gt_macro_file_save(const GtMacroSet *set, const gchar *path, GError **error)
+void
+gt_macro_set_to_key_file(const GtMacroSet *set, GKeyFile *kf, const gchar *prefix)
 {
-	GKeyFile *kf;
 	const GtMacroLists *lists = gt_macro_set_get_lists(set);
-	gchar *data;
-	gsize len = 0;
-	gboolean ok;
 
-	if(!backup_before_overwrite(path, error))
-		return FALSE;
-	kf = g_key_file_new();
-	g_key_file_set_integer(kf, HEADER_GROUP, "version", FILE_VERSION);
 	for(guint i = 0; i < gt_macro_set_count(set); i++)
 	{
 		const GtMacro *m = gt_macro_set_get(set, i);
-		gchar *group = g_strdup_printf("macro:%u", i + 1);
+		gchar *group = g_strdup_printf("%smacro:%u", prefix, i + 1);
 
+		/* Un groupe de même nom est remplacé */
+		g_key_file_remove_group(kf, group, NULL);
 		g_key_file_set_string(kf, group, "label", m->label);
 		g_key_file_set_string(kf, group, "shortcut", m->shortcut);
 		g_key_file_set_string(kf, group, "action", m->action);
@@ -342,13 +414,14 @@ gt_macro_file_save(const GtMacroSet *set, const gchar *path, GError **error)
 		gint n = gt_macro_lists_entry_count(lists, li);
 		const gchar **displays = g_new0(const gchar *, n + 1);
 		const gchar **values = g_new0(const gchar *, n + 1);
-		gchar *group = g_strdup_printf("list:%d", li + 1);
+		gchar *group = g_strdup_printf("%slist:%d", prefix, li + 1);
 
 		for(gint ei = 0; ei < n; ei++)
 		{
 			displays[ei] = gt_macro_lists_entry_display(lists, li, ei);
 			values[ei] = gt_macro_lists_entry_value(lists, li, ei);
 		}
+		g_key_file_remove_group(kf, group, NULL);
 		g_key_file_set_string(kf, group, "name", gt_macro_lists_name(lists, li));
 		g_key_file_set_string_list(kf, group, "displays", displays, n);
 		g_key_file_set_string_list(kf, group, "values", values, n);
@@ -356,6 +429,21 @@ gt_macro_file_save(const GtMacroSet *set, const gchar *path, GError **error)
 		g_free(displays);
 		g_free(values);
 	}
+}
+
+gboolean
+gt_macro_file_save(const GtMacroSet *set, const gchar *path, GError **error)
+{
+	GKeyFile *kf;
+	gchar *data;
+	gsize len = 0;
+	gboolean ok;
+
+	if(!backup_before_overwrite(path, error))
+		return FALSE;
+	kf = g_key_file_new();
+	g_key_file_set_integer(kf, HEADER_GROUP, "version", FILE_VERSION);
+	gt_macro_set_to_key_file(set, kf, "");
 	data = g_key_file_to_data(kf, &len, NULL);
 	g_key_file_free(kf);
 	/* Écriture atomique (fichier temporaire puis renommage) ; le message d'erreur de GLib cite le chemin */

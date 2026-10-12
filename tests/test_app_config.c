@@ -6,6 +6,8 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <utime.h>
 
 #include "app_config.h"
 #include "app_ui.h"
@@ -251,6 +253,31 @@ test_profil_inconnu(void)
 	g_assert_cmpint(Load_configuration_from_file(s, "absent"), ==, -1);
 	g_assert_cmpint(nb_messages('E'), ==, 1);
 	g_assert_nonnull(strstr(dernier_message(), "absent"));
+	g_object_unref(s);
+}
+
+/* Fichier devenu illisible en cours de session : le chargement d'un profil rend la vraie cause, pas « No section » */
+static void
+test_profil_cause_reelle(void)
+{
+	GtSession *s;
+	GError *err = NULL;
+	struct utimbuf t = { 1000000, 1000000 };
+
+	if(getuid() == 0)
+	{
+		g_test_skip("les droits ne s'appliquent pas à root");
+		return;
+	}
+	s = demarrer(RC_DEUX_PROFILS);
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
+	g_assert_cmpint(g_chmod(chemin_rc, 0), ==, 0);
+	g_assert_cmpint(utime(chemin_rc, &t), ==, 0);
+	g_assert_false(app_config_load_profile(s, "atelier", &err));
+	g_assert_error(err, G_FILE_ERROR, G_FILE_ERROR_PERM);
+	g_assert_nonnull(strstr(err->message, "Cannot read the configuration file"));
+	g_clear_error(&err);
+	g_assert_cmpint(g_chmod(chemin_rc, 0600), ==, 0);
 	g_object_unref(s);
 }
 
@@ -684,6 +711,81 @@ test_etat_fenetre_aberrant(void)
 	g_object_unref(s);
 }
 
+static void
+test_last_project(void)
+{
+	GtSession *s = demarrer(RC_DEUX_PROFILS);
+	GKeyFile *kf;
+	gchar *v;
+
+	g_assert_null(app_config_get_last_project());
+	app_config_set_last_project("/a/b.gtkterm");
+	kf = charger_rc();
+	v = g_key_file_get_string(kf, "general", "last_project", NULL);
+	g_assert_cmpstr(v, ==, "/a/b.gtkterm");
+	g_free(v);
+	g_key_file_free(kf);
+	v = app_config_get_last_project();
+	g_assert_cmpstr(v, ==, "/a/b.gtkterm");
+	g_free(v);
+	app_config_set_last_project(NULL);
+	kf = charger_rc();
+	g_assert_false(g_key_file_has_key(kf, "general", "last_project", NULL));
+	g_key_file_free(kf);
+	g_assert_null(app_config_get_last_project());
+	g_object_unref(s);
+}
+
+static void
+test_profil_dans_projet(void)
+{
+	gchar *dossier = g_path_get_dirname(chemin_rc);
+	gchar *m_ini = g_build_filename(dossier, "m.ini", NULL);
+	gchar *rc = g_strdup_printf("[profile:default]\nport=/dev/null\nspeed=9600\n\n[profile:p]\nport=/dev/null\nspeed=57600\nmacros_file=%s\n", m_ini);
+	GtSession *s;
+	GtMacroSet *jeu;
+	GKeyFile *kf;
+	GError *err = NULL;
+	gchar *v;
+
+	/* Fichier de macros du profil existant, avec une macro */
+	{
+		GtSession *tmp = gt_session_new(NULL, NULL);
+
+		gt_macro_set_append(gt_macros_get_set(gt_session_get_macros(tmp)), "du-fichier", "", "x", "");
+		g_assert_cmpint(gt_macros_save_file(gt_session_get_macros(tmp), m_ini, FALSE, TRUE), ==, GT_MACROS_SAVED);
+		g_object_unref(tmp);
+	}
+	s = demarrer(rc);
+	gt_session_set_in_project(s, TRUE);
+	jeu = gt_macro_set_new();
+	gt_macro_set_append(jeu, "du-projet", "", "y", "");
+	gt_macros_replace_set(gt_session_get_macros(s), jeu);
+	g_assert_true(app_config_load_profile(s, "p", &err));
+	g_assert_no_error(err);
+	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 57600);
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(gt_session_get_macros(s))), ==, 1);
+	g_assert_cmpstr(gt_macro_set_get(gt_macros_get_set(gt_session_get_macros(s)), 0)->label, ==, "du-projet");
+	g_assert_null(gt_macros_get_path(gt_session_get_macros(s)));
+	config_remember_macros_file(s);
+	kf = charger_rc();
+	v = g_key_file_get_string(kf, "profile:p", "macros_file", NULL);
+	g_assert_cmpstr(v, ==, m_ini);
+	g_free(v);
+	g_key_file_free(kf);
+	g_assert_true(app_config_save_profile(s, "p", &err));
+	g_assert_no_error(err);
+	kf = charger_rc();
+	v = g_key_file_get_string(kf, "profile:p", "macros_file", NULL);
+	g_assert_cmpstr(v, ==, m_ini);
+	g_free(v);
+	g_key_file_free(kf);
+	g_object_unref(s);
+	g_free(rc);
+	g_free(m_ini);
+	g_free(dossier);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -704,6 +806,7 @@ main(int argc, char **argv)
 	g_test_add_func("/app_config/default-absent", test_default_absent);
 	g_test_add_func("/app_config/chargement-profils", test_chargement_profils);
 	g_test_add_func("/app_config/profil-inconnu", test_profil_inconnu);
+	g_test_add_func("/app_config/profil-cause-reelle", test_profil_cause_reelle);
 	g_test_add_func("/app_config/verification", test_verification);
 	g_test_add_func("/app_config/enregistrement", test_enregistrement);
 	g_test_add_func("/app_config/enregistrement-nom-invalide", test_enregistrement_nom_invalide);
@@ -719,6 +822,8 @@ main(int argc, char **argv)
 	g_test_add_func("/app_config/etat-fenetre-aller-retour", test_etat_fenetre_aller_retour);
 	g_test_add_func("/app_config/etat-fenetre-x-y-retires", test_etat_fenetre_x_y_retires);
 	g_test_add_func("/app_config/etat-fenetre-aberrant", test_etat_fenetre_aberrant);
+	g_test_add_func("/app_config/last-project", test_last_project);
+	g_test_add_func("/app_config/profil-dans-projet", test_profil_dans_projet);
 	ret = g_test_run();
 
 	g_ptr_array_unref(messages);

@@ -12,6 +12,8 @@ src/macro_file.c
 src/macros.c
 src/port_form.c
 src/profile.c
+src/project.c
+src/project_file.c
 src/rx_logger.c
 src/script_engine.c
 src/session.c
@@ -24,6 +26,7 @@ src/ui/file_send_window.c
 src/ui/hex_send_bar.c
 src/ui/macro_editor.c
 src/ui/macro_panel.c
+src/ui/macros_save.c
 src/ui/menus.ui
 src/ui/port_dialog.c
 src/ui/profile_dialogs.c

@@ -428,6 +428,11 @@ static void on_open_chosen(GFile *file, gpointer user_data)
 	}
 	gtk_text_buffer_set_text(editor_buffer(sp), contents, (gint)len);
 	g_free(contents);
+	if(gt_session_get_in_project(sp->session))	/* onglet de projet : import, le chemin n'est pas retenu */
+	{
+		g_object_unref(panel);
+		return;
+	}
 	path = g_file_get_path(file);
 	if(path != NULL)
 	{
@@ -485,10 +490,13 @@ static void on_save_chosen(GFile *file, gpointer user_data)
 	text = gtk_text_buffer_get_text(buf, &start, &end, FALSE);
 	if(g_file_set_contents(path, text, -1, &err))
 	{
-		g_free(sp->script_path);
-		sp->script_path = path;
-		path = NULL;
-		panel_save_state(sp);
+		if(!gt_session_get_in_project(sp->session))	/* onglet de projet : export, le chemin n'est pas retenu */
+		{
+			g_free(sp->script_path);
+			sp->script_path = path;
+			path = NULL;
+			panel_save_state(sp);
+		}
 	}
 	else
 	{
@@ -508,7 +516,7 @@ static void on_save_clicked(GtkButton *b, gpointer user_data)
 
 	if(sp->shut_down)	/* page arrêtée : plus de sélecteur */
 		return;
-	if(sp->script_path != NULL)
+	if(sp->script_path != NULL && !gt_session_get_in_project(sp->session))	/* en projet : toujours le dialogue d'enregistrement */
 	{
 		GFile *f = g_file_new_for_path(sp->script_path);
 
@@ -841,6 +849,24 @@ static void layout_copy(ScriptPanel *sp, ScriptPanel *from)
 	g_clear_pointer(&sp->script_path, g_free);
 }
 
+/* Texte de l'éditeur → session (script-text) */
+static void push_script_text(ScriptPanel *sp)
+{
+	GtkTextBuffer *buf = editor_buffer(sp);
+	GtkTextIter start, end;
+	gchar *text;
+
+	gtk_text_buffer_get_bounds(buf, &start, &end);
+	text = gtk_text_buffer_get_text(buf, &start, &end, FALSE);
+	gt_session_set_script_text(sp->session, text);
+	g_free(text);
+}
+
+static void on_editor_changed(GtkTextBuffer *buf, gpointer user_data)
+{
+	push_script_text(user_data);
+}
+
 /* Moteur débranché du panneau (journal et fin) */
 static void engine_detach(ScriptPanel *sp)
 {
@@ -912,6 +938,8 @@ GtkWidget *gt_script_panel_new(GtkApplication *app, GtSession *s, GActionMap *ta
 		layout_copy(sp, from);
 	else
 		layout_load(sp, kf);	/* première page : [layout] et [session] */
+	if(gt_session_get_in_project(s))
+		g_clear_pointer(&sp->script_path, g_free);	/* onglet de projet : [session] non lu */
 
 	sp->panel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gtk_widget_set_name(sp->panel, "script-panel");
@@ -949,7 +977,9 @@ GtkWidget *gt_script_panel_new(GtkApplication *app, GtSession *s, GActionMap *ta
 	gtk_source_view_set_indent_on_tab(GTK_SOURCE_VIEW(sp->editor), TRUE);
 	gtk_source_view_set_indent_width(GTK_SOURCE_VIEW(sp->editor), 4);
 	gtk_source_view_set_tab_width(GTK_SOURCE_VIEW(sp->editor), 4);
-	if(sp->script_path != NULL && g_file_get_contents(sp->script_path, &contents, NULL, NULL) && g_utf8_validate(contents, -1, NULL))
+	if(gt_session_get_in_project(s))	/* onglet de projet : le texte vient de la session, jamais d'un fichier */
+		gtk_text_buffer_set_text(GTK_TEXT_BUFFER(ebuf), gt_session_get_script_text(s), -1);
+	else if(sp->script_path != NULL && g_file_get_contents(sp->script_path, &contents, NULL, NULL) && g_utf8_validate(contents, -1, NULL))
 		gtk_text_buffer_set_text(GTK_TEXT_BUFFER(ebuf), contents, -1);
 	else
 	{
@@ -958,6 +988,8 @@ GtkWidget *gt_script_panel_new(GtkApplication *app, GtSession *s, GActionMap *ta
 	}
 	g_free(contents);
 	gtk_text_buffer_set_modified(GTK_TEXT_BUFFER(ebuf), FALSE);
+	push_script_text(sp);	/* une fois après le chargement, puis à chaque modification (la session ne renvoie jamais le texte à l'éditeur) */
+	g_signal_connect(ebuf, "changed", G_CALLBACK(on_editor_changed), sp);
 	scroll = gtk_scrolled_window_new();
 	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), sp->editor);
 	gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scroll), 150);
@@ -1063,7 +1095,7 @@ void gt_script_panel_store_state(GtkWidget *panel, GKeyFile *kf)
 		g_key_file_set_integer(kf, "layout", "pos_leftright", sp->pos_leftright);
 	/* [session] script_path (règle des onglets, 6b) : un panneau qui a un chemin l'écrit ; un panneau qui n'en a pas ne retire jamais la clé,
 	 * sinon quitter avec un nouvel onglet actif (éditeur au modèle, sans fichier) effacerait le script enregistré par la première page */
-	if(sp->script_path != NULL)
+	if(sp->script_path != NULL && !gt_session_get_in_project(sp->session))
 		g_key_file_set_string(kf, "session", "script_path", sp->script_path);
 }
 
@@ -1079,4 +1111,22 @@ static void panel_save_state(ScriptPanel *sp)
 	gt_script_panel_store_state(sp->panel, gt_config_store_get_key_file(store));
 	if(!gt_config_store_is_read_only(store))
 		config_save_store(FALSE);
+}
+
+void gt_script_panel_set_layout(GtkWidget *panel, const gchar *layout)
+{
+	ScriptPanel *sp = panel_of(panel);
+
+	if(sp == NULL || sp->shut_down || sp->layout_action == NULL || layout == NULL)
+		return;
+	g_action_change_state(G_ACTION(sp->layout_action), g_variant_new_string(layout));
+}
+
+const gchar *gt_script_panel_get_layout(GtkWidget *panel)
+{
+	ScriptPanel *sp = panel_of(panel);
+
+	if(sp == NULL)
+		return "topbottom";
+	return sp->orientation == GTK_ORIENTATION_VERTICAL ? "topbottom" : "leftright";
 }

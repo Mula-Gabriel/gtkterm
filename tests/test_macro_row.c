@@ -157,6 +157,52 @@ static void test_aller_retour_jeu(void)
 	gt_macro_set_free(set);
 }
 
+static void test_set_args(void)
+{
+	GtMacroRow *row = gt_macro_row_new(3, "A", "", "A%d", "");
+	const gchar *un[] = { "1", NULL };
+	const gchar *un_bis[] = { "1", NULL };
+
+	notifications = 0;
+	g_signal_connect(row, "notify::args", G_CALLBACK(compter), NULL);
+	gt_macro_row_set_args(row, NULL);
+	g_assert_cmpuint(notifications, ==, 0);
+	gt_macro_row_set_args(row, un);
+	g_assert_cmpuint(notifications, ==, 1);
+	g_assert_cmpstr(gt_macro_row_get_args(row)[0], ==, "1");
+	g_assert_null(gt_macro_row_get_args(row)[1]);
+	gt_macro_row_set_args(row, un_bis);	/* même valeur : pas de notification */
+	g_assert_cmpuint(notifications, ==, 1);
+	gt_macro_row_set_args(row, NULL);
+	g_assert_cmpuint(notifications, ==, 2);
+	g_assert_null(gt_macro_row_get_args(row));
+	g_object_unref(row);
+}
+
+static void test_args_recopies(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint a = gt_macro_set_append(set, "A", "", "A%d", "");
+	GListStore *store;
+	GtMacroEdit *edits;
+	GtMacroRow *neuve = gt_macro_row_new(0, "N", "", "N", "");
+	guint n = 0;
+
+	g_assert_true(gt_macro_set_set_arg(set, a, 0, "42"));
+	store = gt_macro_rows_from_set(set);
+	g_list_store_append(store, neuve);
+	g_object_unref(neuve);
+	edits = gt_macro_rows_to_edits(G_LIST_MODEL(store), &n);
+	g_assert_cmpuint(n, ==, 2);
+	g_assert_nonnull(edits[0].args);
+	g_assert_cmpstr(edits[0].args[0], ==, "42");
+	g_assert_null(edits[0].args[1]);
+	g_assert_null(edits[1].args);
+	g_free(edits);
+	g_object_unref(store);
+	gt_macro_set_free(set);
+}
+
 static void test_listes(void)
 {
 	GtMacroLists *lists = gt_macro_lists_new();
@@ -191,5 +237,7 @@ int main(int argc, char **argv)
 	g_test_add_func("/macro_row/suppression-et-insertion", test_suppression_et_insertion);
 	g_test_add_func("/macro_row/aller-retour-jeu", test_aller_retour_jeu);
 	g_test_add_func("/macro_row/listes", test_listes);
+	g_test_add_func("/macro_row/set-args", test_set_args);
+	g_test_add_func("/macro_row/args-recopies", test_args_recopies);
 	return g_test_run();
 }

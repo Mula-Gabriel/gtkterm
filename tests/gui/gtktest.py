@@ -532,12 +532,22 @@ class Env:
 
     # ---------- onglets ----------
     def sessions(self):
-        """Onglets (crochet test-sessions) : liste de dict index, id, name, state, profile, macros_file, active, busy, dans l'ordre."""
+        """Onglets (crochet test-sessions) : liste de dict index, id, name, state, profile, macros_file, active, busy, in_project, script, dans l'ordre."""
         self.action('test-sessions')
         return self.state('test-sessions') or []
 
     def active_session(self):
         return [s for s in self.sessions() if s['active']][0]
+
+    # ---------- projet (6c) ----------
+    def project(self):
+        """Projet de la fenêtre (crochet test-project) : dict open (b), path (s, vide sans fichier), modified (b), name (s)."""
+        self.action('test-project')
+        return self.state('test-project') or {}
+
+    def project_path(self, name):
+        """Chemin d'un fichier projet dans le HOME privé du scénario."""
+        return os.path.join(self.home, name)
 
     # ---------- port derrière un lien symbolique (perte et retour du périphérique) ----------
     def use_link(self):
@@ -607,6 +617,18 @@ def open_tab(env, port, timeout=8):
     ok = wait_until(lambda: len(env.sessions()) == avant + 1 and env.active_session()['name'] == os.path.basename(port), timeout)
     check(ok, 'onglet ouvert sur %s' % port, env.sessions())
     return ok
+
+
+def save_project_as(env, path):
+    """File › Save project as… (app.project-save-as) : chemin absolu saisi dans le sélecteur « Save project »."""
+    env.action('project-save-as')
+    file_dialog(env, 'Save project', path)
+
+
+def open_project(env, path):
+    """File › Open project… (app.project-open) : chemin absolu saisi dans le sélecteur « Open project »."""
+    env.action('project-open')
+    file_dialog(env, 'Open project', path)
 
 
 def macros_v2_text(*libelles):

@@ -26,6 +26,8 @@
 #include "link.h"
 #include "macros.h"
 #include "macro_file.h"
+#include "macros_format.h"
+#include "file_stamp.h"
 
 struct _GtMacros
 {
@@ -36,6 +38,11 @@ struct _GtMacros
   gchar *path;
   gchar *last_save_error;	/* dernier échec d'enregistrement signalé (chemin, domaine, code) : un seul message par échec */
   gboolean shut_down;
+  GHashTable *usage;		/* id → gchar ** (possédés) : valeurs d'usage des arguments, jamais enregistrées */
+  gboolean embedded;		/* onglet de projet : aucun fichier retenu */
+  GtFileStamp stamp;		/* identité du fichier courant à sa dernière lecture ou écriture */
+  void (*edited) (gpointer data);
+  gpointer edited_data;
 };
 
 static gboolean
@@ -62,6 +69,7 @@ gt_macros_new (GtkTermLink *link, GtSession *owner)
   m->link = g_object_ref (link);
   m->owner = owner;
   m->set = gt_macro_set_new ();
+  m->usage = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, (GDestroyNotify) g_strfreev);
   m->poller = gt_macro_poller_new (m->set, poller_send, poller_state, m);
   return m;
 }
@@ -99,6 +107,8 @@ gt_macros_shutdown (GtMacros *m)
   gt_macro_poller_free (m->poller);
   m->poller = NULL;
   m->shut_down = TRUE;
+  m->edited = NULL;
+  m->edited_data = NULL;
 }
 
 void
@@ -110,6 +120,7 @@ gt_macros_free (GtMacros *m)
   gt_macro_set_free (m->set);
   g_free (m->path);
   g_free (m->last_save_error);
+  g_hash_table_unref (m->usage);
   g_object_unref (m->link);
   g_free (m);
 }
@@ -118,6 +129,7 @@ static gboolean
 send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboolean announce)
 {
   const GtMacro *macro = gt_macro_set_find (m->set, id);
+  const gchar *const *use_args = args;
   GBytes *bytes;
   const guint8 *data;
   gsize len = 0;
@@ -128,7 +140,13 @@ send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboole
     return FALSE;
   /* Nom affiché : le libellé, à défaut le raccourci (C8) ; pris avant l'envoi, dont les gestionnaires ne doivent pas toucher au jeu */
   name = g_strdup (macro->label[0] != '\0' ? macro->label : macro->shortcut);
-  bytes = gt_macro_expand (m->set, macro, args, n_args);
+  /* Arguments enregistrés : valeurs d'usage ou défauts, déjà résolus ici (jamais -1 vers gt_macro_expand) */
+  if (n_args < 0)
+    {
+      use_args = gt_macros_get_args (m, id);
+      n_args = use_args != NULL ? (gint) g_strv_length ((gchar **) use_args) : 0;
+    }
+  bytes = gt_macro_expand (m->set, macro, use_args, n_args);
   data = g_bytes_get_data (bytes, &len);
   if (len > 0)
     written = gt_link_send (m->link, data, len, GT_SEND_MACRO);
@@ -159,6 +177,96 @@ gt_macros_changed (GtMacros *m)
 
   if (ui->macros_changed != NULL)
     ui->macros_changed (m->owner);
+  gt_macros_edited (m);
+}
+
+void
+gt_macros_edited (GtMacros *m)
+{
+  if (m->edited != NULL)
+    m->edited (m->edited_data);
+}
+
+void
+gt_macros_set_edited_func (GtMacros *m, void (*func) (gpointer data), gpointer data)
+{
+  m->edited = func;
+  m->edited_data = data;
+}
+
+void
+gt_macros_set_embedded (GtMacros *m, gboolean embedded)
+{
+  m->embedded = embedded;
+  if (embedded)
+    {
+      g_clear_pointer (&m->path, g_free);
+      memset (&m->stamp, 0, sizeof m->stamp);
+    }
+}
+
+gboolean
+gt_macros_is_embedded (GtMacros *m)
+{
+  return m->embedded;
+}
+
+const gchar *const *
+gt_macros_get_args (GtMacros *m, guint id)
+{
+  const GtMacro *macro = gt_macro_set_find (m->set, id);
+  gchar **usage;
+
+  if (macro == NULL)
+    return NULL;
+  usage = g_hash_table_lookup (m->usage, GUINT_TO_POINTER (id));
+  if (usage != NULL && (gint) g_strv_length (usage) == macro_count_format_args (gt_macro_set_get_lists (m->set), macro->action))
+    return (const gchar *const *) usage;
+  return (const gchar *const *) macro->args;
+}
+
+void
+gt_macros_set_usage_arg (GtMacros *m, guint id, gint arg_index, const gchar *value)
+{
+  const GtMacro *macro = gt_macro_set_find (m->set, id);
+  gint n;
+  gchar **usage;
+
+  if (macro == NULL)
+    return;
+  n = macro_count_format_args (gt_macro_set_get_lists (m->set), macro->action);
+  if (arg_index < 0 || arg_index >= n)
+    return;
+  usage = g_hash_table_lookup (m->usage, GUINT_TO_POINTER (id));
+  if (usage == NULL || (gint) g_strv_length (usage) != n)
+    {
+      /* Vecteur créé depuis les défauts (ou ""), au bon nombre */
+      gchar **fresh = g_new0 (gchar *, n + 1);
+
+      for (gint i = 0; i < n; i++)
+        fresh[i] = g_strdup (macro->args != NULL && macro->args[i] != NULL ? macro->args[i] : "");
+      g_hash_table_insert (m->usage, GUINT_TO_POINTER (id), fresh);
+      usage = fresh;
+    }
+  g_free (usage[arg_index]);
+  usage[arg_index] = g_strdup (value != NULL ? value : "");
+}
+
+void
+gt_macros_reset_usage (GtMacros *m, guint id)
+{
+  if (id == 0)
+    g_hash_table_remove_all (m->usage);
+  else
+    g_hash_table_remove (m->usage, GUINT_TO_POINTER (id));
+}
+
+gboolean
+gt_macros_has_usage (GtMacros *m, guint id)
+{
+  if (id == 0)
+    return g_hash_table_size (m->usage) > 0;
+  return g_hash_table_contains (m->usage, GUINT_TO_POINTER (id));
 }
 
 void
@@ -171,9 +279,45 @@ gt_macros_replace_set (GtMacros *m, GtMacroSet *set)
   old = m->set;
   m->set = set;
   gt_macro_set_free (old);
+  g_hash_table_remove_all (m->usage);
   /* Panneau et raccourcis reconstruits par l'interface ; une fenêtre d'édition ouverte sur l'ancien jeu s'y ferme sans enregistrer
      (ses lignes décrivent l'ancien jeu : les appliquer au nouveau perdrait arguments et polling) */
   gt_macros_changed (m);
+}
+
+static gboolean
+args_equal (const gchar *const *a, const gchar *const *b)
+{
+  static const gchar *const none[] = { NULL };
+
+  return g_strv_equal (a != NULL ? a : none, b != NULL ? b : none);
+}
+
+void
+gt_macros_apply_edits (GtMacros *m, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists)
+{
+  GHashTable *before = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, (GDestroyNotify) g_strfreev);
+  GHashTableIter iter;
+  gpointer key;
+
+  /* Valeurs par défaut avant l'application, comparées après (check_args a pu les ajuster aux listes définitives) */
+  for (guint i = 0; i < gt_macro_set_count (m->set); i++)
+    {
+      const GtMacro *macro = gt_macro_set_get (m->set, i);
+
+      g_hash_table_insert (before, GUINT_TO_POINTER (macro->id), g_strdupv (macro->args));
+    }
+  gt_macro_set_apply_edits (m->set, rows, n_rows, lists);
+  g_hash_table_iter_init (&iter, m->usage);
+  while (g_hash_table_iter_next (&iter, &key, NULL))
+    {
+      const GtMacro *macro = gt_macro_set_find (m->set, GPOINTER_TO_UINT (key));
+
+      /* Macro supprimée, ou valeurs par défaut changées : les valeurs d'usage masqueraient la nouvelle valeur par défaut */
+      if (macro == NULL || !args_equal ((const gchar *const *) macro->args, g_hash_table_lookup (before, key)))
+        g_hash_table_iter_remove (&iter);
+    }
+  g_hash_table_unref (before);
 }
 
 const gchar *
@@ -221,7 +365,11 @@ gt_macros_load_file (GtMacros *m, const gchar *path, gboolean interactive)
   GtMacroSet *set = NULL;
   GError *error = NULL;
   gboolean ok = TRUE;
+  GtFileStamp stamp;
 
+  /* Identité relevée avant la lecture (comme project_file.c et config_store.c) : jamais plus récente que le contenu chargé, une réécriture
+     pendant la lecture sera vue comme un conflit au prochain enregistrement */
+  gt_file_stamp_take (load_path, &stamp);
   if (!gt_macro_file_load (load_path, &set, &error))
     {
       gboolean missing = g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT);
@@ -253,8 +401,14 @@ gt_macros_load_file (GtMacros *m, const gchar *path, gboolean interactive)
       g_clear_error (&error);
       set = gt_macro_set_new ();
     }
-  g_free (m->path);
-  m->path = load_path;
+  /* Mode intégré : le fichier est importé, son chemin n'est pas retenu. Identité prise avant la lecture (absent : « absent »). */
+  if (!m->embedded)
+    {
+      g_free (m->path);
+      m->path = g_strdup (load_path);
+      m->stamp = stamp;
+    }
+  g_free (load_path);
   g_clear_pointer (&m->last_save_error, g_free);
   gt_macros_replace_set (m, set);
   return ok;
@@ -266,12 +420,41 @@ gt_macros_forget_save_error (GtMacros *m)
   g_clear_pointer (&m->last_save_error, g_free);
 }
 
-gboolean
-gt_macros_save_file (GtMacros *m, const gchar *path, gboolean interactive)
+GtMacrosSaveResult
+gt_macros_save_file (GtMacros *m, const gchar *path, gboolean interactive, gboolean force)
 {
-  gchar *save_path = resolve_path (m, path);
+  gchar *save_path;
   GError *error = NULL;
 
+  if (path == NULL && m->embedded && m->path == NULL)
+    {
+      report_error (interactive, _ ("This tab has no macros file: its macros are saved with the project."));
+      return GT_MACROS_FAILED;
+    }
+  save_path = resolve_path (m, path);
+  /* Garde d'identité : le fichier courant a été réécrit par un tiers depuis notre dernière lecture ou écriture */
+  if (!force && g_strcmp0 (save_path, m->path) == 0 && gt_file_stamp_changed (save_path, &m->stamp))
+    {
+      if (!interactive)
+        g_warning (_ ("%s changed on disk: not overwritten"), save_path);
+      g_free (save_path);
+      return GT_MACROS_CONFLICT;
+    }
+  /* Aucun fichier courant (aucun chargé ni enregistré) : la cible est le fichier par défaut, jamais lu par cet onglet ; présent et non vide,
+     il n'est pas réécrit en silence (conflit) */
+  if (!force && path == NULL && m->path == NULL)
+    {
+      GtFileStamp target;
+
+      gt_file_stamp_take (save_path, &target);
+      if (target.exists && target.size > 0)
+        {
+          if (!interactive)
+            g_warning (_ ("%s already exists: not overwritten"), save_path);
+          g_free (save_path);
+          return GT_MACROS_CONFLICT;
+        }
+    }
   if (!gt_macro_file_save (m->set, save_path, &error))
     {
       /* Chaque frappe dans un argument enregistre : un même échec n'ouvre qu'une boîte. L'échec est reconnu à son chemin et à son
@@ -289,10 +472,30 @@ gt_macros_save_file (GtMacros *m, const gchar *path, gboolean interactive)
       m->last_save_error = key;
       g_error_free (error);
       g_free (save_path);
-      return FALSE;
+      return GT_MACROS_FAILED;
     }
   g_clear_pointer (&m->last_save_error, g_free);
-  g_free (m->path);
-  m->path = save_path;
-  return TRUE;
+  if (!m->embedded)
+    {
+      g_free (m->path);
+      m->path = save_path;
+      gt_file_stamp_take (m->path, &m->stamp);
+    }
+  else
+    g_free (save_path);
+  return GT_MACROS_SAVED;
+}
+
+gboolean
+gt_macros_reload (GtMacros *m)
+{
+  gchar *path;
+  gboolean ok;
+
+  if (m->path == NULL && m->embedded)
+    return FALSE;
+  path = g_strdup (m->path);	/* NULL : le fichier par défaut (cible d'un enregistrement sans fichier courant) */
+  ok = gt_macros_load_file (m, path, TRUE);
+  g_free (path);
+  return ok;
 }

@@ -116,7 +116,8 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
    `GtkDropDown`, valeur d'un `GtkSpinButton`, police d'un `GtkFontDialogButton`, couleur d'un `GtkColorDialogButton`). Les classes CSS d'un widget sont
    dans la clé `css` du dump. Onglets (6b) : `test-terminal-text` et `test-terminal-props` visent l'onglet actif ; `app.test-sessions` (état `aa{sv}`
    recalculé à chaque activation, comme `test-dump`) décrit chaque onglet dans l'ordre : `index` (i), `id` (u), `name` (s, nom court), `state` (s :
-   `closed`, `connecting`, `open`, `listening`, `lost`, `reconnecting`), `profile` (s), `macros_file` (s, vide si aucun), `active` (b), `busy` (b), pour
+   `closed`, `connecting`, `open`, `listening`, `lost`, `reconnecting`), `profile` (s), `macros_file` (s, vide si aucun), `active` (b), `busy` (b), `in_project` (b, onglet de projet : macros
+   intégrées), `script` (s, texte de l'éditeur de script tenu par la session), pour
    vérifier l'indépendance des onglets sans dépendre de l'affichage. Les widgets des pages non affichées du `GtkNotebook` sont visibles mais non mappés.
 3. **Faux navigateur broadway** (`broadway.py`) : protocole de `gtk4-broadwayd`, réponse immédiate aux `ROUNDTRIP`, souris (masque du bouton présent à l'appui
    et au relâchement ; un clic attend que la géométrie du widget soit stable ; `drag_in_surface` pour un glisser, par ex. réordonner les onglets) et
@@ -157,7 +158,9 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
   Entrée).
 - Port : `read_pty(duration)`, `drain()`, `write_pty(data)`, `use_link()`, `unplug()`, `replug()` (port derrière un lien symbolique).
 - Onglets : `e.new_pty()` (paire pty supplémentaire, objet `Pty` : `port`, `read(duration)`, `drain()`, `write(data)` ; fermée avec l'`Env`),
-  `e.sessions()` (liste de dict lue dans `test-sessions`), `e.active_session()`, `open_tab(env, port)` (nouvel onglet par le vrai chemin : `app.new-tab`,
+  `e.sessions()` (liste de dict lue dans `test-sessions`), `e.active_session()`, `e.project()` (dict `open`, `path`, `modified`, `name` lu dans `test-project`),
+  `e.project_path(nom)` (chemin d'un fichier projet dans le HOME privé du scénario), `save_project_as(env, chemin)` et `open_project(env, chemin)` (File › Save project as… / Open project… par les
+  vrais sélecteurs de fichiers), `open_tab(env, port)` (nouvel onglet par le vrai chemin : `app.new-tab`,
   dialogue Port, port remplacé, OK ; attend que la nouvelle session soit active). `find`/`find1` ignorent les widgets non mappés : un nom stable
   (`terminal`, `macro-panel`…) désigne celui de l'onglet affiché.
 - Macros : `macros_v2_text(*libellés)`, `write_macros_v2(path, macros, lists=None)`, `write_macros_v1(path, macros, lists=None)`, `macro_config(env, fichier)`,
@@ -170,7 +173,7 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
 ### Écrire un scénario
 
 - `tests/gui/test_<nom>.py` : `from gtktest import *`, un `Env('<nom>')`, `write_config(e.general() + e.profile(…))`, `start(…)`, des `check(…)`, puis
-  `e.finish()` et `sys.exit(conclude())` ; l'ajouter à `gui_scenarios` dans `tests/gui/meson.build` (57 scénarios aujourd'hui).
+  `e.finish()` et `sys.exit(conclude())` ; l'ajouter à `gui_scenarios` dans `tests/gui/meson.build` (66 scénarios aujourd'hui).
 - Viser les widgets par leur nom stable (`gtk_widget_set_name` dans `src/ui/`, par ex. `port-dialog`, `macro-<id>`, `script-run`) ; passer par une action
   `app.*` quand le geste n'est pas l'objet du test, par le navigateur quand il l'est.
 - Échec : lire `build/tests/gui/runs/<scénario>/result.txt` (une ligne `OK` / `ECHEC` par vérification) et `gtkterm.stderr` (sortie d'erreur de GTKTerm) du même dossier.
@@ -186,3 +189,20 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
   `test_onglets_sigusr.py` (SIGUSR1/2 sur tous les onglets), `test_onglets_terminal.py` (dialogue Terminal lié à sa session), `test_onglets_ordre.py`
   (glisser d'étiquette → ordre du gestionnaire), `test_onglets_macros.py` et `test_onglets_macros_fichier.py` (macros, raccourcis et polling par onglet ;
   fichier de macros d'un nouvel onglet), `test_onglets_lua.py` (port 0 = onglet de lancement, deux scripts en parallèle, fermeture pendant un script).
+- Projets (sous-projet 6c) : `test_projet.py` (Save project as sur deux onglets libres puis titre et « • », Save, l'onglet actif ne compte pas dans « modifié », Close project, Open project : onglets,
+  ports, onglet actif, macros et script restaurés ; import et export d'un script ; fichier abîmé refusé sans rien fermer), `test_projet_demarrage.py` (dernier projet rouvert ; fichier absent : boîte,
+  `last_project` effacé, plus de boîte au démarrage suivant ; fichier illisible : `last_project` gardé ; `-p`, `--project`, `--project` avec `-p` refusé), `test_projet_fermeture.py` (question Save /
+  Don't save / Cancel à la fermeture, Save en échec sur un dossier en lecture seule), `test_projet_macros.py` (macros intégrées : aucun `.ini` écrit, import / export, nouvel onglet avec copie du jeu ;
+  Close project avec un profil `default` sans `macros_file` : onglet libre sur le fichier de macros par défaut, une macro ajoutée sans rien perdre), `test_projet_conflit.py` (Save project as d'un nom
+  sans « .gtkterm » dont la version suffixée existe : question, Cancel n'écrit rien, Replace écrit ; fichier projet réécrit par un tiers : Overwrite / Reload / Cancel, Cancel bouton par défaut
+  (`focus` du dump) et Overwrite `destructive-action`, Entrée n'écrase pas, chacun des trois choix ; Reload avec un script en cours : « Close all tabs? »), `test_projet_operations.py` (New project :
+  onglet de projet sans titre, sans macros, titre ; « Close all tabs? » sur New, Open et Close project avec un script en cours, Cancel garde tout ; Open project sur un projet modifié : Save puis
+  ouverture, Don't save puis ouverture sans rien écrire ; projet courant rouvert après Save : fichier relu). Les aides `Env.project()`, `Env.project_path()`, `save_project_as()` et `open_project()`
+  sont décrites plus haut ; `test-project` donne l'état du projet (`open`, `path`, `modified`, `name`) et `test-sessions` les champs `in_project` et `script`.
+- Macros (6c) : `test_macros_arguments.py` (valeurs d'usage jamais enregistrées, valeurs par défaut de la zone « Default values », « Reset arguments »), `test_macros_conflit.py` (un même `.ini` pour
+  deux onglets libres, réécrit par un tiers : question Overwrite / Reload / Cancel, Cancel bouton par défaut et Entrée sans écrasement, chacun des trois choix ; sans profil `default`, le fichier de
+  macros par défaut présent n'est pas réécrit en silence : question « The macros file already exists. », Cancel, Reload), `test_macro_editor_colonnes.py` (colonnes de « Configure Macros » : largeur au
+  moins égale au titre, mesurée par `natural_w`, et un glisser sur un bord ne change qu'une colonne ; `natural_w` est la largeur naturelle du widget mesurée par `gtk_widget_measure`, donnée par le
+  dump pour un widget mappé).
+- Panneau de script (6c) : `test_script_panneau.py` (affiché pendant que GTKTerm tourne, le panneau reçoit une hauteur utile et l'éditeur reste dessiné ; masqué puis réaffiché de même ; une position
+  enregistrée valable est respectée).

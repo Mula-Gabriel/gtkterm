@@ -6,7 +6,8 @@
  *   id (s, adresse), depth (i), native (i, rang du widget natif — fenêtre ou popover — qui porte la surface, -1 avant le premier),
  *   type (s), role (s, GtkAccessibleRole), label (s, si non vide), name (s, si posé par gtk_widget_set_name), title (s, fenêtres),
  *   css (as), visible, mapped, sensitive, focus, selected (b), active (b, widgets à propriété « active » booléenne), modal (b, fenêtres),
- *   x, y, w, h (i, en coordonnées de la surface du natif, si mappé), surface_w, surface_h (i, natifs), popup_x, popup_y (i, popovers),
+ *   x, y, w, h (i, en coordonnées de la surface du natif, si mappé), natural_w (i, si mappé : largeur naturelle mesurée par gtk_widget_measure, indépendante de
+ *   l'allocation), surface_w, surface_h (i, natifs), popup_x, popup_y (i, popovers),
  *   frame (i, natifs : compteur d'images de l'horloge de la surface ; une géométrie lue avant l'image suivante peut être périmée). */
 #include <string.h>
 #include <vte/vte.h>
@@ -158,6 +159,13 @@ static void dump_widget(GtkWidget *w, GtkNative *nat, gint nat_idx, gint *n_nati
 		add_int(&d, "y", (gint)(r.origin.y + sy));
 		add_int(&d, "w", (gint)r.size.width);
 		add_int(&d, "h", (gint)r.size.height);
+	}
+	if(gtk_widget_get_mapped(w))
+	{
+		gint nat_w = 0;
+
+		gtk_widget_measure(w, GTK_ORIENTATION_HORIZONTAL, -1, NULL, &nat_w, NULL, NULL);
+		add_int(&d, "natural_w", nat_w);
 	}
 	if(GTK_IS_NATIVE(w) && gtk_native_get_surface(GTK_NATIVE(w)) != NULL)
 	{
@@ -327,7 +335,7 @@ static void on_test_terminal_props(GSimpleAction *action, GVariant *param, gpoin
 
 /* test-sessions (plan, décision 9) : état aa{sv} recalculé à chaque activation (Activate puis Describe, comme test-dump) ; un dict par onglet,
  * dans l'ordre : index (i), id (u), name (s, nom court), state (s, pseudo de GtLinkState), profile (s), macros_file (s, vide si aucun),
- * active (b), busy (b) */
+ * active (b), busy (b), in_project (b), script (s, texte de l'éditeur de script tenu par la session) */
 static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
 	GtSessionManager *m = gt_app_get_sessions();
@@ -352,9 +360,30 @@ static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer us
 		g_variant_builder_add(&d, "{sv}", "macros_file", g_variant_new_string(macros != NULL ? macros : ""));
 		g_variant_builder_add(&d, "{sv}", "active", g_variant_new_boolean(s == active));
 		g_variant_builder_add(&d, "{sv}", "busy", g_variant_new_boolean(gt_session_is_busy(s)));
+		g_variant_builder_add(&d, "{sv}", "in_project", g_variant_new_boolean(gt_session_get_in_project(s)));
+		g_variant_builder_add(&d, "{sv}", "script", g_variant_new_string(gt_session_get_script_text(s)));
 		g_variant_builder_add_value(&b, g_variant_builder_end(&d));
 	}
 	g_type_class_unref(states);
+	g_simple_action_set_state(action, g_variant_builder_end(&b));
+}
+
+/* test-project (plan, décision 13) : état a{sv} recalculé à chaque activation : open (b), path (s, vide sans fichier), modified (b), name (s) */
+static void on_test_project(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+	GtProject *p = gt_app_get_project();
+	GVariantBuilder b;
+
+	g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
+	if(p != NULL)
+	{
+		const gchar *path = gt_project_get_path(p);
+
+		g_variant_builder_add(&b, "{sv}", "open", g_variant_new_boolean(gt_project_is_open(p)));
+		g_variant_builder_add(&b, "{sv}", "path", g_variant_new_string(path != NULL ? path : ""));
+		g_variant_builder_add(&b, "{sv}", "modified", g_variant_new_boolean(gt_project_is_modified(p)));
+		g_variant_builder_add(&b, "{sv}", "name", g_variant_new_take_string(gt_project_get_name(p)));
+	}
 	g_simple_action_set_state(action, g_variant_builder_end(&b));
 }
 
@@ -466,6 +495,10 @@ void gt_test_hooks_install(GtkApplication *app)
 	g_object_unref(a);
 	a = g_simple_action_new_stateful("test-sessions", NULL, g_variant_new_array(G_VARIANT_TYPE_VARDICT, NULL, 0));
 	g_signal_connect(a, "activate", G_CALLBACK(on_test_sessions), NULL);
+	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
+	g_object_unref(a);
+	a = g_simple_action_new_stateful("test-project", NULL, g_variant_new_array(G_VARIANT_TYPE("{sv}"), NULL, 0));
+	g_signal_connect(a, "activate", G_CALLBACK(on_test_project), NULL);
 	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
 	g_object_unref(a);
 	a = g_simple_action_new("test-activate", G_VARIANT_TYPE_STRING);

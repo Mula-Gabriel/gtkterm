@@ -33,6 +33,13 @@ gchar          *gt_session_short_name_for(const GtProfile *p);	/* série : nom d
 void            gt_session_set_file_sending(GtSession *s, gboolean sending);	/* tenu par l'envoi de fichier de la page */
 gboolean        gt_session_is_busy(GtSession *s);	/* script en cours ou envoi de fichier en cours */
 gboolean        gt_session_is_shut_down(GtSession *s);
+/* Projet (6c) : propriété « in-project » (onglet d'un projet : macros intégrées) ; propriété « script-text » (texte de l'éditeur de script, jamais NULL,
+ * notifiée seulement si elle change) ; signal « edited » (aucun argument) : un réglage enregistrable a pu changer (plan, décision 2). */
+gboolean        gt_session_get_in_project(GtSession *s);
+void            gt_session_set_in_project(GtSession *s, gboolean in_project);	/* gt_macros_set_embedded ; edited */
+const gchar    *gt_session_get_script_text(GtSession *s);
+void            gt_session_set_script_text(GtSession *s, const gchar *text);	/* NULL : "" */
+void            gt_session_edited(GtSession *s);	/* émet « edited » (rien après shutdown) */
 /* Options ← profil (un seul « changed »), auto-reconnect de la liaison, nom court recalculé ; ne rouvre pas le port, n'appelle aucun crochet */
 void            gt_session_apply_profile(GtSession *s);
 void            gt_session_open_port(GtSession *s);	/* port du profil (nom court recalculé) ; échec : signal open-failed de la liaison */

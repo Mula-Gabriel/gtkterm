@@ -34,6 +34,7 @@ typedef struct
 	const gchar *shortcut;
 	const gchar *action;
 	const gchar *tab;
+	const gchar *const *args;	/* valeurs par défaut ; NULL : aucune */
 } GtMacroEdit;
 
 GtMacroSet         *gt_macro_set_new          (void);
@@ -49,6 +50,7 @@ void                gt_macro_set_take_lists   (GtMacroSet *set, GtMacroLists *li
 gboolean            gt_macro_set_set_arg      (GtMacroSet *set, guint id, gint arg_index, const gchar *value);
 gboolean            gt_macro_set_set_args     (GtMacroSet *set, guint id, const gchar *const *args, gint n_args);
 gboolean            gt_macro_set_set_polling  (GtMacroSet *set, guint id, gboolean polling, guint period_ms);
+GtMacroSet         *gt_macro_set_copy         (const GtMacroSet *set);	/* copie profonde ; nouveaux identifiants */
 void                gt_macro_set_apply_edits  (GtMacroSet *set, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists);
 
 gboolean            gt_macro_action_is_separator(const gchar *action, gchar **label_out);

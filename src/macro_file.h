@@ -15,4 +15,11 @@ gboolean gt_macro_file_load(const gchar *path, GtMacroSet **set_out, GError **er
  * autre contenu, FALSE + G_FILE_ERROR_EXIST et rien n'est écrit. */
 gboolean gt_macro_file_save(const GtMacroSet *set, const gchar *path, GError **error);
 
+/* Jeu ↔ groupes de kf préfixés (6c) : prefix "" → [macro:N] et [list:K] (fichier .ini) ; "tab:0:" → [tab:0:macro:N]… Sans en-tête.
+ * Écriture : groupes ajoutés dans l'ordre (macros 1…n, puis listes 1…k) ; groupes existants de même nom remplacés. */
+void        gt_macro_set_to_key_file(const GtMacroSet *set, GKeyFile *kf, const gchar *prefix);
+/* Lecture tolérante, jamais NULL : groupes « prefix macro:* » et « prefix list:* » dans l'ordre du fichier ; un échappement invalide garde la
+ * valeur brute (g_warning citant origin et le groupe) ; une liste sans entrée existe quand même. */
+GtMacroSet *gt_macro_set_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar *origin);
+
 #endif

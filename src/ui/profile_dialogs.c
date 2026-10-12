@@ -9,6 +9,7 @@
 #include "app_config.h"
 #include "link.h"
 #include "macros.h"
+#include "macros_save.h"
 #include "profile.h"
 #include "term_options.h"
 #include "app.h"
@@ -427,8 +428,7 @@ static void on_macros_save_chosen(GFile *file, gpointer user_data)
 	{
 		/* Enregistrement explicite : un échec déjà signalé par un enregistrement implicite est de nouveau affiché */
 		gt_macros_forget_save_error(gt_session_get_macros(s));
-		if(gt_macros_save_file(gt_session_get_macros(s), path, TRUE))
-			config_remember_macros_file(s);
+		gt_ui_macros_save(gt_app_get_main_window(), s, path);
 	}
 	g_free(path);
 	g_object_unref(s);

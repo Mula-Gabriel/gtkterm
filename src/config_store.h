@@ -16,6 +16,8 @@ void           gt_config_store_free(GtConfigStore *s);
 gboolean       gt_config_store_is_read_only(GtConfigStore *s);
 gboolean       gt_config_store_was_migrated(GtConfigStore *s);
 const gchar   *gt_config_store_get_path(GtConfigStore *s);
+/* Dernière erreur de lecture (magasin en lecture seule), NULL sinon ; retenue par la lecture, effacée à la lecture réussie suivante */
+const GError  *gt_config_store_get_read_error(GtConfigStore *s);
 
 /* Profils ; noms comparés sans tenir compte de la casse (g_utf8_casefold), casse d'origine conservée */
 gchar        **gt_config_store_list_profiles(GtConfigStore *s);
@@ -42,7 +44,8 @@ GKeyFile      *gt_config_store_get_key_file(GtConfigStore *s);
  * fait. FALSE (GError, magasin en lecture seule) seulement si le fichier est devenu illisible. */
 gboolean       gt_config_store_reload_if_changed(GtConfigStore *s, GError **error);
 
-/* Écriture atomique en 0600, dossier créé ; refusée en lecture seule ; copie de sauvegarde unique avant la première écriture d'un fichier migré */
+/* Écriture atomique en 0600, dossier créé ; refusée en lecture seule ; copie de sauvegarde unique avant la première écriture d'un fichier migré.
+ * Si l'écriture échoue, le contenu en mémoire revient à celui d'avant les changements non enregistrés. */
 gboolean       gt_config_store_save(GtConfigStore *s, GError **error);
 
 /* true/yes/on/1 et false/no/off/0, casse ignorée ; out inchangé si le texte n'est pas reconnu */

@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include "config_store.h"
 
@@ -1022,6 +1023,157 @@ nettoyer(void)
 	g_rmdir(dossier);
 }
 
+/* Changement annulé si l'enregistrement échoue : la mémoire revient à l'état d'avant */
+static void
+test_annulation_apres_echec(void)
+{
+	gchar *sous = g_build_filename(dossier, "annul", NULL);
+	gchar *p = g_build_filename(sous, "annul.rc", NULL);
+	GtConfigStore *s;
+	GtProfile pr;
+
+	if(getuid() == 0)
+	{
+		g_test_skip("les droits ne s'appliquent pas à root");
+		g_free(sous);
+		g_free(p);
+		return;
+	}
+	g_assert_cmpint(g_mkdir_with_parents(sous, 0700), ==, 0);
+	g_assert_true(g_file_set_contents(p, "[profile:a]\nport=/dev/ttyS0\n", -1, NULL));
+	s = charger(p);
+	gt_profile_init_defaults(&pr);
+	gt_config_store_put_profile(s, "b", &pr);
+	g_assert_true(gt_config_store_has_profile(s, "b"));
+	g_assert_cmpint(g_chmod(sous, 0500), ==, 0);
+	g_assert_false(gt_config_store_save(s, NULL));
+	g_assert_cmpint(g_chmod(sous, 0700), ==, 0);
+	g_assert_false(gt_config_store_has_profile(s, "b"));
+	g_assert_true(gt_config_store_has_profile(s, "a"));
+	/* Le magasin reste utilisable : un nouveau changement s'enregistre */
+	gt_config_store_put_profile(s, "c", &pr);
+	enregistrer(s);
+	g_assert_true(gt_config_store_has_profile(s, "c"));
+	gt_profile_clear(&pr);
+	gt_config_store_free(s);
+	g_free(sous);
+	g_free(p);
+}
+
+/* Fichier absent au chargement : l'état d'avant est un magasin vide, le changement est annulé aussi */
+static void
+test_annulation_fichier_absent(void)
+{
+	gchar *sous = g_build_filename(dossier, "annul-absent", NULL);
+	gchar *p = g_build_filename(sous, "absent.rc", NULL);
+	GtConfigStore *s;
+	GtProfile pr;
+
+	if(getuid() == 0)
+	{
+		g_test_skip("les droits ne s'appliquent pas à root");
+		g_free(sous);
+		g_free(p);
+		return;
+	}
+	g_assert_cmpint(g_mkdir_with_parents(sous, 0500), ==, 0);
+	s = charger(p);
+	gt_profile_init_defaults(&pr);
+	gt_config_store_put_profile(s, "b", &pr);
+	g_assert_false(gt_config_store_save(s, NULL));
+	g_assert_cmpint(g_chmod(sous, 0700), ==, 0);
+	g_assert_false(gt_config_store_has_profile(s, "b"));
+	gt_profile_clear(&pr);
+	gt_config_store_free(s);
+	g_free(sous);
+	g_free(p);
+}
+
+/* Magasin en lecture seule : l'enregistrement refusé abandonne aussi le changement en mémoire */
+static void
+test_annulation_lecture_seule(void)
+{
+	gchar *p = ecrire("annul-ro.rc", "[profile:a]\nport=/dev/ttyS0\n");
+	GtConfigStore *s;
+	GtProfile pr;
+	GError *err = NULL;
+
+	if(getuid() == 0)
+	{
+		g_test_skip("les droits ne s'appliquent pas à root");
+		g_free(p);
+		return;
+	}
+	g_assert_cmpint(g_chmod(p, 0), ==, 0);
+	s = gt_config_store_load(p, &err);
+	g_assert_nonnull(err);
+	g_clear_error(&err);
+	g_assert_true(gt_config_store_is_read_only(s));
+	gt_profile_init_defaults(&pr);
+	gt_config_store_put_profile(s, "b", &pr);
+	g_assert_false(gt_config_store_save(s, NULL));
+	g_assert_false(gt_config_store_has_profile(s, "b"));
+	g_assert_cmpint(g_chmod(p, 0600), ==, 0);
+	gt_profile_clear(&pr);
+	gt_config_store_free(s);
+	g_free(p);
+}
+
+/* Fichier devenu illisible : l'erreur de lecture est retenue, puis effacée à la lecture réussie */
+static void
+test_erreur_de_lecture_retenue(void)
+{
+	gchar *p = ecrire("lecture-err.rc", "[profile:a]\nport=/dev/ttyS0\n");
+	GtConfigStore *s;
+	GError *err = NULL;
+	struct utimbuf t = { 1000000, 1000000 };
+
+	if(getuid() == 0)
+	{
+		g_test_skip("les droits ne s'appliquent pas à root");
+		g_free(p);
+		return;
+	}
+	s = charger(p);
+	g_assert_null(gt_config_store_get_read_error(s));
+	g_assert_cmpint(g_chmod(p, 0), ==, 0);
+	g_assert_cmpint(utime(p, &t), ==, 0);
+	g_assert_false(gt_config_store_reload_if_changed(s, &err));
+	g_clear_error(&err);
+	g_assert_nonnull(gt_config_store_get_read_error(s));
+	g_assert_cmpint(gt_config_store_get_read_error(s)->domain, ==, G_FILE_ERROR);
+	g_assert_cmpint(g_chmod(p, 0600), ==, 0);
+	t.modtime = t.actime = 2000000;	/* les droits ne changent pas l'identité : la date doit changer */
+	g_assert_cmpint(utime(p, &t), ==, 0);
+	g_assert_true(gt_config_store_reload_if_changed(s, &err));
+	g_assert_no_error(err);
+	g_assert_null(gt_config_store_get_read_error(s));
+	g_assert_true(gt_config_store_has_profile(s, "a"));
+	gt_config_store_free(s);
+	g_free(p);
+}
+
+/* Migration stricte : transport_type et wait_char non numériques sont ignorés avec un avertissement */
+static void
+test_migration_non_numerique(void)
+{
+	gchar *p = ecrire("non-num.rc", "[default]\nport = /dev/ttyS0\ntransport_type = tcp\nwait_char = x\n");
+	GtConfigStore *s;
+	GKeyFile *kf;
+
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*not a number*");
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*not a number*");
+	s = charger(p);
+	g_test_assert_expected_messages();
+	g_assert_true(gt_config_store_was_migrated(s));
+	g_assert_true(gt_config_store_has_profile(s, "default"));
+	kf = gt_config_store_get_key_file(s);
+	g_assert_false(g_key_file_has_key(kf, "profile:default", "transport", NULL));
+	g_assert_false(g_key_file_has_key(kf, "profile:default", "wait_char", NULL));
+	gt_config_store_free(s);
+	g_free(p);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1057,6 +1209,11 @@ main(int argc, char **argv)
 	g_test_add_func("/config_store/relecture-fichier-supprime", test_relecture_fichier_supprime);
 	g_test_add_func("/config_store/relecture-devenu-illisible-puis-ancien-format", test_relecture_devenu_illisible_puis_ancien_format);
 	g_test_add_func("/config_store/erreur-ecriture-cite-le-chemin", test_erreur_ecriture_cite_le_chemin);
+	g_test_add_func("/config_store/annulation-apres-echec", test_annulation_apres_echec);
+	g_test_add_func("/config_store/annulation-fichier-absent", test_annulation_fichier_absent);
+	g_test_add_func("/config_store/annulation-lecture-seule", test_annulation_lecture_seule);
+	g_test_add_func("/config_store/erreur-de-lecture-retenue", test_erreur_de_lecture_retenue);
+	g_test_add_func("/config_store/migration-non-numerique", test_migration_non_numerique);
 	r = g_test_run();
 	nettoyer();
 	g_free(dossier);

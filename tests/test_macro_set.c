@@ -142,6 +142,10 @@ test_periode_saisie(void)
 	g_assert_cmpuint(p, ==, 77);
 }
 
+static const gchar *const ARG1[] = { "1", NULL };
+static const gchar *const ARG3[] = { "3", NULL };
+static const gchar *const ARGR[] = { "R", NULL };
+
 /* A (argument « 1 », raccourci), B (polling 250 ms), C (argument « 3 »). */
 static GtMacroSet *
 jeu_abc(guint *a, guint *b, guint *c)
@@ -163,7 +167,7 @@ test_edition_suppression(void)
 {
 	guint a, b, c;
 	GtMacroSet *set = jeu_abc(&a, &b, &c);
-	GtMacroEdit rows[] = { { a, "A", "<Control>F1", "A%d", "" }, { c, "C", "", "C%d", "" } };
+	GtMacroEdit rows[] = { { a, "A", "<Control>F1", "A%d", "", ARG1 }, { c, "C", "", "C%d", "", ARG3 } };
 
 	gt_macro_set_apply_edits(set, rows, G_N_ELEMENTS(rows), NULL);
 	g_assert_cmpuint(gt_macro_set_count(set), ==, 2);
@@ -182,7 +186,7 @@ test_edition_deplacement_et_tri(void)
 {
 	guint a, b, c;
 	GtMacroSet *set = jeu_abc(&a, &b, &c);
-	GtMacroEdit rows[] = { { c, "C", "", "C%d", "" }, { b, "B", "", "B", "" }, { a, "A", "<Control>F1", "A%d", "" } };
+	GtMacroEdit rows[] = { { c, "C", "", "C%d", "", ARG3 }, { b, "B", "", "B", "" }, { a, "A", "<Control>F1", "A%d", "", ARG1 } };
 
 	gt_macro_set_apply_edits(set, rows, G_N_ELEMENTS(rows), NULL);
 	g_assert_cmpuint(gt_macro_set_count(set), ==, 3);
@@ -202,7 +206,7 @@ test_edition_ajout_et_doublon(void)
 {
 	guint a, b, c, nouveau, doublon;
 	GtMacroSet *set = jeu_abc(&a, &b, &c);
-	GtMacroEdit rows[] = { { 0, "N", "None", "N%d", "T" }, { a, "A+", "<Control>F1", "A%d", "" }, { a, "A2", "", "A%d", "" } };
+	GtMacroEdit rows[] = { { 0, "N", "None", "N%d", "T" }, { a, "A+", "<Control>F1", "A%d", "", ARG1 }, { a, "A2", "", "A%d", "" } };
 
 	gt_macro_set_apply_edits(set, rows, G_N_ELEMENTS(rows), NULL);
 	g_assert_cmpuint(gt_macro_set_count(set), ==, 3);
@@ -233,7 +237,7 @@ test_edition_change_arguments(void)
 {
 	guint a, b, c;
 	GtMacroSet *set = jeu_abc(&a, &b, &c);
-	GtMacroEdit rows[] = { { a, "A", "", "A%d %d", "" }, { b, "B", "", "B", "" }, { c, "C", "", "C%s", "" } };
+	GtMacroEdit rows[] = { { a, "A", "", "A%d %d", "", ARG1 }, { b, "B", "", "B", "" }, { c, "C", "", "C%s", "", ARG3 } };
 
 	gt_macro_set_apply_edits(set, rows, G_N_ELEMENTS(rows), NULL);
 	g_assert_null(gt_macro_set_find(set, a)->args);			/* 1 -> 2 spécificateurs */
@@ -279,7 +283,7 @@ test_listes_reprises_identiques(void)
 	GtMacroSet *set = gt_macro_set_new();
 	GtMacroLists *mode = gt_macro_lists_new();
 	guint id = gt_macro_set_append(set, "M", "", "M %#Mode", "");
-	GtMacroEdit rows[] = { { id, "M", "", "M %#Mode", "" } };
+	GtMacroEdit rows[] = { { id, "M", "", "M %#Mode", "", ARGR } };
 
 	gt_macro_lists_add(mode, "Mode", "Run", "R");
 	gt_macro_set_take_lists(set, mode);
@@ -362,6 +366,66 @@ test_expansion(void)
 	gt_macro_set_free(set);
 }
 
+static void
+test_copie(void)
+{
+	GtMacroSet *set = gt_macro_set_new(), *copie;
+	GtMacroLists *lists = gt_macro_lists_new();
+	guint a, b;
+
+	gt_macro_lists_add(lists, "Modes", "Lent", "0");
+	gt_macro_set_take_lists(set, lists);
+	a = gt_macro_set_append(set, "A", "<Control>F1", "A%d", "T1");
+	b = gt_macro_set_append(set, "B", "", "B%#Modes", "");
+	gt_macro_set_set_arg(set, a, 0, "5");
+	gt_macro_set_set_polling(set, a, TRUE, 250);
+	gt_macro_set_set_arg(set, b, 0, "0");
+	copie = gt_macro_set_copy(set);
+	g_assert_cmpuint(gt_macro_set_count(copie), ==, 2);
+	for(guint i = 0; i < 2; i++)
+	{
+		const GtMacro *o = gt_macro_set_get(set, i), *c = gt_macro_set_get(copie, i);
+
+		g_assert_cmpuint(c->id, !=, o->id);
+		g_assert_cmpstr(c->label, ==, o->label);
+		g_assert_cmpstr(c->shortcut, ==, o->shortcut);
+		g_assert_cmpstr(c->action, ==, o->action);
+		g_assert_cmpstr(c->tab, ==, o->tab);
+		g_assert_cmpint(c->polling, ==, o->polling);
+		g_assert_cmpuint(c->polling_period_ms, ==, o->polling_period_ms);
+		g_assert_cmpstr(c->args[0], ==, o->args[0]);
+	}
+	g_assert_cmpuint(gt_macro_set_get(copie, 0)->polling_period_ms, ==, 250);
+	gt_macro_set_free(set);
+	g_assert_cmpint(gt_macro_lists_count(gt_macro_set_get_lists(copie)), ==, 1);
+	g_assert_cmpstr(gt_macro_lists_entry_value(gt_macro_set_get_lists(copie), 0, 0), ==, "0");
+	g_assert_cmpstr(gt_macro_set_get(copie, 1)->args[0], ==, "0");	/* la liste est prise avant les macros */
+	gt_macro_set_free(copie);
+}
+
+static void
+test_edits_avec_args(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint a = gt_macro_set_append(set, "A", "", "A%d;%s", "");
+	const gchar *init[] = { "1", "x" };
+	const gchar *deux[] = { "2", "y", NULL };
+	const gchar *un[] = { "3", NULL };
+	const gchar *sept[] = { "7", NULL };
+	GtMacroEdit rows[] = { { a, "A", "", "A%d;%s", "", deux }, { 0, "N", "", "N%d", "", sept }, { 0, "Z", "", "Z%d", "", NULL } };
+
+	gt_macro_set_set_args(set, a, init, 2);
+	gt_macro_set_apply_edits(set, rows, G_N_ELEMENTS(rows), NULL);
+	g_assert_cmpstr(gt_macro_set_get(set, 0)->args[0], ==, "2");
+	g_assert_cmpstr(gt_macro_set_get(set, 0)->args[1], ==, "y");
+	g_assert_cmpstr(gt_macro_set_get(set, 1)->args[0], ==, "7");
+	g_assert_null(gt_macro_set_get(set, 2)->args);
+	rows[0].args = un;	/* mauvais nombre */
+	gt_macro_set_apply_edits(set, rows, 1, NULL);
+	g_assert_null(gt_macro_set_get(set, 0)->args);
+	gt_macro_set_free(set);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -379,5 +443,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/listes-reprises-identiques", test_listes_reprises_identiques);
 	g_test_add_func("/macro_set/separateurs", test_separateurs);
 	g_test_add_func("/macro_set/expansion", test_expansion);
+	g_test_add_func("/macro_set/copie", test_copie);
+	g_test_add_func("/macro_set/edits-avec-args", test_edits_avec_args);
 	return g_test_run();
 }

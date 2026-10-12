@@ -136,6 +136,36 @@ test_copie_independante(void)
 	gt_macro_lists_free(c);
 }
 
+static void
+test_copie_liste_vide(void)
+{
+	GtMacroLists *l = gt_macro_lists_new(), *c;
+
+	gt_macro_lists_add_list(l, "Vide");
+	gt_macro_lists_add(l, "Pleine", "a", "1");
+	c = gt_macro_lists_copy(l);
+	g_assert_cmpint(gt_macro_lists_count(c), ==, 2);
+	g_assert_cmpint(gt_macro_lists_find(c, "Vide"), ==, 0);
+	g_assert_cmpint(gt_macro_lists_entry_count(c, 0), ==, 0);
+	g_assert_cmpint(gt_macro_lists_find(c, "Pleine"), ==, 1);
+	gt_macro_lists_free(l);
+	gt_macro_lists_free(c);
+}
+
+static void
+test_liste_vide(void)
+{
+	GtMacroLists *l = gt_macro_lists_new();
+	gint i = gt_macro_lists_add_list(l, "Vide");
+
+	g_assert_cmpint(i, ==, 0);
+	g_assert_cmpint(gt_macro_lists_find(l, "Vide"), ==, 0);
+	g_assert_cmpint(gt_macro_lists_entry_count(l, 0), ==, 0);
+	g_assert_cmpint(gt_macro_lists_add_list(l, "Vide"), ==, 0);
+	g_assert_cmpint(gt_macro_lists_count(l), ==, 1);
+	gt_macro_lists_free(l);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -149,5 +179,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_list/ordre-des-listes", test_ordre_des_listes);
 	g_test_add_func("/macros_list/indices-hors-bornes", test_indices_hors_bornes);
 	g_test_add_func("/macros_list/copie-independante", test_copie_independante);
+	g_test_add_func("/macros_list/liste-vide", test_liste_vide);
+	g_test_add_func("/macros_list/copie-liste-vide", test_copie_liste_vide);
 	return g_test_run();
 }
