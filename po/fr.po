@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 1.3.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-12 14:34+0200\n"
+"POT-Creation-Date: 2026-10-12 18:31+0200\n"
 "PO-Revision-Date: 2026-10-10 12:00+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -218,14 +218,14 @@ msgid "--project cannot be combined with --config or port settings"
 msgstr ""
 "--project ne peut pas être combiné avec --config ni avec des réglages de port"
 
-#: src/config_store.c:585
+#: src/config_store.c:586
 #, c-format
 msgid ""
 "The configuration file %s could not be read: nothing has been written to it."
 msgstr ""
 "Le fichier de configuration %s n'a pas pu être lu : rien n'y a été écrit."
 
-#: src/config_store.c:594
+#: src/config_store.c:595
 #, c-format
 msgid "Cannot create directory %s: %s"
 msgstr "Impossible de créer le dossier %s : %s"
@@ -683,7 +683,7 @@ msgstr "Ne pas enregistrer"
 msgid "Save changes to the project?"
 msgstr "Enregistrer les modifications du projet ?"
 
-#: src/ui/app.c:1093
+#: src/ui/app.c:1099
 #, c-format
 msgid ""
 "Cannot open the project: %s\n"
@@ -692,20 +692,20 @@ msgstr ""
 "Impossible d'ouvrir le projet : %s\n"
 "Il ne sera plus rouvert au démarrage."
 
-#: src/ui/app.c:1096
+#: src/ui/app.c:1102
 #, c-format
 msgid "Cannot open the project: %s"
 msgstr "Impossible d'ouvrir le projet : %s"
 
-#: src/ui/app.c:1203
+#: src/ui/app.c:1209
 msgid "GTKTerm projects"
 msgstr "Projets GTKTerm"
 
-#: src/ui/app.c:1208 src/ui/script_panel.c:464
+#: src/ui/app.c:1214 src/ui/script_panel.c:464
 msgid "All files"
 msgstr "Tous les fichiers"
 
-#: src/ui/app.c:1212
+#: src/ui/app.c:1218
 msgid "Open project"
 msgstr "Ouvrir un projet"
 
@@ -1569,11 +1569,11 @@ msgstr "Couleur du fond"
 msgid "_Close"
 msgstr "_Fermer"
 
-#: src/ui/update_window.c:48
+#: src/ui/update_window.c:70
 msgid "No terminal emulator found. Please install xterm or similar."
-msgstr "Aucun émulateur de terminal trouvé. Installez xterm ou un équivalent."
+msgstr "Aucun émulateur de terminal trouvé. Installez xterm ou équivalent."
 
-#: src/ui/update_window.c:53
+#: src/ui/update_window.c:75
 #, c-format
 msgid ""
 "Failed to launch update terminal:\n"
@@ -1582,107 +1582,201 @@ msgstr ""
 "Impossible de lancer le terminal de mise à jour :\n"
 "%s"
 
-#: src/ui/update_window.c:60
+#: src/ui/update_window.c:87
 msgid ""
-"The update is running in a terminal window.\n"
-"Follow the instructions there and restart GTKTerm when done."
+"The update is running in a terminal window. GTKTerm will be closed and "
+"restarted when it finishes."
 msgstr ""
-"La mise à jour s'exécute dans une fenêtre de terminal.\n"
-"Suivez-y les instructions et relancez GTKTerm à la fin."
+"La mise à jour se déroule dans une fenêtre de terminal. GTKTerm sera fermé "
+"puis relancé à la fin."
 
-#: src/ui/update_window.c:97
-msgid "Update now"
-msgstr "Mettre à jour maintenant"
+#: src/ui/update_window.c:178
+msgid "This version is installed."
+msgstr "Cette version est installée."
 
-#: src/ui/update_window.c:97
-msgid "Later"
-msgstr "Plus tard"
+#: src/ui/update_window.c:181
+msgid "Warnings"
+msgstr "Avertissements"
 
-#: src/ui/update_window.c:97
-msgid "Skip this version"
-msgstr "Ignorer cette version"
+#: src/ui/update_window.c:201
+msgid "You are leaving these versions:"
+msgstr "Vous quittez ces versions :"
 
-#: src/ui/update_window.c:103
+#: src/ui/update_window.c:217
 #, c-format
-msgid ""
-"Latest revision: %.12s\n"
-"Installed revision: %.12s"
-msgstr ""
-"Dernière révision : %.12s\n"
-"Révision installée : %.12s"
+msgid "Update to %s"
+msgstr "Mettre à jour vers %s"
 
-#: src/ui/update_window.c:109
-msgid "A new version of GTKTerm is available."
-msgstr "Une nouvelle version de GTKTerm est disponible."
+#: src/ui/update_window.c:219
+#, c-format
+msgid "Roll back to %s"
+msgstr "Revenir à %s"
 
-#: src/ui/update_window.c:152
+#: src/ui/update_window.c:221
+#, c-format
+msgid "Reinstall %s"
+msgstr "Réinstaller %s"
+
+#: src/ui/update_window.c:243
+msgid "No published version found."
+msgstr "Aucune version publiée trouvée."
+
+#: src/ui/update_window.c:246
+#, c-format
+msgid "A new version is available (%s)."
+msgstr "Une nouvelle version est disponible (%s)."
+
+#: src/ui/update_window.c:252
+msgid "GTKTerm is up to date."
+msgstr "GTKTerm est à jour."
+
+#: src/ui/update_window.c:279
+#, c-format
+msgid "%s — latest, installed"
+msgstr "%s — la plus récente, installée"
+
+#: src/ui/update_window.c:281
+#, c-format
+msgid "%s — latest"
+msgstr "%s — la plus récente"
+
+#: src/ui/update_window.c:283
+#, c-format
+msgid "%s — installed"
+msgstr "%s — installée"
+
+#: src/ui/update_window.c:333
 #, c-format
 msgid "Could not check for updates: %s"
 msgstr "Impossible de vérifier les mises à jour : %s"
 
-#: src/ui/update_window.c:165
-msgid "GTKTerm is up to date."
-msgstr "GTKTerm est à jour."
-
-#: src/ui/update_window.c:168
-#, c-format
-msgid "The installed revision is unknown; the latest revision is %.12s."
-msgstr "La révision installée est inconnue ; la dernière révision est %.12s."
-
-#: src/ui/update_window.c:174
-#, c-format
-msgid "A new version is available (%.12s)."
-msgstr "Une nouvelle version est disponible (%.12s)."
-
-#: src/ui/update_window.c:197
+#: src/ui/update_window.c:373
 msgid "Please enter the URL of the source repository."
-msgstr "Saisissez l'URL du dépôt des sources."
+msgstr "Saisissez l'URL du dépôt source."
 
-#: src/ui/update_window.c:205
+#: src/ui/update_window.c:385
 msgid "Checking…"
 msgstr "Vérification…"
 
-#: src/ui/update_window.c:262
+#: src/ui/update_window.c:460
+#, c-format
+msgid "Install %s?"
+msgstr "Installer %s ?"
+
+#: src/ui/update_window.c:462
+msgid ""
+"See the warnings above. GTKTerm will be closed and restarted at the end of "
+"the update: unsaved project changes and running operations will be lost."
+msgstr ""
+"Voir les avertissements ci-dessus. GTKTerm sera fermé puis relancé à la fin "
+"de la mise à jour : les modifications non enregistrées du projet et les "
+"opérations en cours seront perdues."
+
+#: src/ui/update_window.c:464
+msgid ""
+"GTKTerm will be closed and restarted at the end of the update: unsaved "
+"project changes and running operations will be lost."
+msgstr ""
+"GTKTerm sera fermé puis relancé à la fin de la mise à jour : les "
+"modifications non enregistrées du projet et les opérations en cours seront "
+"perdues."
+
+#: src/ui/update_window.c:466
+msgid "See the warnings above."
+msgstr "Voir les avertissements ci-dessus."
+
+#: src/ui/update_window.c:467 src/ui/update_window.c:643
+msgid "Install"
+msgstr "Installer"
+
+#: src/ui/update_window.c:572
 msgid "Updates"
 msgstr "Mises à jour"
 
-#: src/ui/update_window.c:274
-msgid "Installed revision:"
-msgstr "Révision installée :"
+#: src/ui/update_window.c:584
+msgid "Installed version:"
+msgstr "Version installée :"
 
-#: src/ui/update_window.c:279
+#: src/ui/update_window.c:593
 msgid "Update source:"
-msgstr "Source de la mise à jour :"
+msgstr "Source des mises à jour :"
 
-#: src/ui/update_window.c:285
+#: src/ui/update_window.c:599
 msgid "Update source"
-msgstr "Source de la mise à jour"
+msgstr "Source des mises à jour"
 
-#: src/ui/update_window.c:288
+#: src/ui/update_window.c:603
 msgid "Check for updates at startup"
-msgstr "Vérifier les mises à jour au démarrage"
+msgstr "Vérifier au démarrage"
 
-#: src/ui/update_window.c:302
+#: src/ui/update_window.c:608
 msgid "Check now"
 msgstr "Vérifier maintenant"
 
-#: src/ui/update_window.c:304
+#: src/ui/update_window.c:614
+msgid "Version:"
+msgstr "Version :"
+
+#: src/ui/update_window.c:618
+msgid "Version"
+msgstr "Version"
+
+#: src/ui/update_window.c:638
+msgid "Skip this version"
+msgstr "Ignorer cette version"
+
+#: src/ui/update_window.c:647
 msgid "Close"
 msgstr "Fermer"
 
-#: src/update_check.c:121
+#: src/update_fetch.c:316
 #, c-format
-msgid "git ls-remote failed (exit status %d)"
-msgstr "git ls-remote a échoué (code de sortie %d)"
+msgid "git failed (exit status %d)"
+msgstr "git a échoué (code de sortie %d)"
 
-#: src/update_check.c:131
-msgid "The remote repository did not report a HEAD revision."
-msgstr "Le dépôt distant n'a indiqué aucune révision HEAD."
+#: src/update_fetch.c:318
+#, c-format
+msgid "git was killed by signal %d"
+msgstr "git a été tué par le signal %d"
+
+#: src/update_fetch.c:396
+msgid "Another update check is in progress."
+msgstr "Une autre vérification des mises à jour est en cours."
 
 #. GTask diffère le rappel à l'itération suivante : jamais d'appel pendant cette fonction
-#: src/update_check.c:150
+#: src/update_fetch.c:422
 msgid "No update source URL."
 msgstr "Aucune URL de source de mise à jour."
+
+#: src/update_fetch.c:428
+#, c-format
+msgid "Invalid update source URL: %s"
+msgstr "URL de source de mise à jour invalide : %s"
+
+#~ msgid "Update now"
+#~ msgstr "Mettre à jour maintenant"
+
+#~ msgid "Later"
+#~ msgstr "Plus tard"
+
+#, c-format
+#~ msgid ""
+#~ "Latest revision: %.12s\n"
+#~ "Installed revision: %.12s"
+#~ msgstr ""
+#~ "Dernière révision : %.12s\n"
+#~ "Révision installée : %.12s"
+
+#~ msgid "A new version of GTKTerm is available."
+#~ msgstr "Une nouvelle version de GTKTerm est disponible."
+
+#, c-format
+#~ msgid "The installed revision is unknown; the latest revision is %.12s."
+#~ msgstr ""
+#~ "La révision installée est inconnue ; la dernière révision est %.12s."
+
+#~ msgid "The remote repository did not report a HEAD revision."
+#~ msgstr "Le dépôt distant n'a indiqué aucune révision HEAD."
 
 #~ msgid "Configuration"
 #~ msgstr "Configuration"

@@ -17,7 +17,7 @@ typedef struct
 	gchar *update_url;
 	gchar *update_prefix;
 	gboolean update_check_startup;
-	gchar *update_skipped_revision;	/* « Skip this version » ; NULL : aucune */
+	gchar *update_skipped_version;	/* « Skip this version » : tag vX.Y.Z ignoré ; NULL : aucun */
 } GtkTermSettings;
 
 extern GtkTermSettings settings;
@@ -32,11 +32,11 @@ GtConfigStore *config_get_store(void);
  * de chaque écriture, avant d'appliquer le changement : relire, appliquer un seul changement, enregistrer */
 void           config_reload_store(void);
 gboolean       config_save_store(gboolean interactive);	/* erreur : gt_app_message si interactive, sinon g_printerr */
-/* Écritures partielles : macros_file du profil actif d'une session, update_url et update_skipped_revision de [general] (seulement s'ils
+/* Écritures partielles : macros_file du profil actif d'une session, update_url et update_skipped_version de [general] (seulement s'ils
  * ont changé) ; jamais les options de ligne de commande */
 void           config_remember_macros_file(GtSession *s);	/* clé macros_file du profil actif de s seulement */
 void           config_save_update_url(const gchar *url);
-void           config_save_skipped_revision(const gchar *rev);	/* [general] update_skipped_revision ; NULL efface */
+void           config_save_skipped_version(const gchar *tag);	/* [general] update_skipped_version ; NULL efface */
 void           config_save_update_check_startup(gboolean enabled);	/* [general] update_check_startup, seulement si la valeur change */
 /* Dernier projet ouvert (6c) : [general] last_project ; NULL si absente ou vide. Le setter relit, écrit, enregistre (non interactif) ; NULL efface ; rien si inchangé. */
 gchar         *app_config_get_last_project(void);	/* relit ; à libérer */

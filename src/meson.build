@@ -101,6 +101,16 @@ git_revision_h = vcs_tag(
 	replace_string : '@GIT_REVISION@'
 )
 
+# Version installée (mise à jour par versions taguées) : tag vX.Y.Z exact, ou vX.Y.Z-N-g<hash> après lui. Sans tag joignable (dépôt sans
+# tag, archive sans historique), la fenêtre affiche la version de meson.build plutôt que « unknown ».
+git_describe_h = vcs_tag(
+	command : ['git', '-c', 'safe.directory=*', 'describe', '--tags', '--match', 'v[0-9]*', '--abbrev=7'],
+	fallback : meson.project_version(),
+	input : 'git_describe.h.in',
+	output : 'git_describe.h',
+	replace_string : '@GIT_DESCRIBE@'
+)
+
 # Couche application (GLib, gudev, Lua ; aucun en-tête GTK, vérifié par grep, spec §14-3) : bibliothèque statique liée par l'interface
 # GTK 4 (src/ui/). Compilée sans dépendance GTK : un en-tête GTK inclus par erreur casse la construction. Les tests d'intégration
 # (tests/meson.build) compilent les mêmes fichiers avec leurs bouchons.
