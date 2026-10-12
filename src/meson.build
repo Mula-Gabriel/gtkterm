@@ -71,6 +71,10 @@ core_sources = [
 	'rx_logger.h',
 	'update_check.c',
 	'update_check.h',
+	'update_fetch.c',
+	'update_fetch.h',
+	'update_versions.c',
+	'update_versions.h',
 	'app_ui.c',
 	'app_ui.h',
 ]
