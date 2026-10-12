@@ -65,6 +65,7 @@ struct configuration_port
 	gchar update_url[1024];
 	gboolean update_check_startup;
 	gchar update_prefix[256];
+	gchar update_skipped_version[32];	// « Skip this version » : tag ignoré ; vide : aucun
 };
 
 typedef struct

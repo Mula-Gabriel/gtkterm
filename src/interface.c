@@ -146,6 +146,7 @@ void signals_toggle_RTS_callback(GtkAction *action, gpointer data);
 void signals_close_port(GtkAction *action, gpointer data);
 void signals_open_port(GtkAction *action, gpointer data);
 void help_about_callback(GtkAction *action, gpointer data);
+void help_updates_callback(GtkAction *action, gpointer data);
 gboolean control_signals_read(void);
 void echo_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
 void Autoreconnect_toggled_callback(GSimpleAction *action, GVariant *parameter, gpointer data);
@@ -637,6 +638,10 @@ static void populate_view_menu(GtkWidget *menu)
 static void populate_help_menu(GtkWidget *menu)
 {
 	GtkWidget *item;
+	item = gtk_menu_item_new_with_mnemonic(_("Check for updates…"));
+	connect_menu_item_callback(item, G_CALLBACK(help_updates_callback));
+	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
 	item = gtk_menu_item_new_with_mnemonic(_("About"));
 	connect_menu_item_callback(item, G_CALLBACK(help_about_callback));
 	gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
@@ -875,6 +880,11 @@ void create_main_window(void)
 	                      g_variant_new_boolean(script_was_visible));
 }
 
+void help_updates_callback(GtkAction *action, gpointer data)
+{
+	update_window_show(GTK_WINDOW(Fenetre));
+}
+
 void help_about_callback(GtkAction *action, gpointer data)
 {
 	gchar *authors[] = {"Julien Schimtt", "Zach Davis", "Florian Euchner", "Stephan Enderlein",
@@ -901,35 +911,7 @@ void help_about_callback(GtkAction *action, gpointer data)
 	gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "https://github.com/Mula-Gabriel/gtkterm");
 	gtk_about_dialog_set_license_type(GTK_ABOUT_DIALOG(dialog), GTK_LICENSE_LGPL_3_0);
 
-	/* Add update source URL entry to the content area. */
-	GtkWidget *url_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-	gtk_widget_set_margin_start(url_box, 12);
-	gtk_widget_set_margin_end(url_box, 12);
-	gtk_widget_set_margin_bottom(url_box, 6);
-	GtkWidget *url_label = gtk_label_new(_("Update source:"));
-	GtkWidget *url_entry = gtk_entry_new();
-	gtk_entry_set_text(GTK_ENTRY(url_entry), config.update_url);
-	gtk_entry_set_width_chars(GTK_ENTRY(url_entry), 50);
-	gtk_box_pack_start(GTK_BOX(url_box), url_label, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(url_box), url_entry, TRUE, TRUE, 0);
-	gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), url_box, FALSE, FALSE, 0);
-	gtk_widget_show_all(url_box);
-
-	/* Add the "Check for updates now" button to the dialog action area. */
-	gtk_dialog_add_button(GTK_DIALOG(dialog), _("Check for updates now"), 1);
-
-	gint resp;
-	do
-	{
-		resp = gtk_dialog_run(GTK_DIALOG(dialog));
-		if(resp == 1)
-			update_check(GTK_WINDOW(dialog), TRUE);
-	}
-	while(resp == 1);
-
-	/* Save the URL back to config even if dialog was just closed. */
-	g_strlcpy(config.update_url, gtk_entry_get_text(GTK_ENTRY(url_entry)), sizeof(config.update_url));
-	save_config_silent();
+	gtk_dialog_run(GTK_DIALOG(dialog));
 
 	gtk_widget_destroy(dialog);
 	if(logo != NULL)
