@@ -530,7 +530,7 @@ test_lecture_seule(void)
 	g_assert_false(app_config_save_profile(s, "atelier", &err));
 	g_assert_nonnull(err);
 	g_clear_error(&err);
-	config_save_skipped_revision("0123abc");
+	config_save_skipped_version("v2.1.0");
 	g_assert_cmpint(nb_messages('E'), ==, 2);	/* écriture demandée par l'utilisateur et refusée : signalée */
 	apres = lire_rc();
 	g_assert_cmpstr(apres, ==, avant);
@@ -542,9 +542,9 @@ test_lecture_seule(void)
 	g_object_unref(s);
 }
 
-/* M34 : « Skip this version » enregistré dans [general] et relu au démarrage suivant ; NULL l'efface */
+/* M34 : « Skip this version » (tag ignoré) enregistré dans [general] et relu au démarrage suivant ; NULL l'efface */
 static void
-test_revision_ignoree(void)
+test_version_ignoree(void)
 {
 	GtSession *s;
 	GKeyFile *kf;
@@ -552,22 +552,30 @@ test_revision_ignoree(void)
 
 	s = demarrer(RC_DEUX_PROFILS);
 	g_assert_cmpint(Check_configuration_file(s), ==, 0);
-	g_assert_null(settings.update_skipped_revision);
-	config_save_skipped_revision("0123abc");
-	g_assert_cmpstr(settings.update_skipped_revision, ==, "0123abc");
+	g_assert_null(settings.update_skipped_version);
+	config_save_skipped_version("v2.1.0");
+	g_assert_cmpstr(settings.update_skipped_version, ==, "v2.1.0");
 	kf = charger_rc();
-	valeur = g_key_file_get_string(kf, "general", "update_skipped_revision", NULL);
-	g_assert_cmpstr(valeur, ==, "0123abc");
+	valeur = g_key_file_get_string(kf, "general", "update_skipped_version", NULL);
+	g_assert_cmpstr(valeur, ==, "v2.1.0");
 	g_free(valeur);
 	g_key_file_free(kf);
 	config_file_init();
 	g_assert_cmpint(Check_configuration_file(s), ==, 0);
-	g_assert_cmpstr(settings.update_skipped_revision, ==, "0123abc");
-	config_save_skipped_revision(NULL);
-	g_assert_null(settings.update_skipped_revision);
+	g_assert_cmpstr(settings.update_skipped_version, ==, "v2.1.0");
+	config_save_skipped_version(NULL);
+	g_assert_null(settings.update_skipped_version);
 	config_file_init();
 	g_assert_cmpint(Check_configuration_file(s), ==, 0);
-	g_assert_null(settings.update_skipped_revision);
+	g_assert_null(settings.update_skipped_version);
+	/* L'ancienne clé (une révision) n'est plus lue */
+	kf = charger_rc();
+	g_key_file_set_string(kf, "general", "update_skipped_revision", "0123abc");
+	g_assert_true(g_key_file_save_to_file(kf, chemin_rc, NULL));
+	g_key_file_free(kf);
+	config_file_init();
+	g_assert_cmpint(Check_configuration_file(s), ==, 0);
+	g_assert_null(settings.update_skipped_version);
 	g_assert_cmpuint(messages->len, ==, 0);
 	g_object_unref(s);
 }
@@ -594,7 +602,7 @@ test_verification_au_demarrage(void)
 	kf = charger_rc();
 	g_assert_true(g_key_file_has_key(kf, "general", "update_check_startup", NULL));
 	g_assert_false(g_key_file_get_boolean(kf, "general", "update_check_startup", NULL));
-	g_assert_false(g_key_file_has_key(kf, "general", "update_skipped_revision", NULL));	/* seule la clé modifiée */
+	g_assert_false(g_key_file_has_key(kf, "general", "update_skipped_version", NULL));	/* seule la clé modifiée */
 	g_assert_cmpuint(g_key_file_get_uint64(kf, "profile:atelier", "speed", NULL), ==, 19200);	/* profils conservés */
 	g_key_file_free(kf);
 	config_file_init();
@@ -816,7 +824,7 @@ main(int argc, char **argv)
 	g_test_add_func("/app_config/fichier-de-macros-retenu", test_fichier_de_macros_retenu);
 	g_test_add_func("/app_config/macros-file-par-session", test_macros_file_par_session);
 	g_test_add_func("/app_config/lecture-seule", test_lecture_seule);
-	g_test_add_func("/app_config/revision-ignoree", test_revision_ignoree);
+	g_test_add_func("/app_config/version-ignoree", test_version_ignoree);
 	g_test_add_func("/app_config/verification-au-demarrage", test_verification_au_demarrage);
 	g_test_add_func("/app_config/etat-fenetre-defauts", test_etat_fenetre_defauts);
 	g_test_add_func("/app_config/etat-fenetre-aller-retour", test_etat_fenetre_aller_retour);

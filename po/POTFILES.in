@@ -37,3 +37,4 @@ src/ui/terminal_dialog.ui
 src/ui/terminal_view.c
 src/ui/update_window.c
 src/update_check.c
+src/update_fetch.c

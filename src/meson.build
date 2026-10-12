@@ -71,6 +71,10 @@ core_sources = [
 	'rx_logger.h',
 	'update_check.c',
 	'update_check.h',
+	'update_fetch.c',
+	'update_fetch.h',
+	'update_versions.c',
+	'update_versions.h',
 	'app_ui.c',
 	'app_ui.h',
 ]
@@ -95,6 +99,16 @@ git_revision_h = vcs_tag(
 	input : 'git_revision.h.in',
 	output : 'git_revision.h',
 	replace_string : '@GIT_REVISION@'
+)
+
+# Version installée (mise à jour par versions taguées) : tag vX.Y.Z exact, ou vX.Y.Z-N-g<hash> après lui. Sans tag joignable (dépôt sans
+# tag, archive sans historique), la fenêtre affiche la version de meson.build plutôt que « unknown ».
+git_describe_h = vcs_tag(
+	command : ['git', '-c', 'safe.directory=*', 'describe', '--tags', '--match', 'v[0-9]*', '--abbrev=7'],
+	fallback : meson.project_version(),
+	input : 'git_describe.h.in',
+	output : 'git_describe.h',
+	replace_string : '@GIT_DESCRIBE@'
 )
 
 # Couche application (GLib, gudev, Lua ; aucun en-tête GTK, vérifié par grep, spec §14-3) : bibliothèque statique liée par l'interface

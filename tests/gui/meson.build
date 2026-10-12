@@ -11,6 +11,7 @@ gui_env.set('GTKTERM_GUARD', gui_guard.full_path())
 gui_env.set('GTKTERM_GUI_RUNS', meson.current_build_dir() / 'runs')
 # Révision construite (GIT_REVISION) : les scénarios de mise à jour font répondre le faux git « à jour » avec elle.
 gui_env.set('GTKTERM_GIT_REVISION_H', git_revision_h.full_path())
+gui_env.set('GTKTERM_GIT_DESCRIBE_H', git_describe_h.full_path())
 
 gui_scenarios = [
 	# squelette, fermeture, messages de démarrage

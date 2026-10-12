@@ -85,11 +85,11 @@ static void settings_load(void)
 	g_free(settings.update_prefix);
 	settings.update_prefix = gt_config_store_get_general_string(store, "update_prefix", GTKTERM_DEFAULT_UPDATE_PREFIX);
 	settings.update_check_startup = gt_config_store_get_general_boolean(store, "update_check_startup", TRUE);
-	g_free(settings.update_skipped_revision);
-	settings.update_skipped_revision = gt_config_store_get_general_string(store, "update_skipped_revision", NULL);
-	/* Clé vide (révision ignorée effacée) : aucune */
-	if(settings.update_skipped_revision != NULL && settings.update_skipped_revision[0] == '\0')
-		g_clear_pointer(&settings.update_skipped_revision, g_free);
+	g_free(settings.update_skipped_version);
+	settings.update_skipped_version = gt_config_store_get_general_string(store, "update_skipped_version", NULL);
+	/* Clé vide (version ignorée effacée) : aucune */
+	if(settings.update_skipped_version != NULL && settings.update_skipped_version[0] == '\0')
+		g_clear_pointer(&settings.update_skipped_version, g_free);
 }
 
 void config_save_update_url(const gchar *url)
@@ -105,16 +105,16 @@ void config_save_update_url(const gchar *url)
 	config_save_store(TRUE);
 }
 
-void config_save_skipped_revision(const gchar *rev)
+void config_save_skipped_version(const gchar *tag)
 {
-	const gchar *value = (rev != NULL && rev[0] != '\0') ? rev : NULL;
+	const gchar *value = (tag != NULL && tag[0] != '\0') ? tag : NULL;
 
-	if(g_strcmp0(value, settings.update_skipped_revision) == 0)
+	if(g_strcmp0(value, settings.update_skipped_version) == 0)
 		return;
-	gt_profile_set_string(&settings.update_skipped_revision, value);
+	gt_profile_set_string(&settings.update_skipped_version, value);
 	config_reload_store();
 	/* NULL : clé vide, relue comme « aucune » (settings_load) */
-	gt_config_store_set_general_string(store, "update_skipped_revision", value);
+	gt_config_store_set_general_string(store, "update_skipped_version", value);
 	config_save_store(TRUE);
 }
 
@@ -192,7 +192,7 @@ static void hard_default_configuration(GtSession *s)
 	gt_profile_set_string(&settings.update_url, GTKTERM_DEFAULT_UPDATE_URL);
 	gt_profile_set_string(&settings.update_prefix, GTKTERM_DEFAULT_UPDATE_PREFIX);
 	settings.update_check_startup = TRUE;
-	g_clear_pointer(&settings.update_skipped_revision, g_free);
+	g_clear_pointer(&settings.update_skipped_version, g_free);
 }
 
 /* Profil du fichier copié dans celui de s ; erreur (profil absent) : profil et nom de profil de s inchangés */

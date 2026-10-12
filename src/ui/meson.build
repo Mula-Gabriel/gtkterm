@@ -68,6 +68,7 @@ ui_sources = [
 	'about.c',
 	'about.h',
 	git_revision_h,
+	git_describe_h,
 	ui_resources,
 ]
 

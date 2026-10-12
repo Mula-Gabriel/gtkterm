@@ -40,7 +40,7 @@ Dependencies: `gtk4` ≥ 4.14, `vte-2.91-gtk4` ≥ 0.76, `gtksourceview-5` ≥ 5
 1. **Core** (`gtkterm_core`, GLib/GObject/GIO only, unit-tested): transport (`transport.c`, `serial_termios.c`, `baud.c`, `baudrates.c`), history and rendering
    (`history.c`, `rx_transform.c`, `view_render.c`), `device_match.c`, configuration (`config_file.c`, `profile.c`, `config_store.c`), macros model
    (`macro_set.c`, `macros_format.c`, `macros_list.c`, `macro_file.c`, `macro_poller.c`), Lua ports (`rx_queue.c`, `script_port.c`), and the sub-project 6a
-   modules: `term_options.c` (`GtTermOptions`), `hex_input.c`, `capture.c`, `file_sender.c` (`GtFileSender`), `rx_logger.c` (`GtRxLogger`), `update_check.c`,
+   modules: `term_options.c` (`GtTermOptions`), `hex_input.c`, `capture.c`, `file_sender.c` (`GtFileSender`), `rx_logger.c` (`GtRxLogger`), `update_check.c`, `update_versions.c`, `update_fetch.c`,
    `app_ui.c` (`GtAppUi`), `serial_ports.c` (serial device discovery), `port_form.c` (Port dialog validation), `macro_view.c` (macro panel display rules),
    `action_relay.c` (`GtActionRelay`, 6b), and the sub-project 6c modules: `profile_keyfile.c` (`GtProfile` ↔ named GKeyFile group, shared by `.gtktermrc`, the macro `.ini` and the
    project), `file_stamp.c` (`GtFileStamp`), `project_file.c` (`GtProjectData` ↔ `.gtkterm` file), `window_state.h` (`GtWindowState`, shared), plus `i18n.c`.
@@ -278,7 +278,7 @@ a case-insensitive duplicate asks for overwrite confirmation). Starting without 
 while others exist uses the defaults silently (`default` is created only by an explicit save). Old parsecfg files are migrated in memory on load, with a
 one-time backup `.gtktermrc.avant-migration`. Only explicit saves write a whole profile; loading a macros file writes only the active profile's `macros_file`
 key (and only if the path changed and the profile still exists), the Updates window only its `[general]` settings, « Skip this version » only
-`update_skipped_revision`. Several GTKTerm instances share the file: every UI write calls `config_reload_store()` first (re-read if the file's identity
+`update_skipped_version` (a tag name). Several GTKTerm instances share the file: every UI write calls `config_reload_store()` first (re-read if the file's identity
 changed — `gt_config_store_reload_if_changed()`), applies its single change, then saves; keep that order when adding a writer. The window state is written
 once, by `close-request`. An unreadable file makes the store read-only: nothing is ever written over it.
 
@@ -317,19 +317,28 @@ compared for « modified » (same serialisation, **without** page state, active 
   silent « last save wins » between tabs and instances sharing a `.ini`.
 - **Stays outside the project:** `[window]` (window size), the global `[colors]` / `[layout]`, `[general]`, the named profiles of `.gtktermrc`.
 
-**Self-update (`update_check.c` + `src/ui/update_window.c` + `data/gtkterm-update.sh`):** the running binary knows its own commit because `src/meson.build`
-generates `git_revision.h` (`GIT_REVISION`) with `vcs_tag()` on every build (with `safe.directory=*` so a root rebuild keeps the real SHA). Install as root with
-`meson install --no-rebuild`, never `sudo ninja install`: right after a commit, a root `ninja` rewrites `build/src/git_revision.h` as root and the next user
-build fails with Permission denied. `gt_update_fetch_remote_async()` runs `git ls-remote -- <url> HEAD` (`GIT_TERMINAL_PROMPT=0`, cancellable, cancelled when
-its window closes); a remote revision is offered when it differs from `GIT_REVISION` and, if the cache checkout exists, is not older than it
-(`git merge-base --is-ancestor`); a local « unknown » revision is never offered at start-up; « Skip this version » is saved in `[general]
-update_skipped_revision`. The start-up check is silent unless a newer revision exists; the « Updates » window (Help › Check for updates…) holds the source URL,
-the start-up switch and « Check now », which checks the URL shown. Accepting launches the installed script (`PACKAGE_DATA_DIR`) with an argument list
-(`g_spawn_async`, never a shell string) inside a detected terminal emulator; the script clones/updates into `$XDG_CACHE_HOME/gtkterm/src`, relaunches
-once on the downloaded copy of itself (so new build dependencies are picked up; it refuses a URL that looks like an option or an `ext::` transport),
-installs the GTK 4 build deps of the distribution, builds with `-Dtests=false`,
-`pkexec`-installs, removes the pre-GTK 4 `<prefix>/share/applications/gtkterm.desktop` unless a package owns it, and restarts the app by PID. The repo URL and
-install prefix come from `settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`).
+**Self-update (`update_versions.c` + `update_fetch.c` + `update_check.c` + `src/ui/update_window.c` + `data/gtkterm-update.sh`; spec `docs/superpowers/specs/2026-10-12-maj-par-tags-design.md`):**
+updates install **published versions** = git tags `vX.Y.Z` (numeric order, never the date), never a branch head. The build knows `GIT_REVISION` and `GIT_DESCRIBE`
+(`git describe --tags --match 'v[0-9]*' --abbrev=7`, both by `vcs_tag()` in `src/meson.build`, with `safe.directory=*`; the installed version is `GIT_DESCRIBE`, else the meson version, else 0.0.0;
+`vX.Y.Z-N-g…` is newer than `vX.Y.Z` and older than the next one). Install as root with `meson install --no-rebuild`, never `sudo ninja install` (a root `ninja` rewrites `build/src/git_revision.h`
+and the next user build fails). `update_versions.c` (core, `gt_version_*`, `gt_news_*`, `gt_release_verdict`) is pure logic; `gt_releases_fetch_async()` (`update_fetch.c`, core) keeps a bare cache
+`$XDG_CACHE_HOME/gtkterm/versions.git` (`clone --bare --filter=tree:0`, then `remote set-url` + `fetch --prune --force +refs/tags/*:refs/tags/*`; a URL change refreshes tags from the new source
+only), lists the tags and reads `NEWS` of the newest tag (`git -c protocol.ext.allow=never`, `GIT_TERMINAL_PROMPT=0`, `LC_ALL=C`, cancellable; an empty URL or one starting with `-` is refused).
+`NEWS` (French, root of the repo): `## vX.Y.Z …` opens a section, `- ` item, `! ` warning, two leading spaces continue the previous item, a `# …` level-1 heading closes the current section (the
+`# Historique` text stays unshown), a section without a published tag is never shown. The « Updates » window (Help › Check for updates…, refreshes when opened; Install and the version list
+insensitive during a refresh) lists the versions, shows the notes between the installed and the chosen version (warnings first; rollback: « You are leaving these versions: »), « Update to /
+Roll back to / Reinstall vX » (confirmation when the notes hold a warning, or when the project is modified or a tab is busy: the script closes GTKTerm with SIGTERM and restarts it), « Skip
+this version » (newest version only; `[general] update_skipped_version` = tag; the old `update_skipped_revision` is neither read
+nor written) and closes after a successful launch; the start-up check is silent unless a newer, non-skipped version exists, and then opens that window. Launching uses an argument list
+(`g_spawn_async`, never a shell string) in a detected terminal: `gtkterm-update.sh <url> <prefix> <pid> <tag>` (tag re-validated). The script takes a lock `$XDG_CACHE_HOME/gtkterm/update.lock`
+(with its PID), checks the tag out in `$XDG_CACHE_HOME/gtkterm/src`, re-executes the script **of that version** (so it picks its own dependencies: GTK 3 for v1.3.x, GTK 4 for v2.x), then asks
+**one single authorization** (`pkexec`) for everything privileged: dependencies, the build **dropped to the user** with `runuser` (`rm -rf build`, `meson setup -Dtests=false`, `ninja`),
+`meson install --no-rebuild`, and the cleanup of files of the registry `installed-files.txt` missing from the new install log (under the prefix, no `..`, files and links only, not owned by a
+package); it then restarts the app by PID. `GTKTERM_UPDATE_SUDO` / `GTKTERM_UPDATE_DEPS=0` are for tests only (an agent never runs the script otherwise); without a registry, a fallback removes the
+pre-GTK 4 `<prefix>/share/applications/gtkterm.desktop` unless a package owns it or the installed version provides it. Tests: the sh TAP tests `update_script` (local upstream repo, throwaway
+prefix, fake `pkexec` counting authorizations) and `publier_version`, `test_update_versions`, `test_update_fetch`. The repo URL and install prefix come from
+`settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`). Release: `tools/publier-version.sh vX.Y.Z` (clean tree, `meson.build`
+version, `NEWS` section; annotated tag, no push).
 
 **GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 66 scenarios drive
 GTKTerm through three bricks: (1) **D-Bus actions** — `org.gtk.Actions` (`Activate`, `SetState`, `Describe`) on the private session bus; start-up is detected
@@ -348,7 +357,8 @@ private HOME), `open_tab(env, port)` (real Port dialog),
 whose failure comes with an internal assertion of `gtk4-broadwayd` in its log (a GTK defect, seen with GTK 4.24) is reported SKIP (77), not FAIL.
 Each scenario runs isolated (`run-gui-test.sh`: own broadway display, `dbus-run-session` on a private bus without service directories,
 `GDK_DEBUG=no-portals`, private HOME/XDG_*, `guard.c` preloaded to refuse real serial ports and the user's real configuration (and, under
-`GTKTERM_GUARD_FAKE_MODEM`, to simulate `TIOCMGET` on a pty), pty pairs only, fake `git`).
+`GTKTERM_GUARD_FAKE_MODEM`, to simulate `TIOCMGET` on a pty), pty pairs only, fake `git`: `bin/git` serves `tags`, `news` and `delay` files, set by `Env.fake_git(tags=…, news=…, delay=…)`, with
+`local_describe()` for the build's `GIT_DESCRIBE`).
 
 **Other entry points:** `src/ui/main.c` (`main`, wiring order), `src/ui/app.c` (`GtkApplication`, relays, tabs, actions, shutdown), `cmdline.c` (CLI
 options incl. `--transport/--host/--tcp-port`, `-T serial`, `none` for

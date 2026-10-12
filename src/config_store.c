@@ -114,7 +114,7 @@ static const gchar * const legacy_marker_keys[] = { "port", "speed", "transport_
 static const gchar * const general_marker_keys[] = { "port", "speed", "transport_type", NULL };
 static const gchar * const legacy_bool_keys[] = { "echo", "crlfauto", "autoreconnect_enabled", "esc_clear_screen", "timestamp", "term_block_cursor",
                                                   "term_visual_bell", NULL };
-static const gchar * const update_keys[] = { "update_url", "update_prefix", "update_check_startup", NULL };
+static const gchar * const update_keys[] = { "update_url", "update_prefix", "update_check_startup", "update_skipped_version", NULL };
 
 static gboolean in_list(const gchar * const *list, const gchar *s)
 {
@@ -225,8 +225,9 @@ static void migrate_profile(GtConfigStore *s, const gchar *old, gboolean update_
 		gchar *val = unquote(raw);
 		gboolean b;
 
-		if(g_str_has_prefix(k, "term_foreground_") || g_str_has_prefix(k, "term_background_") || g_strcmp0(k, "show_rxtx") == 0)
-			;	/* couleurs traitées ensemble ci-dessous ; show_rxtx abandonnée */
+		if(g_str_has_prefix(k, "term_foreground_") || g_str_has_prefix(k, "term_background_") || g_strcmp0(k, "show_rxtx") == 0 ||
+		   g_strcmp0(k, "update_skipped_revision") == 0)
+			;	/* couleurs traitées ensemble ci-dessous ; show_rxtx et update_skipped_revision (ancien numéro de révision) abandonnées */
 		else if(in_list(update_keys, k))
 		{
 			if(update_source)
