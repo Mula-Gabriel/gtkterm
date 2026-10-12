@@ -74,13 +74,20 @@ section sans tag, sélection dans les deux sens, verdict). Ligne GTK 3 : pas de 
   - présent : `remote set-url origin -- <url>`, puis `git fetch --prune --prune-tags --force origin '+refs/tags/*:refs/tags/*'` ;
   - un serveur qui ignore le filtre envoie tout : ça fonctionne quand même, en plus lourd ;
   - mêmes protections qu'aujourd'hui : `GIT_TERMINAL_PROMPT=0`, `LC_ALL=C`, `-c protocol.ext.allow=never`, sous-processus `GSubprocess` annulable (tué à l'annulation).
+  - annulation : le git en cours reçoit `SIGTERM` (pas `SIGKILL`, qui l'empêcherait de nettoyer ses verrous et son clone inachevé) ;
+  - cache abîmé : rien n'est supprimé, le dossier est renommé à côté en `versions.git.abandonne-<horodatage en µs>` puis l'opération repart **une seule fois** d'un clone, seulement pour un échec
+    LOCAL : `remote set-url` ou `for-each-ref` en échec, `fetch` dont l'erreur désigne le dépôt local (`Unable to create '….lock': File exists`, `cannot lock ref`, `not a git repository`, `bad config`, `is corrupt` sur un chemin du cache ; l'URL est retirée du message avant examen), ou clone refusé
+    parce que le dossier cible est non vide. Un échec réseau (DNS, connexion, authentification, source introuvable) rend l'erreur et garde le cache : hors ligne, rien n'est écarté. Un
+    second échec rend l'erreur de la seconde tentative, un renommage impossible l'erreur d'origine, une erreur de communication avec git ne déplace rien ;
+  - **verrou** : tout accès au cache passe par un `flock` sur `versions.git.lock` (fichier voisin), tenu pendant toute l'opération, reclone compris ; occupé, on réessaie toutes les 200 ms sans bloquer la
+    boucle (annulable), 10 s au plus, puis « Another update check is in progress. » (`G_IO_ERROR_BUSY`). Un `.lock` trouvé dans le cache est donc périmé par construction ;
 - **Versions** : `git for-each-ref` sur ce cache, puis `gt_version_list_from_refs()`.
 - **Notes** : `git show <version la plus récente>:NEWS` (git va chercher l'arbre et le fichier à la demande). La version la plus récente porte l'historique complet, corrections de notes
   anciennes comprises. Une version la plus récente sans `NEWS` (impossible avec le script de publication) donne une zone de notes vide, sans erreur.
 - **Enchaînement** : une seule opération asynchrone « actualiser » (clone ou fetch, for-each-ref, show), annulable, qui rend versions et sections ou une erreur. L'interface ne bloque
   jamais pendant ce temps.
-- **Démarrage** (si « Vérifier au démarrage ») : la même opération, en différé comme aujourd'hui ; silencieuse sauf si `gt_update_verdict()` rend `AVAILABLE`. Un échec (réseau, verrou
-  git d'une autre instance qui actualise en même temps) est silencieux au démarrage, affiché dans la fenêtre sinon.
+- **Démarrage** (si « Vérifier au démarrage ») : la même opération, en différé comme aujourd'hui ; silencieuse sauf si `gt_update_verdict()` rend `AVAILABLE`. Un échec (réseau, ou autre instance qui actualise en même temps
+  et dont le verrou reste tenu plus de 10 s : « Another update check is in progress. ») est silencieux au démarrage, affiché dans la fenêtre sinon.
 - **« Ignorer cette version »** enregistre le **nom de tag** dans `update_skipped_version` (`[general]` de `.gtktermrc` pour la refonte, clé parsecfg du même nom pour la ligne GTK 3).
   L'ancienne clé `update_skipped_revision` (une révision) n'est plus lue ni écrite.
 
@@ -175,4 +182,4 @@ une autre version, dans les deux sens.
 - **Environnement minimal de `pkexec`** : les chemins de `meson` et `ninja` sont résolus côté utilisateur et passés en arguments, `HOME` est redonné à la construction.
 - **Serveur sans filtre partiel** : clone complet du cache, plus lent la première fois seulement.
 - **Configuration après retour à `v1.3.2`** : non convertie automatiquement ; couvert par l'avertissement de `NEWS` (restaurer `.gtktermrc.avant-migration`).
-- **Deux instances qui actualisent le cache en même temps** : l'une échoue sur le verrou git ; silencieux au démarrage, message dans la fenêtre, « Check now » réessaie.
+- **Deux instances qui actualisent le cache en même temps** : la seconde attend le verrou du cache (10 s au plus, puis « Another update check is in progress. ») ; silencieux au démarrage, message dans la fenêtre, « Check now » réessaie.

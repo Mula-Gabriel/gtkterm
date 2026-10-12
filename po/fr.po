@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 0.99.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-12 16:19+0200\n"
+"POT-Creation-Date: 2026-10-12 18:25+0200\n"
 "PO-Revision-Date: 2011-07-25 16:06+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -1119,11 +1119,11 @@ msgstr "Ecriture de RTS"
 msgid "No open port"
 msgstr "Aucun port ouvert"
 
-#: src/update.c:106
+#: src/update.c:108
 msgid "No terminal emulator found. Please install xterm or similar."
 msgstr "Aucun émulateur de terminal trouvé. Installez xterm ou équivalent."
 
-#: src/update.c:123
+#: src/update.c:125
 #, c-format
 msgid ""
 "Failed to launch update terminal:\n"
@@ -1132,7 +1132,7 @@ msgstr ""
 "Impossible de lancer le terminal de mise à jour :\n"
 "%s"
 
-#: src/update.c:130
+#: src/update.c:136
 msgid ""
 "The update is running in a terminal window.\n"
 "Follow the instructions there and restart GTKTerm when done."
@@ -1140,129 +1140,138 @@ msgstr ""
 "La mise à jour se déroule dans une fenêtre de terminal.\n"
 "Suivez les instructions et redémarrez GTKTerm à la fin."
 
-#: src/update.c:217
+#: src/update.c:227
 msgid "This version is installed."
 msgstr "Cette version est installée."
 
-#: src/update.c:220
+#: src/update.c:230
 msgid "Warnings"
 msgstr "Avertissements"
 
-#: src/update.c:240
+#: src/update.c:250
 msgid "You are leaving these versions:"
 msgstr "Vous quittez ces versions :"
 
-#: src/update.c:256
+#: src/update.c:266
 #, c-format
 msgid "Update to %s"
 msgstr "Mettre à jour vers %s"
 
-#: src/update.c:258
+#: src/update.c:268
 #, c-format
 msgid "Roll back to %s"
 msgstr "Revenir à %s"
 
-#: src/update.c:260
+#: src/update.c:270
 #, c-format
 msgid "Reinstall %s"
 msgstr "Réinstaller %s"
 
-#: src/update.c:292
+#: src/update.c:302
 #, c-format
 msgid "%s — latest, installed"
 msgstr "%s — la plus récente, installée"
 
-#: src/update.c:294
+#: src/update.c:304
 #, c-format
 msgid "%s — latest"
 msgstr "%s — la plus récente"
 
-#: src/update.c:296
+#: src/update.c:306
 #, c-format
 msgid "%s — installed"
 msgstr "%s — installée"
 
-#: src/update.c:315
+#: src/update.c:325
 msgid "No published version found."
 msgstr "Aucune version publiée trouvée."
 
-#: src/update.c:318
+#: src/update.c:328
 #, c-format
 msgid "A new version is available (%s)."
 msgstr "Une nouvelle version est disponible (%s)."
 
-#: src/update.c:324
+#: src/update.c:334
 msgid "GTKTerm is up to date."
 msgstr "GTKTerm est à jour."
 
-#: src/update.c:343
+#: src/update.c:354
 #, c-format
 msgid "Could not check for updates: %s"
 msgstr "Impossible de vérifier les mises à jour : %s"
 
-#: src/update.c:369
+#: src/update.c:385
 msgid "Please enter the URL of the source repository."
 msgstr "Saisissez l'URL du dépôt source."
 
-#: src/update.c:385
+#: src/update.c:397
 msgid "Checking…"
 msgstr "Vérification…"
 
-#: src/update.c:423
+#: src/update.c:435
 #, c-format
 msgid "Install %s?"
 msgstr "Installer %s ?"
 
-#: src/update.c:425
+#: src/update.c:437
 msgid "See the warnings above."
 msgstr "Voir les avertissements ci-dessus."
 
-#: src/update.c:497
+#: src/update.c:509
 msgid "Updates"
 msgstr "Mises à jour"
 
-#: src/update.c:506
+#: src/update.c:518
 msgid "Installed version:"
 msgstr "Version installée :"
 
-#: src/update.c:513
+#: src/update.c:525
 msgid "Update source:"
 msgstr "Source des mises à jour :"
 
-#: src/update.c:521
+#: src/update.c:533
 msgid "Check for updates at startup"
 msgstr "Vérifier au démarrage"
 
-#: src/update.c:524
+#: src/update.c:536
 msgid "Check now"
 msgstr "Vérifier maintenant"
 
-#: src/update.c:529
+#: src/update.c:541
 msgid "Version:"
 msgstr "Version :"
 
-#: src/update.c:548
+#: src/update.c:560
 msgid "Skip this version"
 msgstr "Ignorer cette version"
 
-#: src/update.c:549
+#: src/update.c:561
 msgid "Install"
 msgstr "Installer"
 
-#: src/update.c:551
+#: src/update.c:563
 msgid "Close"
 msgstr "Fermer"
 
-#: src/update_fetch.c:205
+#: src/update_fetch.c:316
 #, c-format
 msgid "git failed (exit status %d)"
 msgstr "git a échoué (code de sortie %d)"
 
-#: src/update_fetch.c:247
+#: src/update_fetch.c:318
+#, c-format
+msgid "git was killed by signal %d"
+msgstr "git a été tué par le signal %d"
+
+#: src/update_fetch.c:396
+msgid "Another update check is in progress."
+msgstr "Une autre vérification des mises à jour est en cours."
+
+#: src/update_fetch.c:422
 msgid "No update source URL."
 msgstr "Aucune URL de source de mise à jour."
 
-#: src/update_fetch.c:253
+#: src/update_fetch.c:428
 #, c-format
 msgid "Invalid update source URL: %s"
 msgstr "URL de source de mise à jour invalide : %s"

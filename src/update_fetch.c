@@ -1,6 +1,12 @@
 /* Versions publiées et notes de version d'une source de mise à jour : voir update_fetch.h. */
 
 #include <glib.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <string.h>
+#include <sys/file.h>
+#include <unistd.h>
 #include <glib/gi18n.h>
 #include <glib/gstdio.h>
 #include <gio/gio.h>
@@ -23,6 +29,10 @@ typedef struct
 	gchar *cache_dir;
 	Step step;
 	GtReleases *releases;	/* résultat en construction */
+	gboolean existed;	/* le cache existait au départ de cette tentative (pas fraîchement cloné par elle) */
+	gint lock_fd;	/* verrou consultatif du cache (<cache>.lock), tenu pendant toute l'opération ; -1 : pas encore pris */
+	gint64 lock_deadline;	/* date limite (monotone, µs) de l'attente du verrou */
+	gboolean retried;	/* le cache a déjà été écarté une fois : plus de nouvelle tentative */
 } FetchState;
 
 void
@@ -41,6 +51,8 @@ fetch_state_free(gpointer p)
 {
 	FetchState *st = p;
 
+	if(st->lock_fd >= 0)
+		close(st->lock_fd);	/* libère le verrou */
 	g_free(st->url);
 	g_free(st->cache_dir);
 	gt_releases_free(st->releases);
@@ -78,6 +90,97 @@ static void
 argv_add(GPtrArray *argv, const gchar *arg)
 {
 	g_ptr_array_add(argv, g_strdup(arg));
+}
+
+/* Dossier non vide ? (clone refusé parce que la cible est occupée) */
+static gboolean
+dir_not_empty(const gchar *path)
+{
+	GDir *d = g_dir_open(path, 0, NULL);
+	gboolean occupe;
+
+	if(d == NULL)
+		return g_file_test(path, G_FILE_TEST_EXISTS) && !g_file_test(path, G_FILE_TEST_IS_DIR);
+	occupe = g_dir_read_name(d) != NULL;
+	g_dir_close(d);
+	return occupe;
+}
+
+/* Le message d'erreur de git d'un fetch trahit-il un problème du dépôt local (et non du réseau) ? L'URL, que git répète dans ses messages, est
+ * retirée avant l'examen ; seules des phrases précises sont reconnues, ligne par ligne. */
+static gboolean
+erreur_depot_local(const gchar *err_text, const gchar *url, const gchar *cache_dir)
+{
+	gchar **morceaux;
+	gchar *sans_url;
+	gchar *bas;
+	gchar *cache_bas;
+	gchar **lignes;
+	gboolean local = FALSE;
+
+	if(err_text == NULL)
+		return FALSE;
+	morceaux = g_strsplit(err_text, url, -1);
+	sans_url = g_strjoinv("", morceaux);
+	g_strfreev(morceaux);
+	bas = g_ascii_strdown(sans_url, -1);
+	cache_bas = g_ascii_strdown(cache_dir, -1);
+	lignes = g_strsplit(bas, "\n", -1);
+	for(gchar **l = lignes; *l != NULL && !local; l++)
+	{
+		local = (strstr(*l, "unable to create '") != NULL && strstr(*l, "lock': file exists") != NULL) || strstr(*l, "cannot lock ref") != NULL ||
+		        strstr(*l, "not a git repository") != NULL || strstr(*l, "fatal: bad config") != NULL ||
+		        (strstr(*l, "is corrupt") != NULL && strstr(*l, cache_bas) != NULL);
+	}
+	g_strfreev(lignes);
+	g_free(cache_bas);
+	g_free(bas);
+	g_free(sans_url);
+	return local;
+}
+
+/* Auto-réparation du cache : un cache dont une étape purement LOCALE échoue (set-url, for-each-ref), un fetch dont l'erreur désigne le dépôt local
+ * (verrous « .lock » laissés par un git interrompu, configuration de clone partiel perdue…) ou une cible de clone occupée par autre chose qu'un
+ * dépôt ferait échouer toutes les actualisations suivantes. Le verrou consultatif du cache étant tenu, tout « .lock » du dépôt est périmé par
+ * construction. Rien n'est supprimé : le dossier est renommé à côté (« <cache>.abandonne-<horodatage en µs> »), puis on repart une seule fois
+ * d'un clone. Une erreur de communication avec git (annulation exclue) n'écarte jamais le cache. Si le renommage échoue, l'erreur d'origine est rendue. Un échec
+ * réseau (DNS, connexion, authentification, source introuvable) n'écarte jamais un cache valide : hors ligne, il reste en place. */
+static gboolean
+cache_ecarter(FetchState *st, const gchar *err_text)
+{
+	gboolean candidat;
+	gchar *abandon;
+	gboolean ok;
+
+	if(st->retried)
+		return FALSE;
+	switch(st->step)
+	{
+		case STEP_CLONE:
+			candidat = dir_not_empty(st->cache_dir);
+			break;
+		case STEP_SET_URL:
+		case STEP_LIST:
+			candidat = st->existed;
+			break;
+		case STEP_FETCH:
+			candidat = st->existed && erreur_depot_local(err_text, st->url, st->cache_dir);
+			break;
+		default:
+			candidat = FALSE;
+			break;
+	}
+	if(!candidat)
+		return FALSE;
+	abandon = g_strdup_printf("%s.abandonne-%" G_GINT64_FORMAT, st->cache_dir, g_get_real_time());
+	ok = g_rename(st->cache_dir, abandon) == 0;
+	g_free(abandon);
+	if(!ok)
+		return FALSE;
+	st->retried = TRUE;
+	st->existed = FALSE;
+	st->step = STEP_CLONE;
+	return TRUE;
 }
 
 /* Lance l'étape courante ; la référence de la tâche passe au rappel */
@@ -179,7 +282,7 @@ on_step_done(GObject *source, GAsyncResult *res, gpointer user_data)
 
 	/* Annulation (fenêtre fermée) : git peut encore attendre le réseau, il ne survit pas à l'actualisation */
 	if(!ok)
-		g_subprocess_force_exit(proc);
+		g_subprocess_send_signal(proc, SIGTERM);	/* SIGTERM et non SIGKILL : git nettoie ses verrous et son clone inachevé */
 	if(g_task_return_error_if_cancelled(task))
 		g_clear_error(&error);
 	else if(st->step == STEP_NEWS)
@@ -193,6 +296,14 @@ on_step_done(GObject *source, GAsyncResult *res, gpointer user_data)
 		g_clear_error(&error);
 		return_releases(task, st);
 	}
+	else if(ok && !g_subprocess_get_successful(proc) && cache_ecarter(st, err_text))
+	{
+		g_clear_error(&error);
+		g_free(out);
+		g_free(err_text);
+		run_step(task);
+		return;
+	}
 	else if(!ok)
 		g_task_return_error(task, error);
 	else if(!g_subprocess_get_successful(proc))
@@ -201,8 +312,11 @@ on_step_done(GObject *source, GAsyncResult *res, gpointer user_data)
 
 		if(line != NULL)
 			g_task_return_new_error(task, G_IO_ERROR, G_IO_ERROR_FAILED, "%s", line);
-		else
+		else if(g_subprocess_get_if_exited(proc))
 			g_task_return_new_error(task, G_IO_ERROR, G_IO_ERROR_FAILED, _("git failed (exit status %d)"), g_subprocess_get_exit_status(proc));
+		else
+			g_task_return_new_error(task, G_IO_ERROR, G_IO_ERROR_FAILED, _("git was killed by signal %d"),
+			                        g_subprocess_get_if_signaled(proc) ? g_subprocess_get_term_sig(proc) : 0);
 		g_free(line);
 	}
 	else if(st->step == STEP_LIST)
@@ -233,12 +347,73 @@ on_step_done(GObject *source, GAsyncResult *res, gpointer user_data)
 	g_object_unref(task);
 }
 
+/* Délai d'attente du verrou : 10 s ; GTKTERM_UPDATE_LOCK_TIMEOUT_MS (pour les tests seulement), lue à chaque appel, le remplace */
+static gint64
+lock_timeout_ms(void)
+{
+	const gchar *v = g_getenv("GTKTERM_UPDATE_LOCK_TIMEOUT_MS");
+	gint64 ms = 10000;
+
+	if(v != NULL && *v != '\0')
+		ms = g_ascii_strtoll(v, NULL, 10);
+	return ms;
+}
+
+/* Verrou pris : détermine la première étape (HEAD présent : cache existant) et lance */
+static void
+demarrer(GTask *task)
+{
+	FetchState *st = g_task_get_task_data(task);
+	gchar *head = g_build_filename(st->cache_dir, "HEAD", NULL);
+
+	st->step = g_file_test(head, G_FILE_TEST_EXISTS) ? STEP_SET_URL : STEP_CLONE;
+	g_free(head);
+	st->existed = st->step != STEP_CLONE;
+	run_step(task);
+}
+
+static gboolean attendre_verrou_tic(gpointer data);
+
+/* Prend le verrou du cache sans bloquer la boucle principale : occupé, nouvel essai toutes les 200 ms, jusqu'à la date limite */
+static void
+attendre_verrou(GTask *task)
+{
+	FetchState *st = g_task_get_task_data(task);
+
+	if(g_task_return_error_if_cancelled(task))
+	{
+		g_object_unref(task);
+		return;
+	}
+	if(flock(st->lock_fd, LOCK_EX | LOCK_NB) == 0)
+	{
+		demarrer(task);
+		return;
+	}
+	if(errno != EWOULDBLOCK && errno != EINTR)
+		g_task_return_new_error(task, G_IO_ERROR, g_io_error_from_errno(errno), "flock: %s", g_strerror(errno));
+	else if(g_get_monotonic_time() >= st->lock_deadline)
+		g_task_return_new_error(task, G_IO_ERROR, G_IO_ERROR_BUSY, _("Another update check is in progress."));
+	else
+	{
+		g_timeout_add(200, attendre_verrou_tic, task);	/* la référence de la tâche passe au tic */
+		return;
+	}
+	g_object_unref(task);
+}
+
+static gboolean
+attendre_verrou_tic(gpointer data)
+{
+	attendre_verrou(G_TASK(data));
+	return G_SOURCE_REMOVE;
+}
+
 void
 gt_releases_fetch_async(const gchar *url, const gchar *cache_dir, GCancellable *cancellable, GAsyncReadyCallback cb, gpointer user_data)
 {
 	GTask *task = g_task_new(NULL, cancellable, cb, user_data);
 	FetchState *st;
-	gchar *head;
 
 	g_task_set_source_tag(task, gt_releases_fetch_async);
 	if(url == NULL || *url == '\0' || cache_dir == NULL)
@@ -258,18 +433,26 @@ gt_releases_fetch_async(const gchar *url, const gchar *cache_dir, GCancellable *
 	st->url = g_strdup(url);
 	st->cache_dir = g_strdup(cache_dir);
 	st->releases = g_new0(GtReleases, 1);
+	st->lock_fd = -1;
 	g_task_set_task_data(task, st, fetch_state_free);
-	head = g_build_filename(cache_dir, "HEAD", NULL);
-	st->step = g_file_test(head, G_FILE_TEST_EXISTS) ? STEP_SET_URL : STEP_CLONE;
-	g_free(head);
-	if(st->step == STEP_CLONE)
 	{
 		gchar *parent = g_path_get_dirname(cache_dir);
+		gchar *lock = g_strconcat(cache_dir, ".lock", NULL);
 
 		g_mkdir_with_parents(parent, 0700);
+		st->lock_fd = open(lock, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+		if(st->lock_fd < 0)
+			g_task_return_new_error(task, G_IO_ERROR, g_io_error_from_errno(errno), "%s: %s", lock, g_strerror(errno));
+		g_free(lock);
 		g_free(parent);
+		if(st->lock_fd < 0)
+		{
+			g_object_unref(task);
+			return;
+		}
 	}
-	run_step(task);
+	st->lock_deadline = g_get_monotonic_time() + lock_timeout_ms() * 1000;
+	attendre_verrou(task);
 }
 
 GtReleases *

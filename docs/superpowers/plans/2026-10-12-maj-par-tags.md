@@ -38,7 +38,8 @@ registre). L'interface est écrite deux fois : `src/update.c` (GTK 3) puis `src/
 1. **Source injoignable ou réponse vide au démarrage** (réseau coupé, URL fausse, dépôt sans tag) → aucune fenêtre, aucun message ; dans la fenêtre, message clair et « Check now »
    réessaie. Épinglé : `test_update_fetch` (erreurs, dépôt sans tag), scénario graphique 7.
 2. **Cache des versions dans un état inattendu** (dossier présent mais vide, ou dossier non vide qui n'est pas un dépôt, URL changée entre deux actualisations) → clone dans un dossier
-   vide, erreur lisible sinon, tags de la nouvelle source seulement après changement d'URL. Épinglé : `test_update_fetch` (cas « dossier vide », « changement d'URL », « dossier occupé »).
+   vide ; sinon, pour un échec local seulement (jamais réseau), le dossier est écarté (renommé `<cache>.abandonne-<horodatage en µs>`, rien supprimé) et recloné une seule fois ; tags de la nouvelle source seulement après changement d'URL.
+   Épinglé : `test_update_fetch` (cas « dossier vide », « changement d'URL », « dossier occupé », « cache non dépôt », « cache verrouillé »).
 3. **`NEWS` mal formé** (fins de ligne CRLF, en-tête non-version, section en double, section d'une version pas encore taguée, `NEWS` absent du tag le plus récent) → jamais d'échec, sections
    ignorées ou texte simple. Épinglé : `test_update_versions` (parse/sélection), `test_update_fetch` (sans `NEWS`).
 4. **Mise à jour interrompue puis relancée** (terminal fermé pendant la construction : `build/` supprimé, registre présent) → la relance reconstruit et fait le ménage d'après le registre.

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-12 16:19+0200\n"
+"POT-Creation-Date: 2026-10-12 18:25+0200\n"
 "PO-Revision-Date: 2024-05-01 20:13-0300\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -1119,147 +1119,156 @@ msgstr "RTS escrito"
 msgid "No open port"
 msgstr "Porta não aberta"
 
-#: src/update.c:106
+#: src/update.c:108
 msgid "No terminal emulator found. Please install xterm or similar."
 msgstr ""
 
-#: src/update.c:123
+#: src/update.c:125
 #, fuzzy, c-format
 msgid ""
 "Failed to launch update terminal:\n"
 "%s"
 msgstr "Falhou ao registrar dados no log\n"
 
-#: src/update.c:130
+#: src/update.c:136
 msgid ""
 "The update is running in a terminal window.\n"
 "Follow the instructions there and restart GTKTerm when done."
 msgstr ""
 
-#: src/update.c:217
+#: src/update.c:227
 msgid "This version is installed."
 msgstr ""
 
-#: src/update.c:220
+#: src/update.c:230
 msgid "Warnings"
 msgstr ""
 
-#: src/update.c:240
+#: src/update.c:250
 msgid "You are leaving these versions:"
 msgstr ""
 
-#: src/update.c:256
+#: src/update.c:266
 #, c-format
 msgid "Update to %s"
 msgstr ""
 
-#: src/update.c:258
+#: src/update.c:268
 #, c-format
 msgid "Roll back to %s"
 msgstr ""
 
-#: src/update.c:260
+#: src/update.c:270
 #, c-format
 msgid "Reinstall %s"
 msgstr ""
 
-#: src/update.c:292
+#: src/update.c:302
 #, c-format
 msgid "%s — latest, installed"
 msgstr ""
 
-#: src/update.c:294
+#: src/update.c:304
 #, c-format
 msgid "%s — latest"
 msgstr ""
 
-#: src/update.c:296
+#: src/update.c:306
 #, c-format
 msgid "%s — installed"
 msgstr ""
 
-#: src/update.c:315
+#: src/update.c:325
 msgid "No published version found."
 msgstr ""
 
-#: src/update.c:318
+#: src/update.c:328
 #, c-format
 msgid "A new version is available (%s)."
 msgstr ""
 
-#: src/update.c:324
+#: src/update.c:334
 msgid "GTKTerm is up to date."
 msgstr ""
 
-#: src/update.c:343
+#: src/update.c:354
 #, c-format
 msgid "Could not check for updates: %s"
 msgstr ""
 
-#: src/update.c:369
+#: src/update.c:385
 msgid "Please enter the URL of the source repository."
 msgstr ""
 
-#: src/update.c:385
+#: src/update.c:397
 msgid "Checking…"
 msgstr ""
 
-#: src/update.c:423
+#: src/update.c:435
 #, c-format
 msgid "Install %s?"
 msgstr ""
 
-#: src/update.c:425
+#: src/update.c:437
 msgid "See the warnings above."
 msgstr ""
 
-#: src/update.c:497
+#: src/update.c:509
 msgid "Updates"
 msgstr ""
 
-#: src/update.c:506
+#: src/update.c:518
 msgid "Installed version:"
 msgstr ""
 
-#: src/update.c:513
+#: src/update.c:525
 msgid "Update source:"
 msgstr ""
 
-#: src/update.c:521
+#: src/update.c:533
 msgid "Check for updates at startup"
 msgstr ""
 
-#: src/update.c:524
+#: src/update.c:536
 msgid "Check now"
 msgstr ""
 
-#: src/update.c:529
+#: src/update.c:541
 msgid "Version:"
 msgstr ""
 
-#: src/update.c:548
+#: src/update.c:560
 msgid "Skip this version"
 msgstr ""
 
-#: src/update.c:549
+#: src/update.c:561
 msgid "Install"
 msgstr ""
 
-#: src/update.c:551
+#: src/update.c:563
 #, fuzzy
 msgid "Close"
 msgstr "_Fechar a porta"
 
-#: src/update_fetch.c:205
+#: src/update_fetch.c:316
 #, c-format
 msgid "git failed (exit status %d)"
 msgstr ""
 
-#: src/update_fetch.c:247
+#: src/update_fetch.c:318
+#, c-format
+msgid "git was killed by signal %d"
+msgstr ""
+
+#: src/update_fetch.c:396
+msgid "Another update check is in progress."
+msgstr ""
+
+#: src/update_fetch.c:422
 msgid "No update source URL."
 msgstr ""
 
-#: src/update_fetch.c:253
+#: src/update_fetch.c:428
 #, c-format
 msgid "Invalid update source URL: %s"
 msgstr ""
