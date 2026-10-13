@@ -6,6 +6,9 @@ montré en tête de la fenêtre), toute autre ligne un texte affiché tel quel (
 prolonge l'élément précédent. Une section sans tag publié n'est jamais affichée.
 Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusqu'à la prochaine section, n'est pas affiché.
 
+## v2.0.2 — 2026-10-13
+- Panneau de macros : séparateurs de section plus visibles (titre en gras, plus grand, non grisé, une ligne sautée au-dessus).
+
 ## v2.0.1 — 2026-10-13
 - Panneau de macros : rendu de la v1.3.x retrouvé. Une liste à côté d'un argument à libellé prend toute la hauteur de la ligne, les lignes
   sont moins serrées et les onglets sont de nouveau délimités.
