@@ -19,14 +19,22 @@
 #define BLINK_MS 500
 #define ARG_WIDTH_MAX 24	/* largeur d'un champ d'argument, en caractères : le texte reste entier dans le champ */
 
+#define ROW_MARGIN 2	/* marge haute et basse d'une ligne de boutons, en pixels */
+
 #define MACRO_PANEL_KEY "gt-macro-panel"	/* sur la boîte du panneau : MacroPanel, libéré avec elle */
 #define MACRO_PANEL_CSS_KEY "gt-macro-panel-css"	/* sur le GdkDisplay : fournisseur CSS commun à tous les panneaux */
 
-/* Seules couleurs fixes : celles du clignotement ; barre d'onglets et « entry.error » suivent le thème */
+/* Seules couleurs fixes : celles du clignotement. Onglets délimités comme l'interface GTK 3 (bordure, onglet affiché plus clair, trait sous la
+   barre, cadre autour des pages) mais en teintes de la couleur du texte (currentColor) : ils suivent le thème, clair ou sombre. */
 static const char panel_css[] =
 	"button.polling-blink { background: #abf573; color: black; border-color: #00cc00; }\n"
+	".macro-tab-bar { border-bottom: 2px solid alpha(currentColor, 0.4); padding: 3px 3px 0 3px; }\n"
 	".macro-tab-bar flowboxchild { padding: 0; margin: 0; }\n"
-	".macro-tab-bar button.macro-tab { border-radius: 4px 4px 0 0; padding: 3px 6px; min-width: 0; margin: 0; }\n"
+	".macro-tab-bar button.macro-tab { border: 1px solid alpha(currentColor, 0.35); border-bottom-width: 0; border-radius: 4px 4px 0 0; padding: 3px 6px;"
+	" min-width: 0; margin: 0; background: alpha(currentColor, 0.15); box-shadow: none; }\n"
+	".macro-tab-bar button.macro-tab:hover:not(:checked) { background: alpha(currentColor, 0.08); }\n"
+	".macro-tab-bar button.macro-tab:checked { background: transparent; font-weight: bold; }\n"
+	".macro-pages { border: 1px solid alpha(currentColor, 0.25); border-top-width: 0; }\n"
 	"button.macro-button { min-width: 0; }\n";
 
 typedef struct
@@ -378,6 +386,7 @@ static GtkWidget *make_args_row(MacroPanel *panel, const GtMacroSet *set, const 
 	GtkWidget *button = make_main_button(panel, m);
 	GPtrArray *fields = g_ptr_array_new();	/* champs non possédés */
 
+	gtk_widget_set_vexpand(hbox, FALSE);	/* explicite : le vexpand d'un champ sans libellé ne remonte pas à la page, la ligne garde sa hauteur naturelle */
 	g_signal_connect(button, "clicked", G_CALLBACK(on_args_button_clicked), panel);
 	gtk_box_append(GTK_BOX(hbox), button);
 	for(gint k = 0; k < n_args; k++)
@@ -392,6 +401,8 @@ static GtkWidget *make_args_row(MacroPanel *panel, const GtMacroSet *set, const 
 			gtk_widget_add_css_class(label, "dim-label");
 			gtk_box_append(GTK_BOX(cell), label);
 		}
+		else
+			gtk_widget_set_vexpand(w, TRUE);	/* sans libellé, le champ prend toute la hauteur de la ligne (celle d'un champ à libellé), comme en GTK 3 */
 		gtk_widget_set_hexpand(cell, TRUE);
 		gtk_box_append(GTK_BOX(cell), w);
 		gtk_box_append(GTK_BOX(hbox), cell);
@@ -401,6 +412,14 @@ static GtkWidget *make_args_row(MacroPanel *panel, const GtMacroSet *set, const 
 	update_button_appearance(panel, m->id);
 	macro_arg_infos_free(infos, n_args);
 	return hbox;
+}
+
+/* Ligne de boutons : 2 px au-dessus et au-dessous en plus de l'espacement de la page (7 px entre deux lignes, comme l'interface GTK 3) */
+static void append_row(GtkWidget *vbox, GtkWidget *row)
+{
+	gtk_widget_set_margin_top(row, ROW_MARGIN);
+	gtk_widget_set_margin_bottom(row, ROW_MARGIN);
+	gtk_box_append(GTK_BOX(vbox), row);
 }
 
 static GtkWidget *make_page(MacroPanel *panel, const GtMacroSet *set, const gchar *tab)
@@ -435,14 +454,14 @@ static GtkWidget *make_page(MacroPanel *panel, const GtMacroSet *set, const gcha
 		case GT_MACRO_VIEW_BUTTON:
 			b = make_main_button(panel, m);
 			g_signal_connect(b, "clicked", G_CALLBACK(on_simple_button_clicked), panel);
-			gtk_box_append(GTK_BOX(vbox), b);
+			append_row(vbox, b);
 			update_button_appearance(panel, m->id);
 			break;
 		case GT_MACRO_VIEW_TWO_VALUES:
-			gtk_box_append(GTK_BOX(vbox), make_two_values(panel, set, m));
+			append_row(vbox, make_two_values(panel, set, m));
 			break;
 		case GT_MACRO_VIEW_ARGS:
-			gtk_box_append(GTK_BOX(vbox), make_args_row(panel, set, m));
+			append_row(vbox, make_args_row(panel, set, m));
 			break;
 		default:
 			break;
@@ -833,6 +852,7 @@ GtkWidget *gt_macro_panel_new(GtSession *s, GActionMap *tab_actions, gboolean vi
 	gtk_widget_add_controller(panel->tab_bar, GTK_EVENT_CONTROLLER(right));
 	panel->stack = gtk_stack_new();
 	gtk_widget_set_vexpand(panel->stack, TRUE);
+	gtk_widget_add_css_class(panel->stack, "macro-pages");
 	gtk_box_append(GTK_BOX(panel->box), panel->tab_bar);
 	gtk_box_append(GTK_BOX(panel->box), panel->stack);
 	build_polling_popover(panel);

@@ -477,6 +477,45 @@ static void on_test_set_text(GSimpleAction *action, GVariant *param, gpointer us
 		g_printerr("GTKTERM-TEST: test-set-text %s : %s\n", key, w == NULL ? "introuvable" : "non éditable");
 }
 
+/* Capture PNG de la fenêtre principale (rendu Cairo hors écran) : pour regarder une disposition, aucun test ne la compare */
+static void on_test_screenshot(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+	GtkApplication *app = GTK_APPLICATION(g_application_get_default());
+	GtkWindow *win = app != NULL ? gtk_application_get_active_window(app) : NULL;
+	const gchar *path = g_variant_get_string(param, NULL);
+	GdkPaintable *paintable;
+	GtkSnapshot *snapshot;
+	GskRenderNode *node;
+	GskRenderer *renderer;
+	GError *error = NULL;
+
+	if(win == NULL)
+		return;
+	paintable = gtk_widget_paintable_new(GTK_WIDGET(win));
+	snapshot = gtk_snapshot_new();
+	gdk_paintable_snapshot(paintable, snapshot, gtk_widget_get_width(GTK_WIDGET(win)), gtk_widget_get_height(GTK_WIDGET(win)));
+	node = gtk_snapshot_free_to_node(snapshot);
+	renderer = gsk_cairo_renderer_new();
+	if(node != NULL && gsk_renderer_realize_for_display(renderer, gtk_widget_get_display(GTK_WIDGET(win)), &error))
+	{
+		GdkTexture *texture = gsk_renderer_render_texture(renderer, node, NULL);
+
+		if(!gdk_texture_save_to_png(texture, path))
+			g_printerr("GTKTERM-TEST: test-screenshot %s : échec\n", path);
+		g_object_unref(texture);
+		gsk_renderer_unrealize(renderer);
+	}
+	else if(error != NULL)
+	{
+		g_printerr("GTKTERM-TEST: test-screenshot : %s\n", error->message);
+		g_error_free(error);
+	}
+	g_object_unref(renderer);
+	if(node != NULL)
+		gsk_render_node_unref(node);
+	g_object_unref(paintable);
+}
+
 void gt_test_hooks_install(GtkApplication *app)
 {
 	GSimpleAction *a;
@@ -503,6 +542,10 @@ void gt_test_hooks_install(GtkApplication *app)
 	g_object_unref(a);
 	a = g_simple_action_new("test-activate", G_VARIANT_TYPE_STRING);
 	g_signal_connect(a, "activate", G_CALLBACK(on_test_activate), NULL);
+	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
+	g_object_unref(a);
+	a = g_simple_action_new("test-screenshot", G_VARIANT_TYPE_STRING);
+	g_signal_connect(a, "activate", G_CALLBACK(on_test_screenshot), NULL);
 	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
 	g_object_unref(a);
 	a = g_simple_action_new("test-set-text", G_VARIANT_TYPE("(ss)"));
