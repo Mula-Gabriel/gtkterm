@@ -4147,3 +4147,10 @@ après chaque modification de `src/` dans ce dépôt-là seulement.
 - **Reste à faire (utilisateur)** : le bout en bout de la v2 (Step 4, points 2 à 4) avec la source `https://git.mulagabriel.eu/Gabriel/gtkterm` au lieu du dépôt de test : montée en
   `v2.0.0` (une seule autorisation, un seul lanceur, `.gtktermrc.avant-migration` créé), retour en `v1.3.2` (« You are leaving these versions », configuration restaurée selon « Revenir
   à v1.3.2 »), remontée ; puis remettre la source GitHub. Après un « Check now », le cache reprend seul un tag déplacé (`fetch --force`).
+
+## État au 2026-10-13 (publication de la v2)
+
+- L'utilisateur a installé `v2.0.0` sur son poste (Ubuntu) par la source Maison : rien de cassé. Correctifs du panneau de macros publiés en `v2.0.1` (liste sur toute la hauteur
+  de la ligne, 7 px entre lignes, onglets délimités) et `v2.0.2` (séparateurs de section plus visibles), installés de même.
+- **Publié sur GitHub sur feu vert** (Step 5.2) : tags `v2.0.0`, `v2.0.1`, `v2.0.2` et branche `refonte` (= `master` de la refonte) ; `master` de GitHub reste la ligne GTK 3
+  (`v1.3.2`) tant qu'un poste peut être en `0a013c2`. Chaque poste en `v1.3.2` voit maintenant la fenêtre s'ouvrir au démarrage avec `v2.0.2`.
