@@ -2,7 +2,8 @@
 # error) dès la frappe ; les valeurs saisies servent à l'envoi mais le fichier n'est jamais touché ; « Reset arguments » (popover) revient aux
 # valeurs par défaut ; l'éditeur (zone « Default values ») les enregistre ; relues après redémarrage ; liste de deux valeurs = deux boutons ;
 # panneau masqué et réaffiché par app.show-macro-panel ; liste sans libellé à côté d'un argument à libellé : la liste prend toute la hauteur de la
-# ligne (deux lignes, comme le bouton), 7 px entre deux lignes (comme l'interface GTK 3).
+# ligne (deux lignes, comme le bouton), 7 px entre deux lignes (comme l'interface GTK 3) ; séparateur titré : titre en gras, non grisé, une
+# ligne sautée au-dessus.
 import os, re, time
 from gi.repository import GLib
 from gtktest import *
@@ -13,6 +14,7 @@ write_macros_v2(ma, [dict(label='Num', action='N%d;', args=['5']),
                      dict(label='Choix', action='C%#Modes;', args=['b']),
                      dict(label='Mix', action='M%#Modes [Idx]%d;', args=['b', '3']),
                      dict(label='L', action='S %#Bin'),
+                     dict(label='Sep', action='[Section]%&'),
                      dict(label='Txt', action='T%s;', args=['x'])],
                 lists=[('Modes', [('Alpha', 'a'), ('Beta', 'b'), ('Gamma', 'g')]), ('Bin', [('Lent', '0'), ('Vif', '1')])])
 macro_config(e, ma)
@@ -45,6 +47,10 @@ check(l_mix['y'] == b_mix['y'] and l_mix['h'] == b_mix['h'], 'liste de Mix sur t
 check(c_mix['h'] < b_mix['h'], 'champ a libelle de Mix sous son libelle', (c_mix['h'], b_mix['h']))
 suivante = e.find1(name=[w for w in e.dump() if re.match(r'^macro-\d+-value-0$', w.get('name') or '')][0]['name'])
 check(suivante['y'] - (b_mix['y'] + b_mix['h']) == 7, '7 px entre la ligne Mix et la suivante', suivante['y'] - (b_mix['y'] + b_mix['h']))
+titre = e.find1(label='Section', type='GtkLabel')
+check('macro-separator-title' in classes(titre) and 'dim-label' not in classes(titre), 'titre du separateur en classe macro-separator-title', classes(titre))
+check(titre.get('sensitive'), 'titre du separateur non grise')
+check(titre['y'] - (suivante['y'] + suivante['h']) >= 18, 'une ligne sautee au-dessus du separateur', titre['y'] - (suivante['y'] + suivante['h']))
 
 depart = open(ma).read()
 mtime = os.stat(ma).st_mtime_ns

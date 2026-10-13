@@ -20,6 +20,7 @@
 #define ARG_WIDTH_MAX 24	/* largeur d'un champ d'argument, en caractères : le texte reste entier dans le champ */
 
 #define ROW_MARGIN 2	/* marge haute et basse d'une ligne de boutons, en pixels */
+#define SEPARATOR_MARGIN_TOP 18	/* au-dessus d'un séparateur : une ligne sautée, la section se détache de la précédente */
 
 #define MACRO_PANEL_KEY "gt-macro-panel"	/* sur la boîte du panneau : MacroPanel, libéré avec elle */
 #define MACRO_PANEL_CSS_KEY "gt-macro-panel-css"	/* sur le GdkDisplay : fournisseur CSS commun à tous les panneaux */
@@ -35,6 +36,7 @@ static const char panel_css[] =
 	".macro-tab-bar button.macro-tab:hover:not(:checked) { background: alpha(currentColor, 0.08); }\n"
 	".macro-tab-bar button.macro-tab:checked { background: transparent; font-weight: bold; }\n"
 	".macro-pages { border: 1px solid alpha(currentColor, 0.25); border-top-width: 0; }\n"
+	".macro-separator-title { font-weight: bold; font-size: 1.25em; }\n"
 	"button.macro-button { min-width: 0; }\n";
 
 typedef struct
@@ -279,14 +281,14 @@ static GtkWidget *make_separator(const gchar *title)
 		GtkWidget *label = gtk_label_new(title);
 		GtkWidget *right = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
 
-		gtk_widget_add_css_class(label, "dim-label");
+		gtk_widget_add_css_class(label, "macro-separator-title");
 		gtk_box_append(GTK_BOX(box), label);
 		gtk_widget_set_hexpand(right, TRUE);
 		gtk_widget_set_valign(right, GTK_ALIGN_CENTER);
 		gtk_box_append(GTK_BOX(box), right);
 	}
-	gtk_widget_set_sensitive(box, FALSE);
-	gtk_widget_set_margin_top(box, 4);
+	gtk_widget_set_can_target(box, FALSE);	/* ni clic ni survol, mais sensible : titre et traits dans la couleur du texte, pas grisés */
+	gtk_widget_set_margin_top(box, SEPARATOR_MARGIN_TOP);
 	gtk_widget_set_margin_bottom(box, 4);
 	return box;
 }
