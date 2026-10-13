@@ -68,7 +68,7 @@ def choisir(texte):
     e.set_text('update-version', texte)
 
 
-# 1. Démarrage : version plus récente → la fenêtre s'ouvre seule, plus récente choisie, avertissements en tête
+# 1. Démarrage : version plus récente → la fenêtre s'ouvre seule, plus récente choisie, avertissements en tête (une seule fois)
 e.fake_git(tags=TAGS, news=NEWS)
 e.start()
 check(wait_until(fenetre_ouverte, 10), 'fenetre ouverte au demarrage')
@@ -79,6 +79,9 @@ avert = notes('update-warning')
 check(any('Avertissement lointain sur deux lignes' in t for t in avert), 'avertissement de NEWS affiche (prolongement joint)', avert)
 check(any(t.startswith('v99.0.0 — 2099-01-01') for t in notes('heading')), 'titre de section', notes('heading'))
 check('Warnings' in notes('update-warning') and 'Warnings' in notes('heading'), 'en-tete Warnings : classes update-warning et heading', notes('update-warning'))
+tous = notes()
+check(sum('Avertissement lointain' in t for t in tous) == 1 and not any(t.startswith('⚠') for t in tous), 'avertissement affiche une seule fois (en tete, pas repete dans sa section)', tous)
+check(any(t.startswith('v99.0.0 — Avertissement lointain') for t in avert), 'avertissement en tete prefixe de sa version', avert)
 check(e.find(name='update-skip') != [], 'Skip visible pour une version plus recente')
 check(NOUVELLE in resultat(), 'resultat : nouvelle version', resultat())
 check(bool(e.find1(name='update-install').get('focus')), 'focus initial sur Install (pas sur l etiquette de la version installee)')

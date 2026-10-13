@@ -326,7 +326,7 @@ and the next user build fails). `update_versions.c` (core, `gt_version_*`, `gt_n
 only), lists the tags and reads `NEWS` of the newest tag (`git -c protocol.ext.allow=never`, `GIT_TERMINAL_PROMPT=0`, `LC_ALL=C`, cancellable; an empty URL or one starting with `-` is refused).
 `NEWS` (French, root of the repo): `## vX.Y.Z …` opens a section, `- ` item, `! ` warning, two leading spaces continue the previous item, a `# …` level-1 heading closes the current section (the
 `# Historique` text stays unshown), a section without a published tag is never shown. The « Updates » window (Help › Check for updates…, refreshes when opened; Install and the version list
-insensitive during a refresh) lists the versions, shows the notes between the installed and the chosen version (warnings first; rollback: « You are leaving these versions: »), « Update to /
+insensitive during a refresh) lists the versions, shows the notes between the installed and the chosen version (warnings once, at the top, each prefixed with its version, never repeated in their section; rollback: « You are leaving these versions: »), « Update to /
 Roll back to / Reinstall vX » (confirmation when the notes hold a warning, or when the project is modified or a tab is busy: the script closes GTKTerm with SIGTERM and restarts it), « Skip
 this version » (newest version only; `[general] update_skipped_version` = tag; the old `update_skipped_revision` is neither read
 nor written) and closes after a successful launch; the start-up check is silent unless a newer, non-skipped version exists, and then opens that window. Launching uses an argument list

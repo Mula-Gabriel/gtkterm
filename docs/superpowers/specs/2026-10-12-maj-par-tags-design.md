@@ -114,7 +114,8 @@ Version:            [v2.1.0 — latest  ▾]
 - **Liste des versions** : de la plus récente à la plus ancienne ; libellés « vX.Y.Z », « vX.Y.Z — latest », « vX.Y.Z — installed » (les deux si c'est le cas). Insensible tant que
   l'actualisation n'a rien rendu. Sélection initiale : la plus récente.
 - **Notes** (lecture seule, défilante) : les avertissements des sections retenues **d'abord**, regroupés sous « Warnings » et mis en évidence (gras, couleur d'avertissement), chacun
-  préfixé de sa version ; puis chaque section (titre « vX.Y.Z — <suite de la ligne> », éléments en puces, texte simple tel quel). Retour en arrière : un en-tête « You are leaving these
+  préfixé de sa version ; puis chaque section (titre « vX.Y.Z — <suite de la ligne> », éléments en puces, texte simple tel quel), sans ses avertissements : chacun n'est montré qu'une fois, en tête
+  (la fenêtre de v1.3.2 les répète encore dans leur section ; d'où des avertissements d'une ligne, la marche à suivre allant dans le texte simple). Retour en arrière : un en-tête « You are leaving these
   versions: » précède les sections. Même version : « This version is installed. ». Le texte des notes n'est jamais interprété comme du balisage Pango.
 - **Bouton principal** selon la sélection : « Update to vX » (plus récente), « Roll back to vX » (plus ancienne), « Reinstall vX » (installée, pour réparer). Si les sections retenues
   contiennent au moins un avertissement, une confirmation (« Install vX? » + rappel « See the warnings above. ») est demandée avant de lancer le script ; sinon lancement direct.

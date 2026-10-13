@@ -199,6 +199,7 @@ refresh_selection(GtUpdateWindow *self)
 	}
 	if(dir == GT_NEWS_ROLLBACK && sel->len > 0)
 		notes_add(self, _("You are leaving these versions:"), "heading", 0);
+	/* Les avertissements ne sont montrés qu'une fois, en tête : les sections n'en reprennent que les nouveautés et le texte */
 	for(guint i = 0; i < sel->len; i++)
 	{
 		GtNewsSection *s = g_ptr_array_index(sel, i);
@@ -207,9 +208,12 @@ refresh_selection(GtUpdateWindow *self)
 		for(guint j = 0; j < s->entries->len; j++)
 		{
 			GtNewsEntry *e = g_ptr_array_index(s->entries, j);
-			gchar *t = e->kind == GT_NEWS_ITEM ? g_strconcat("• ", e->text, NULL) : e->kind == GT_NEWS_WARNING ? g_strconcat("⚠ ", e->text, NULL) : g_strdup(e->text);
+			gchar *t;
 
-			notes_add(self, t, e->kind == GT_NEWS_WARNING ? "update-warning" : NULL, 12);
+			if(e->kind == GT_NEWS_WARNING)
+				continue;
+			t = e->kind == GT_NEWS_ITEM ? g_strconcat("• ", e->text, NULL) : g_strdup(e->text);
+			notes_add(self, t, NULL, 12);
 			g_free(t);
 		}
 	}
