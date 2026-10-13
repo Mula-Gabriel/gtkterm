@@ -4134,3 +4134,16 @@ git status --short   # vide
 
 Remarque pour l'exécution : la Partie A se fait **entièrement** dans `~/git/gtkterm-gtk3`, la Partie B dans `~/git/gtkterm` ; le hook PostToolUse du projet reconstruit `~/git/gtkterm/build`
 après chaque modification de `src/` dans ce dépôt-là seulement.
+
+## État au 2026-10-13 (reprise)
+
+- **Publié sur GitHub** (`origin`, suivi par les postes) : `master` = ligne GTK 3 en `c7f36b8`, tag `v1.3.2`. Vérifié par l'utilisateur sur son poste : passage de `0a013c2` (ancien
+  gestionnaire) à `v1.3.2`, puis fenêtre « Updates » GTK 3 fonctionnelle (source Maison : `v2.0.0` proposée avec ses avertissements).
+- **Publié sur Maison** : `master` = refonte (Maison n'a jamais porté la ligne GTK 3 sur `master`), tags `v1.3.2` et `v2.0.0`. Le tag `v2.0.0` a été **reposé** le 2026-10-13 (`9b243b4` :
+  avertissements montrés une seule fois, en tête ; avertissements de `v2.0.0` d'une ligne, marche à suivre « Revenir à v1.3.2 » en texte simple) ; il n'était encore sur aucun autre poste.
+  La fenêtre de `v1.3.2` répète encore les avertissements dans leur section (son code) : d'où des avertissements courts.
+- **Pas publié sur GitHub** : `v2.0.0` (tag + branche `refonte`, Step 5.2). Dès qu'il y est, chaque poste en `v1.3.2` voit la fenêtre s'ouvrir au démarrage avec `v2.0.0` : à faire seulement
+  sur feu vert explicite, après le test ci-dessous.
+- **Reste à faire (utilisateur)** : le bout en bout de la v2 (Step 4, points 2 à 4) avec la source `https://git.mulagabriel.eu/Gabriel/gtkterm` au lieu du dépôt de test : montée en
+  `v2.0.0` (une seule autorisation, un seul lanceur, `.gtktermrc.avant-migration` créé), retour en `v1.3.2` (« You are leaving these versions », configuration restaurée selon « Revenir
+  à v1.3.2 »), remontée ; puis remettre la source GitHub. Après un « Check now », le cache reprend seul un tag déplacé (`fetch --force`).
