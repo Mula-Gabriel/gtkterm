@@ -477,11 +477,28 @@ static void on_test_set_text(GSimpleAction *action, GVariant *param, gpointer us
 		g_printerr("GTKTERM-TEST: test-set-text %s : %s\n", key, w == NULL ? "introuvable" : "non éditable");
 }
 
-/* Capture PNG de la fenêtre principale (rendu Cairo hors écran) : pour regarder une disposition, aucun test ne la compare */
+/* Fenêtre visible qui a le focus (« Configure Macros » n'est pas attachée à l'application), sinon la fenêtre active de l'application */
+static GtkWindow *focused_window(void)
+{
+	GListModel *tops = gtk_window_get_toplevels();
+	GtkApplication *app = GTK_APPLICATION(g_application_get_default());
+	GtkWindow *found = NULL;
+
+	for(guint i = 0; found == NULL && i < g_list_model_get_n_items(tops); i++)
+	{
+		GtkWindow *w = g_list_model_get_item(tops, i);
+
+		if(gtk_widget_get_mapped(GTK_WIDGET(w)) && gtk_window_is_active(w))
+			found = w;
+		g_object_unref(w);
+	}
+	return found != NULL ? found : (app != NULL ? gtk_application_get_active_window(app) : NULL);
+}
+
+/* Capture PNG de la fenêtre qui a le focus (rendu Cairo hors écran) : pour regarder une disposition, aucun test ne la compare */
 static void on_test_screenshot(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-	GtkApplication *app = GTK_APPLICATION(g_application_get_default());
-	GtkWindow *win = app != NULL ? gtk_application_get_active_window(app) : NULL;
+	GtkWindow *win = focused_window();
 	const gchar *path = g_variant_get_string(param, NULL);
 	GdkPaintable *paintable;
 	GtkSnapshot *snapshot;

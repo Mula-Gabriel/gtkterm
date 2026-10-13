@@ -122,7 +122,7 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
    programmé d'un widget désigné par son id de dump, son nom ou son libellé ; synchrone : un `GtkButton` sensible reçoit `clicked` avant la réponse D-Bus, un
    bouton insensible n'est jamais cliqué et fait échouer le scénario), `app.test-set-text((ss))` (texte d'une entrée ou d'un `GtkTextView`, choix d'un
    `GtkDropDown`, valeur d'un `GtkSpinButton`, police d'un `GtkFontDialogButton`, couleur d'un `GtkColorDialogButton`). Les classes CSS d'un widget sont
-   dans la clé `css` du dump. `app.test-screenshot(s)` écrit une capture PNG de la fenêtre principale (rendu Cairo hors écran) au chemin donné : pour
+   dans la clé `css` du dump. `app.test-screenshot(s)` écrit une capture PNG de la fenêtre qui a le focus (sinon la fenêtre principale ; rendu Cairo hors écran) au chemin donné : pour
    regarder une disposition pendant une mise au point, aucun scénario ne la compare. Onglets (6b) : `test-terminal-text` et `test-terminal-props` visent l'onglet actif ; `app.test-sessions` (état `aa{sv}`
    recalculé à chaque activation, comme `test-dump`) décrit chaque onglet dans l'ordre : `index` (i), `id` (u), `name` (s, nom court), `state` (s :
    `closed`, `connecting`, `open`, `listening`, `lost`, `reconnecting`), `profile` (s), `macros_file` (s, vide si aucun), `active` (b), `busy` (b), `in_project` (b, onglet de projet : macros

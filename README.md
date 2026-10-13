@@ -1,283 +1,278 @@
+<p align="center">
+  <img src="data/gtkterm_128x128.png" width="112" alt="GTKTerm icon"/>
+</p>
 
-# GTKTerm Fork
+<h1 align="center">GTKTerm</h1>
 
-1. Separate Macros File
-- Macros and lists are stored in a standalone .ini file, independent from the serial port config (.gtktermrc) 
-- Menu items "Load macros file..." and "Save macros file" open a file chooser dialog
-- The last used macros file path is saved in .gtktermrc and auto-loaded at startup
-                                                                                                              
-2. Value Lists (New "Lists" Tab)
-- In the Macros configuration window, a new "Lists" tab lets you define named lists of display/value pairs
-- Each list entry has a List name, Display text (shown in UI), and Value (sent to serial port)
-- Lists are referenced in macro actions using %#ListName syntax
-- Example: A list called "Commands" with entries like "Reset" → "AT+RESET", "Ping" → "AT+PING"
-                                                                                                              
-3. Macros with Format Arguments
-- Macro actions support full printf-style format specifiers with length modifiers:
-  - %s – string
-  - %c – single character
-  - %d / %i – signed int; %hd/%hi (short), %hhd/%hhi (signed char), %ld/%li (long), %lld/%lli (long long)
-  - %u / %o – unsigned int (decimal/octal); %hu/%ho (unsigned short), %hhu/%hho (unsigned char), %lu/%lo (unsigned long), %llu/%llo (unsigned long long)
-  - %x / %X – unsigned hex; %hx/%hX, %hhx/%hhX, %lx/%lX, %llx/%llX
-  - %f / %e / %g / %a (and F/E/G/A variants) – float (~9 significant digits)
-  - %lf / %le / %lg / %la – double (~16 significant digits)
-  - %Lf / %Le / %Lg / %La – long double (~19 significant digits)
-- Values are automatically truncated to the type's precision on send; no trailing zeros or out-of-range digits reach the port
-- Macros with arguments automatically generate buttons with input fields in the macro panel
-- Example action: "AT+SEND=%s\r\n" → user types the string, macro sends the full command
-- A `[name]` tag placed immediately before a format specifier adds a label above its input field
-- Example: "AT+SPEED=[Speed]%d\r\n" → the integer field is labeled "Speed" in the UI
-- Works with list arguments too: "[Command]%#Commands" → the dropdown is labeled "Command"
-                                                                                                              
-4. List Arguments in Macros
-- Using %#ListName in a macro action creates a combo box dropdown in the button UI
-- User selects from the predefined list values before sending
-- Can be combined with regular format args: "CMD=%#Commands=%d\r\n"
-                                                                                                              
-5. Reorder Buttons (Move Up/Down)
-- Both the Macros tab and Lists tab have "Move Up" / "Move Down" buttons
-- Lets you reorder macros and list entries to match your preferred workflow
+<p align="center">
+  <b>A serial and TCP terminal for Linux, built for people who talk to devices all day.</b><br/>
+  Tabs, projects, a macro panel with arguments, and Lua scripting, on GTK 4.
+</p>
 
-6. TCP Client / Server Transport
-- Supports three transport modes: Serial port, TCP Client, and TCP Server
-- TCP Client connects to a remote host:port with optional auto-reconnect (2-second interval)
-- TCP Server listens on a port and accepts a single client connection (new client replaces old)
-- Privileged ports (<1024) are supported via Linux CAP_NET_BIND_SERVICE capability
-- Switch transport type in Config > Port dialog via a combo box; GUI adapts to show relevant settings
-- Command-line options: --transport (serial|tcp-client|tcp-server), --host, --tcp-port
+<p align="center">
+  <a href="https://github.com/Mula-Gabriel/gtkterm/tags"><img alt="Latest version" src="https://img.shields.io/github/v/tag/Mula-Gabriel/gtkterm?sort=semver&label=version&color=2e7d32"/></a>
+  <img alt="GTK 4" src="https://img.shields.io/badge/GTK-4.14%2B-4a86cf"/>
+  <img alt="Lua 5.4" src="https://img.shields.io/badge/Lua-5.4-000080"/>
+  <img alt="Platform: Linux" src="https://img.shields.io/badge/platform-Linux-555"/>
+  <a href="COPYING"><img alt="License: GPL v3" src="https://img.shields.io/badge/license-GPL--3.0-c0392b"/></a>
+</p>
 
-7. Smart Add (Insert After Selection)
-- In the Macros tab, clicking "Add" inserts a new macro right after the currently selected row
-- In the Lists tab, clicking "Add Entry" inserts a new entry right after the currently selected row
-- With multiple rows selected, the new item is inserted after the last selected row
-- If no row is selected, the new item is appended at the end of the list as before
+<p align="center">
+  <img src="docs/images/gtkterm-main.png" width="92%" alt="GTKTerm with two tabs (a serial port and a TCP client) and the macro panel"/>
+</p>
 
-8. Macro Tab Groups
-- Each macro has an optional **Tab** field in the configuration window
-- Macros sharing the same tab name are grouped under a common tab in the macro panel
-- Macros with no tab name are placed in the **General** tab automatically
-- The tab bar wraps across multiple rows if there are many groups
-- Right-clicking anywhere on the tab bar shows a checklist of all tabs, allowing you to show or hide each group independently
+GTKTerm talks to anything with a serial line: embedded boards, microcontrollers, modems, GPS receivers, CNC machines, test benches. This fork of the classic
+GTKTerm adds everything a daily bench workflow asks for: one tab per port, a whole workstation saved in one project file, buttons for your commands (with
+fields, drop-down lists and periodic sending), a Lua engine to automate exchanges, TCP client and server links, and updates from inside the application.
 
-9. Macro Polling (Right-click on a macro button)
-- Right-clicking any macro button opens a context menu with two options:
-  - **Polling Mode** checkbox: enables or disables periodic auto-send for that macro
-  - **Period (ms)** field: sets the repeat interval in milliseconds (default: 1000 ms)
-- When polling is enabled, the button label gains a ⏱ prefix to indicate the mode
-- **Left-clicking** the button then acts as a start/stop toggle:
-  - First click: sends the macro immediately and starts repeating it at the configured interval
-  - Second click: stops the periodic sending
-- While actively polling, the button blinks to provide a visual indicator
-- For macros with format arguments, the argument values entered at start time are captured and reused for every subsequent send
-- The polling configuration (enabled state and period) is saved with the macros (macros file or project) and restored at startup
+## ✨ Highlights
 
-10. Visual Separators in the Macro Panel
-- In the **action** field of a macro, use `[Label]%&` to insert a decorative separator in the panel instead of a button
-- The separator renders as a horizontal line with the label centered on it — non-clickable and greyed out
-- Use `%&` alone (no label) for an unlabeled horizontal line
-- The macro **label** field still needs to be filled in (for the config editor), but it is not shown in the panel
-- Example: action `[AT Commands]%&` → a `──── AT Commands ────` divider between button groups
+<table>
+<tr>
+<td width="50%" valign="top">
 
-11. Multi-Selection in Macro/List Editors
-- Both the Macros and Lists tabs support multi-row selection (Ctrl+Click, Shift+Click)
-- Move Up / Move Down and Delete buttons operate on the entire selected group
-- Selected rows keep their relative order after moving; the group moves as a block
-- Delete removes all selected rows in one operation (processed bottom-to-top to preserve indices)
+**🗂️ Tabs**<br/>
+One port per tab, each a complete session: its own link, options, profile, macros, script, log and file transfer. Drag tabs to reorder them.
 
-11. Input Validation with Visual Feedback
-- Numeric macro arguments (integer and float types) are validated on focus-out or Enter
-- If the value exceeds the type's range or contains invalid characters, the entry field turns red, bold, with a red border
-- Default argument values are validated at startup and when loading a macros file or a project
-- Empty fields and string/list fields are always considered valid
+</td>
+<td width="50%" valign="top">
 
-12. Lua Script Panel
-- A built-in Lua 5.4 script editor and output console, shown/hidden via the View menu
-- Syntax highlighting powered by GtkSourceView 5 (Lua keywords, strings, numbers, comments, functions)
-- Toolbar buttons: **Open**, **Save**, **Run**, **Stop**, **Colors…**
-- **Run** executes the script in a background thread; **Stop** interrupts it at the next `gtkterm.sleep()` or `gtkterm.wait_for()` call
-- Without a project, the last opened script file is saved and reloaded automatically at startup; in a project, the script text is part of the project
-- **Layout** — right-click anywhere on the divider or toolbar to toggle between:
-  - *Horizontal* — editor on top, console on bottom
-  - *Vertical* — editor on the left, console on the right
-- The chosen layout and both divider positions are persisted independently across sessions
-- **Colors** — the "Colors…" button opens a dialog to customise:
-  - Editor background and default text color
-  - Syntax colors: comments, keywords, strings, numbers, functions
-  - Line-number bar foreground and background
-  - Colors default to a dark or light palette derived from the terminal's configured background; changes are saved in the `[colors]` group of `.gtktermrc`
+**📦 Projects**<br/>
+A single `.gtkterm` file holds every tab with its port, settings, macros and script. Send it to a colleague: the whole workstation comes with it.
 
-### Lua Scripting API
+</td>
+</tr>
+<tr>
+<td valign="top">
 
-Function | Description
----:|---
-`gtkterm.send(handle, data)` | Send raw bytes to a port (`handle 0` = main serial port)
-`gtkterm.wait_for(handle, pattern, timeout_ms)` | Block until `pattern` (Lua regex) appears in received data, or timeout; returns `true/false, matched_string`
-`gtkterm.sleep(ms)` | Pause execution for `ms` milliseconds (interruptible by Stop)
-`gtkterm.log(text)` | Print a line to the script console
-`gtkterm.get_macros()` | Return a list of `{index, label, n_args, args=[{type,label,list}]}` tables
-`gtkterm.send_macro(index_or_label, …)` | Send a macro by its index or label, with optional format arguments
-`gtkterm.get_lists()` | Return a list of `{name, entries=[{display,value}]}` tables for all defined value lists
-`gtkterm.time()` | Return wall-clock time in seconds (float) — use instead of `os.clock()` for elapsed-time measurement
+**🎛️ Macro panel**<br/>
+Buttons grouped in tabs, printf-style arguments (`%d`, `%s`, `%x`…), drop-down lists, labelled fields, section separators, keyboard shortcuts and
+periodic sending (polling).
 
-**Example script** (`scripts/05_macros_demo.lua`):
-```lua
-local macros = gtkterm.get_macros()
-for _, m in ipairs(macros) do
-    gtkterm.log(string.format("[%d] %s", m.index, m.label))
-end
-gtkterm.send_macro(1)          -- send macro #1
-gtkterm.sleep(500)
-gtkterm.send_macro("Reset")    -- send macro by label
+</td>
+<td valign="top">
+
+**🧩 Lua scripting**<br/>
+A built-in editor and console. Scripts send, wait for answers, open up to 15 extra serial or TCP ports, trigger macros and write CSV files, in a
+background thread that never freezes the window.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**🌐 Serial and TCP**<br/>
+Serial ports, TCP client and TCP server, with silent auto-reconnect: unplug the adapter, plug it back, the tab picks up where it left off.
+
+</td>
+<td valign="top">
+
+**🔄 Built-in updates**<br/>
+Help › Check for updates… lists the published versions with their release notes, installs one in a single step, and can roll back just as easily.
+
+</td>
+</tr>
+</table>
+
+## 📥 Installation
+
+### Build from source
+
+GTKTerm needs GTK 4 (≥ 4.14), VTE for GTK 4 (≥ 0.76), GtkSourceView 5 (≥ 5.12), libgudev, Lua 5.4 and GLib ≥ 2.70. Ubuntu 24.04 provides all of them:
+
+```sh
+sudo apt install libgtk-4-dev libvte-2.91-gtk4-dev libgtksourceview-5-dev libgudev-1.0-dev liblua5.4-dev meson ninja-build git
+git clone https://github.com/Mula-Gabriel/gtkterm.git
+cd gtkterm
+meson setup build
+ninja -C build
+sudo meson install -C build --no-rebuild
 ```
 
+`--no-rebuild` keeps root from rebuilding (and from leaving root-owned files in `build/`). The default prefix is `/usr/local`; use
+`meson setup build -Dprefix=/usr` to install elsewhere.
 
-<p align="center">
-    <img src="docs/images/Capture1.png" width="60%"/>
-</p>
-<p align="center">
-    <img src="docs/images/Capture2.png" width="60%"/>
-</p>
-<p align="center">
-    <img src="docs/images/Capture3.png" width="60%"/>
-</p>
-<p align="center">
-    <img src="docs/images/Capture4.png" width="60%"/>
-    </p>
-<p align="center">
-    <img src="docs/images/Capture5.png" width="60%"/>
-    </p>
-<p align="center">
-    <img src="docs/images/Capture6.png" width="60%"/>
-</p>
-# GTKTerm: A GTK Serial Port Terminal
-<img src="data/gtkterm_256x256.png" align="right" width="20%"/>
+### Stay up to date
 
+Open **Help › Check for updates…**. GTKTerm lists the published versions (git tags `vX.Y.Z`), shows what changed between yours and the one you pick, with
+any warnings first, and installs it with **Update to vX.Y.Z**. It asks for your password once, rebuilds and restarts GTKTerm. **Roll back to vX.Y.Z** works
+the same way. A newer version is also announced at start-up; **Skip this version** silences it until the next one.
 
-GTKTerm is a simple, graphical serial port terminal emulator for Linux and possibly other POSIX-compliant operating systems. It can be used to communicate with all kinds of devices with a serial interface, such as embedded computers, microcontrollers, modems, GPS receivers, CNC machines and more.
+> [!NOTE]
+> Coming from a GTK 3 build of GTKTerm? The launcher is now `eu.mulagabriel.gtkterm.desktop`. The updater removes the old `gtkterm.desktop`; after a manual
+> `sudo meson install` over a GTK 3 installation, remove `<prefix>/share/applications/gtkterm.desktop` by hand.
 
+### Uninstall
 
-## Usage
+```sh
+sudo ninja -C build uninstall
+```
+
+If the `build` directory is gone, build again with the same `-Dprefix`, then uninstall.
+
+## 🚀 Using GTKTerm
+
 ### Tabs
-Each tab is a complete, independent GTKTerm session: its own port (serial or TCP), history, options (echo, CR/LF, timestamps, view), macros file and
-macro panel (polling keeps sending on the tab's own port while another tab is shown), Lua script panel (port 0 is the tab's port), log and file transfer.
-Port › New port… (`<ctrl><shift>T`) opens the port dialog pre-filled with the active tab's settings; Cancel creates nothing. The tab bar only appears with
-two tabs or more; tabs can be reordered by dragging them. Closing a tab (its close button or `<ctrl><shift>W`) asks for confirmation only when a script is
-running or a file is being sent in it; the last tab cannot be closed. Menus, shortcuts and the Port, Terminal, profile and macro dialogs act on the active
-tab. The same serial port cannot be opened in two tabs (port lock, unless `--disable-port-lock`). Tabs are restored only through a project (see below); without one, GTKTerm starts with a single tab.
+
+**Port › New port…** (`Ctrl+Shift+T`) opens the port dialog pre-filled with the active tab's settings, for a serial port, a TCP client or a TCP server.
+Each tab keeps its own link, history, options (echo, CR/LF, timestamps, view), macros, script panel, log and file transfer; a polling macro keeps sending
+on its own port while another tab is shown. The tab bar appears from two tabs; a tab whose link is lost shows its name in italics while it reconnects. Closing a
+tab (`Ctrl+Shift+W`) asks for confirmation only when a script is running or a file is being sent. The same serial port cannot be opened in two tabs
+(unless `--disable-port-lock`).
 
 ### Projects
-A project is a single `.gtkterm` file that holds a whole workstation: every tab with its port and terminal settings, the layout of its page (panel visibility and separator positions), **a copy** of
-its macros and lists and **a copy** of the text of its Lua script. Nothing in the file points to a `.ini` or a `.lua`: copy or send the file and the whole workstation comes with it.
 
-- **Create:** File › New project starts a single tab with the `default` profile, no macros and no script, as « Untitled project ». Port › New port… then adds tabs (a new tab gets a copy of the active
-  tab's macros). File › Save project as… writes the file wherever you want; from ordinary tabs it turns them all into the tabs of the new project. The `.gtkterm` extension is added when the name typed
-  lacks it, and GTKTerm then asks before replacing an existing file of that name.
-- **Save:** File › Save project (without a file yet, it asks for one). Saving is always explicit. The window title shows `name • - tab` while the project has unsaved changes, `name - tab` otherwise.
-  Moving a separator, switching tab or typing in the terminal does not count as a change; changing a setting, a macro, a polling period, the script or the set of tabs does.
-- **Open:** File › Open project… (`<ctrl><shift>O`) replaces all the tabs by those of the file and opens their ports (a missing port keeps its tab; with auto-reconnect, the tab reconnects when the
-  device appears). A file that is unreadable, written by a newer version or damaged is refused as a whole and nothing is closed. If a script is running or a file is being sent, or if the current
-  project has unsaved changes, GTKTerm asks first (Save / Don't save / Cancel).
-- **Close:** File › Close project goes back to a single ordinary tab with the `default` profile and its macros file (or the default macros file). Closing the window with unsaved
-  changes asks the same question.
-- **Last project:** GTKTerm reopens the last project opened or saved when it starts, unless the command line gives a profile (`-c`) or port settings. A file that no longer exists is reported once and
-  forgotten; a file refused for another reason (permissions, damaged) is reported and kept. In both cases GTKTerm starts normally. `gtkterm --project FILE` opens that project (it cannot be combined
-  with `-c` or port settings).
-- **Macros in a project:** they live in the project, not in a `.ini`. Configure macros… edits them in the project; Load macros file… imports a copy of a `.ini` into the tab; Save macros file… exports
-  them to a `.ini` without linking the tab to it. The script editor works the same way: Open… loads a file into the editor, Save exports to a `.lua`, and the text itself is saved with the project.
-- **Arguments:** what you type or pick in the argument fields of the macro panel is used for sending but never saved (« Reset arguments », in the right-click menu of a button, goes back to the default
-  values). The default values of a macro are set in Configure macros…, in the « Default values » area under the table, and saved with the macro (in the project or in the `.ini`); changing them there
-  also drops the values typed in the panel for that macro.
-- **Without a project:** tabs work as before (profiles in `.gtktermrc`, one `.ini` of macros per tab). If a `.ini` was rewritten by someone else (another tab or another GTKTerm) since it was read,
-  GTKTerm asks Overwrite / Reload / Cancel before saving over it, and a tab that has read no macros file asks the same before writing over an existing default macros file. A project file changed on
-  disk is handled the same way; Reload replaces the tabs, after a confirmation if a script is running or a file is being sent. In these questions Cancel is the default button: Enter never overwrites.
-- **Not in a project:** the window size, the default script colours and layout (`[colors]`, `[layout]`), the update settings and the named profiles of `.gtktermrc` (Port › Load profile…, Save
-  profile…, Delete profile… still work: loading a profile into a project tab changes the tab, hence the project).
+A project is one `.gtkterm` file holding a whole workstation: every tab with its port and terminal settings, its page layout, **a copy** of its macros and
+**a copy** of its Lua script. Nothing in it points to another file.
 
-### Keyboard Shortcuts 
-As GTKTerm is often used like a terminal emulator,
-the shortcut keys are assigned to `<ctrl><shift>`, rather than just `<ctrl>`. This allows the user to send keystrokes of the form `<ctrl>X` and not have GTKTerm intercept them.
+| Action | What it does |
+|---|---|
+| **File › New project** | One tab with the `default` profile, no macros, no script. |
+| **File › Open project…** (`Ctrl+Shift+O`) | Replaces all the tabs with the project's and opens their ports. A damaged or newer file is refused as a whole and nothing is closed. |
+| **File › Save project** / **Save project as…** | Saving is always explicit; the title shows `name •` while there are unsaved changes. |
+| **File › Close project** | Back to a single ordinary tab. |
 
-Key Combination | Effect
----:|---
-`<ctrl><shift>L` | Clear screen
-`<ctrl><shift>R` | Send file
-`<ctrl><shift>Q` | Quit
-`<ctrl><shift>O` | Open project
-`<ctrl><shift>S` | Configure port
-`<ctrl><shift>V` | Paste
-`<ctrl><shift>C` | Copy
-`<ctrl><shift>F` | Find
-`<ctrl><shift>K` | Clear Scrollback
-`<ctrl><shift>A` | Select All
-`<ctrl><shift>B` | Send Break
-`<ctrl><shift>T` | New port (new tab)
-`<ctrl><shift>W` | Close tab
-`<ctrl><shift>Page Down` | Next tab
-`<ctrl><shift>Page Up` | Previous tab
-F5 | Open Port
-F6 | Close Port
-F7 | Toggle DTR
-F8 | Toggle RTS
+GTKTerm reopens the last project at start-up (unless the command line gives a profile or port settings), and `gtkterm --project FILE` opens a given one.
+Before writing over a project or macros file that someone else changed on disk, GTKTerm asks **Overwrite / Reload / Cancel**, with Cancel as the default.
 
-### Command Line Options
-See `man gtkterm` or `gtkterm --help` for more information on available command line interface options.
+Without a project, tabs work with named profiles (Port › Load / Save / Delete profile…, stored in `~/.config/.gtktermrc`) and one macros file (`.ini`) per
+tab.
 
-### Notes on RS485:
-The RS485 flow control is a software user-space emulation and therefore may not work for all configurations (won't respond quickly enough). If this is the case for your setup, you will need to either use a dedicated RS232 to RS485 converter, or look for a kernel level driver. This is an inherent limitation to user space programs.
+### Macro panel
 
-### Scriptability with Signals
-Some microcontrollers and other embedded devices are flashed using the same serial interface that is also used for outputting debug information. To facilitate rapid development on these platforms, GTKTerm supports the following UNIX signals:
+Toggle it with **View › Macro panel** and fill it in **Macros › Configure macros…**. Each macro has a label, an optional keyboard shortcut, an action
+(the text to send, with `\r`, `\n`, `\xNN` escapes) and an optional tab name to group buttons.
 
-Signal | Action | Usage Example
----:|:---:|---
-`SIGUSR1` | Open Port | `killall -USR1 gtkterm`
-`SIGUSR2` | Close Port | `killall -USR2 gtkterm`
+<p align="center">
+  <img src="docs/images/gtkterm-macro-editor.png" width="62%" alt="The Configure Macros window"/>
+</p>
 
-The signals act on the port of every tab of the process.
+| In the action | In the panel |
+|---|---|
+| `AT+SEND=%s\r` | a button and a text field |
+| `RD [Address]%u\r` | a field labelled « Address » |
+| `CH %#Channels\r` | a drop-down list of the `Channels` list (Macros › Lists tab) |
+| `ATE%#OnOff\r` with a two-entry list | two buttons, « Echo On » and « Echo Off » |
+| `[Network]%&` | a section separator titled « Network » (`%&` alone: a plain line) |
 
-You may find it useful to send these signals in your own firmware flashing scripts.
+- **Arguments**: what you type in the panel is used for sending but never saved; each macro keeps **default values**, set under the table of the
+  Configure macros window. Right-click a button › **Reset arguments** goes back to them.
+- **Polling**: right-click a button › **Polling Mode** and a period in milliseconds. The button gets a ⏱ prefix; a click starts or stops the periodic
+  sending, and the button blinks while it runs.
+- **Tabs**: macros with no tab name go to **General**; right-click the tab bar to show or hide each group.
 
-## Installation
-GTKTerm has a few dependencies-
-* GTK 4 (`gtk4`, version 4.14 or higher)
-* VTE for GTK 4 (`vte-2.91-gtk4`, version 0.76 or higher)
-* libgudev (`gudev-1.0`, version 230 or higher)
-* Lua 5.4 (`lua5.4`) — scripting engine
-* GtkSourceView 5 (`gtksourceview-5`, version 5.12 or higher) — script editor syntax highlighting
+<details>
+<summary><b>All format specifiers</b></summary>
 
-On Ubuntu 24.04 or later: `sudo apt install libgtk-4-dev libvte-2.91-gtk4-dev libgudev-1.0-dev liblua5.4-dev libgtksourceview-5-dev meson ninja-build`.
+| Specifier | Type |
+|---|---|
+| `%s` | string |
+| `%c` | single character |
+| `%d` `%i` (with `hh`, `h`, `l`, `ll`) | signed integer |
+| `%u` `%o` `%x` `%X` (with `hh`, `h`, `l`, `ll`) | unsigned integer: decimal, octal, hexadecimal |
+| `%f` `%e` `%g` `%a` (and `F` `E` `G` `A`) | float, about 9 significant digits |
+| `%lf` `%le` `%lg` `%la` | double, about 16 significant digits |
+| `%Lf` `%Le` `%Lg` `%La` | long double, about 19 significant digits |
+| `%#Name` | value picked from the list `Name` |
+| `[Label]` before any of them | label shown above the field |
 
-Once these dependencies are installed, most people should simply run:
+Values are checked as you type (an invalid field turns red) and truncated to the type's precision when sent.
 
-	meson build
-	ninja -C build
+</details>
 
-To install GTKTerm system-wide, run (after building as your user):
+### Lua scripting
 
-	sudo meson install -C build --no-rebuild
-	gtk-update-icon-cache
+**View › Script panel** opens an editor (syntax highlighting, configurable colours) and a console. **Run** starts the script in a background thread;
+**Stop** interrupts it at once, even inside a loop. Port `0` is the tab's own port; ports `1` to `15` are extra serial or TCP ports opened by the script.
 
-`--no-rebuild` keeps root from rebuilding (and from leaving root-owned files in `build/`).
+<p align="center">
+  <img src="docs/images/gtkterm-script.png" width="92%" alt="A Lua script polling a device, with its output in the console"/>
+</p>
 
-Upgrading from a GTK 3 build of GTKTerm: the launcher is now `eu.mulagabriel.gtkterm.desktop`; remove the old one once,
-`sudo rm <prefix>/share/applications/gtkterm.desktop` (the in-app updater does it for you). A manual `sudo meson install` over a GTK 3 installation
-leaves that old `gtkterm.desktop` launcher in place, so remove it by hand.
+| Function | Description |
+|---|---|
+| `gtkterm.send(port, data)` / `gtkterm.send_hex(port, "01 A0 FF")` | Send bytes; returns `true`, or `false` and a reason. |
+| `gtkterm.wait_for(port, text [, timeout_ms])` | Wait until `text` is received; returns the data up to and including it, or `nil` and `"timeout"` / `"closed"`. |
+| `gtkterm.read(port)` / `gtkterm.clear(port)` | Take everything received so far / discard it. |
+| `gtkterm.open(port, "serial", device [, baud, bits, stop, parity, flow])` | Open an extra serial port (`port` 1–15). |
+| `gtkterm.open(port, "tcp_client", host, tcp_port [, timeout_ms])` | Connect to a TCP server. |
+| `gtkterm.open(port, "tcp_server", tcp_port [, host])` | Listen for one TCP client. |
+| `gtkterm.close(port)` / `gtkterm.status(port)` | Close a port / get its state (`"open"`, `"closed"`, `"lost"`…). |
+| `gtkterm.send_macro(index_or_label [, args…])` | Send a macro of the tab. |
+| `gtkterm.get_macros()` / `gtkterm.get_lists()` | The tab's macros (with their arguments) and value lists. |
+| `gtkterm.sleep(ms)` / `gtkterm.time()` | Pause / seconds from a monotonic clock. |
+| `gtkterm.log(text)` / `print(…)` | Write to the console. |
+| `gtkterm.save_csv(file, values…)` | Append one comma-separated line to a file. |
 
-If you wish to install GTKTerm someplace other than the default directory, e.g. in `/usr`, use:
+Eleven commented examples live in [`scripts/`](scripts): AT commands, `wait_for`, CSV logging, macros, a binary protocol, TCP client and server, several
+ports at once, a firmware update.
 
-	meson build -Dprefix=/usr
+### Views, logging and files
 
-Then build and install as usual.
+<p align="center">
+  <img src="docs/images/gtkterm-hex.png" width="92%" alt="Hexadecimal view with index"/>
+</p>
 
-## Uninstallation
-To uninstall GTKTerm, run:
+- **View**: ASCII or hexadecimal (8 to 32 bytes per line, optional index); **View › Send hexadecimal data** opens a bar to type bytes. Switching view,
+  echo, CR/LF or timestamps redraws the whole history: nothing received is lost.
+- **Terminal**: local echo, CR LF auto, ESC clears the screen, timestamps; **Terminal › Settings…** for the font, colours, cursor and scrollback.
+- **Log › To file…** records everything received (with pause, stop and clear); **File › Save RAW / ASCII file…** saves the history;
+  **File › Send RAW file…** sends a file, with an optional delay or a wait for a character at each end of line.
 
-	ninja -C build uninstall
+### Keyboard shortcuts
 
-If you already deleted the `build` directory, just compile and install GTKTerm again as explained in the [previous section](#installation) with the same target location prefix (`-Dprefix`) and perform the uninstall step afterwards.
+GTKTerm keeps every plain `Ctrl+letter` for the port (`Ctrl+C`, `Ctrl+B`, `Ctrl+Z`… are sent to the device), so its own commands use `Ctrl+Shift`.
 
-## License
-Original Code by: Julien Schmitt
+| Keys | Action | Keys | Action |
+|---|---|---|---|
+| `Ctrl+Shift+T` | New port (new tab) | `Ctrl+Shift+C` | Copy |
+| `Ctrl+Shift+W` | Close tab | `Ctrl+Shift+V` | Paste |
+| `Ctrl+Shift+Page Down` / `Page Up` | Next / previous tab | `Ctrl+Shift+A` | Select all |
+| `Ctrl+Shift+O` | Open project | `Ctrl+Shift+F` | Find |
+| `Ctrl+Shift+S` | Port settings | `Ctrl+Shift+L` | Clear screen |
+| `Ctrl+Shift+R` | Send file | `Ctrl+Shift+K` | Clear scrollback |
+| `Ctrl+Shift+B` | Send break | `Ctrl+Shift+Q` | Quit |
+| `F5` / `F6` | Open / close port | `F7` / `F8` | Toggle DTR / RTS |
+
+### Command line
+
+```sh
+gtkterm --port /dev/ttyUSB0 --speed 115200        # serial port
+gtkterm -T tcp-client --host 192.168.1.20 -P 4000  # TCP client
+gtkterm -T tcp-server -P 4000                      # TCP server
+gtkterm -c bench                                   # saved profile « bench »
+gtkterm --project ~/bench.gtkterm                  # project
+```
+
+`gtkterm --help` (or `man gtkterm`) lists every option: bits, parity, stop bits, flow control (including RS-485), end-of-line delay, port lock.
+
+### Scripting from the shell
+
+Some boards are flashed through the same serial line that prints their debug output. GTKTerm releases and takes back the port on signals, for every tab:
+
+| Signal | Action | Example |
+|---|---|---|
+| `SIGUSR1` | Open the ports | `killall -USR1 gtkterm` |
+| `SIGUSR2` | Close the ports | `killall -USR2 gtkterm` |
+
+> [!NOTE]
+> RS-485 flow control is emulated in user space and may not switch fast enough for every setup; use an RS-232 to RS-485 converter or a kernel driver if
+> it does not.
+
+## 🛠️ Development
+
+```sh
+meson setup build && ninja -C build
+meson test -C build                 # unit and integration tests
+meson test -C build --suite gui     # GTK 4 interface scenarios, on a private display (never your screen)
+```
+
+The code is split into three layers: a GLib-only core, an application layer and the GTK 4 interface. See [`CLAUDE.md`](CLAUDE.md) for the architecture,
+[`tests/README.md`](tests/README.md) for the test harness and [`NEWS`](NEWS) for the history of versions.
+
+## 📜 License
+
+Original code by Julien Schmitt; this fork adds tabs, projects, macros, Lua scripting, TCP transport and the GTK 4 interface.
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
