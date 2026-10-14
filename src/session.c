@@ -8,6 +8,7 @@
 struct _GtSession
 {
 	GObject parent_instance;
+	GtPortActivity *activity;
 	guint id;
 	GtkTermLink *link;
 	GtTermOptions *options;
@@ -166,6 +167,46 @@ static void install_actions(GtSession *s)
 	update_serial_actions(s);
 }
 
+static GtPortActivityLink activity_link_state(GtkTermLink *link)
+{
+	switch(gt_link_get_state(link))
+	{
+	case GT_LINK_CONNECTING: return GT_PORT_LINK_CONNECTING;
+	case GT_LINK_OPEN: return GT_PORT_LINK_OPEN;
+	case GT_LINK_LISTENING: return GT_PORT_LINK_LISTENING;
+	case GT_LINK_LOST: return GT_PORT_LINK_LOST;
+	case GT_LINK_RECONNECTING: return GT_PORT_LINK_RECONNECTING;
+	default: return GT_PORT_LINK_CLOSED;
+	}
+}
+
+/* notify::state de la liaison (peut tourner sous la surveillance du transport : ne fait que mettre à jour le modèle) */
+static void on_link_state_activity(GObject *link, GParamSpec *pspec, gpointer user_data)
+{
+	GtSession *s = user_data;
+
+	gt_port_activity_set_link_state(s->activity, activity_link_state(s->link), g_get_monotonic_time());
+}
+
+/* received de la liaison : même contrainte de réentrance */
+static void on_link_received(GtkTermLink *link, GBytes *data, gint64 wall_time_us, gpointer user_data)
+{
+	GtSession *s = user_data;
+
+	gt_port_activity_received(s->activity, g_get_monotonic_time());
+}
+
+static void apply_activity_timeouts(GtSession *s)
+{
+	gt_port_activity_set_timeouts(s->activity, (guint)MAX(s->profile.idle_timeout_s, 0), (guint)MAX(s->profile.no_data_timeout_s, 0),
+	                              g_get_monotonic_time());
+}
+
+GtPortActivity *gt_session_get_activity(GtSession *s)
+{
+	return s->activity;
+}
+
 GtSession *gt_session_new(const GtProfile *profile, const gchar *profile_name)
 {
 	GtSession *s = g_object_new(GT_TYPE_SESSION, NULL);
@@ -188,6 +229,10 @@ GtSession *gt_session_new(const GtProfile *profile, const gchar *profile_name)
 	g_signal_connect_swapped(s->link, "notify::auto-reconnect", G_CALLBACK(gt_session_edited), s);
 	gt_macros_set_edited_func(s->macros, (void (*)(gpointer))gt_session_edited, s);
 	install_actions(s);
+	s->activity = gt_port_activity_new();
+	apply_activity_timeouts(s);
+	g_signal_connect(s->link, "notify::state", G_CALLBACK(on_link_state_activity), s);
+	g_signal_connect(s->link, "received", G_CALLBACK(on_link_received), s);
 	return s;
 }
 
@@ -263,6 +308,7 @@ void gt_session_apply_profile(GtSession *s)
 	gt_term_options_apply_profile(s->options, &s->profile);	/* un seul « changed » : un seul redessin du terminal */
 	g_object_set(s->link, "auto-reconnect", s->profile.auto_reconnect, NULL);
 	update_short_name(s);
+	apply_activity_timeouts(s);
 	gt_session_edited(s);
 }
 
@@ -273,6 +319,8 @@ void gt_session_open_port(GtSession *s)
 	if(s->shut_down)
 		return;
 	update_short_name(s);
+	apply_activity_timeouts(s);
+	gt_port_activity_reset(s->activity, g_get_monotonic_time());
 	gt_profile_to_transport_params(&s->profile, &params);
 	gt_link_open(s->link, &params, NULL);	/* échec : open-failed de la liaison (l'interface affiche le message) */
 	transport_params_clear(&params);
@@ -401,6 +449,7 @@ static void gt_session_dispose(GObject *object)
 	/* La liaison n'est rendue qu'à la finalisation : toujours présente ici, même si dispose est appelé plusieurs fois */
 	gt_session_shutdown(s);
 	g_signal_handlers_disconnect_by_data(s->link, s);
+	g_clear_object(&s->activity);
 	g_clear_object(&s->actions);
 	G_OBJECT_CLASS(gt_session_parent_class)->dispose(object);
 }

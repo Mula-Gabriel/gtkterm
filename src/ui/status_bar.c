@@ -12,6 +12,7 @@
 #include <gtk/gtk.h>
 #include <sys/ioctl.h>	/* TIOCM_* */
 
+#include "activity_icon.h"
 #include "status_bar.h"
 
 #define LED_POLL_MS 100
@@ -21,6 +22,7 @@ typedef struct
 {
 	GtkWidget *box;		/* la barre (non possédée) */
 	GtkTermLink *link;	/* référence */
+	GtkWidget *activity;	/* status-activity */
 	GtkWidget *text;	/* status-text */
 	GtkWidget *flash;	/* status-flash */
 	GtkWidget *leds[6];
@@ -46,7 +48,7 @@ static void on_link_notify(GObject *object, GParamSpec *pspec, gpointer user_dat
 static gboolean flash_end(gpointer data);	/* flash_id = 0, status-flash caché, status-text visible ; G_SOURCE_REMOVE */
 static void on_destroy(GtkWidget *box, gpointer user_data);	/* retire les deux minuteries, déconnecte la liaison, libère */
 
-GtkWidget *gt_status_bar_new(GtkTermLink *link)
+GtkWidget *gt_status_bar_new(GtkTermLink *link, GtPortActivity *activity)
 {
 	StatusBar *sb = g_new0(StatusBar, 1);
 
@@ -56,6 +58,10 @@ GtkWidget *gt_status_bar_new(GtkTermLink *link)
 	gtk_widget_set_margin_end(sb->box, 6);
 	gtk_widget_set_margin_top(sb->box, 2);
 	gtk_widget_set_margin_bottom(sb->box, 2);
+
+	sb->activity = gt_activity_icon_new(activity, "status-activity");
+	gtk_widget_set_visible(sb->activity, FALSE);
+	gtk_box_append(GTK_BOX(sb->box), sb->activity);
 
 	sb->text = gtk_label_new(NULL);
 	gtk_widget_set_name(sb->text, "status-text");
@@ -165,6 +171,14 @@ void gt_status_bar_flash(GtkWidget *bar, const gchar *text, guint ms)
 	gtk_widget_set_visible(sb->text, FALSE);
 	gtk_widget_set_visible(sb->flash, TRUE);
 	sb->flash_id = g_timeout_add(MAX(ms, 1), flash_end, sb);
+}
+
+void gt_status_bar_set_activity_visible(GtkWidget *bar, gboolean visible)
+{
+	StatusBar *sb = bar != NULL ? g_object_get_data(G_OBJECT(bar), STATUS_BAR_KEY) : NULL;
+
+	if(sb != NULL)
+		gtk_widget_set_visible(sb->activity, visible);
 }
 
 void gt_status_bar_detach(GtkWidget *bar)

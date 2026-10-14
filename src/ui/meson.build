@@ -10,7 +10,8 @@ ui_c_args = [
 	'-DGTK_SOURCE_VERSION_MAX_ALLOWED=GTK_SOURCE_VERSION_5_12',
 ]
 
-# Préfixe /eu/mulagabriel/gtkterm/ui : menus.ui, terminal_dialog.ui, logo (rien sous …/gtk/, que GtkApplication chargerait d'office)
+# Préfixe /eu/mulagabriel/gtkterm/ui : menus.ui, terminal_dialog.ui, logo, icons/ (chemin d'icônes ajouté par app.c) ; rien sous …/gtk/,
+# que GtkApplication chargerait d'office
 ui_resources = gnome.compile_resources('gtkterm-resources', 'gtkterm.gresource.xml', source_dir : '.')
 
 ui_deps = [gtk4_dep, vte4_dep, gsv5_dep, gtkterm_app_dep]
@@ -25,6 +26,8 @@ ui_sources = [
 	'main_window.h',
 	'session_view.c',
 	'session_view.h',
+	'activity_icon.c',
+	'activity_icon.h',
 	'tab_label.c',
 	'tab_label.h',
 	'terminal_view.c',

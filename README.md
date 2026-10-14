@@ -116,9 +116,21 @@ If the `build` directory is gone, build again with the same `-Dprefix`, then uni
 
 **Port › New port…** (`Ctrl+Shift+T`) opens the port dialog pre-filled with the active tab's settings, for a serial port, a TCP client or a TCP server.
 Each tab keeps its own link, history, options (echo, CR/LF, timestamps, view), macros, script panel, log and file transfer; a polling macro keeps sending
-on its own port while another tab is shown. The tab bar appears from two tabs; a tab whose link is lost shows its name in italics while it reconnects. Closing a
+on its own port while another tab is shown. The tab bar appears from two tabs, each tab showing the activity of its port (see below). Closing a
 tab (`Ctrl+Shift+W`) asks for confirmation only when a script is running or a file is being sent. The same serial port cannot be opened in two tabs
 (unless `--disable-port-lock`).
+
+### Port activity
+
+A small indicator left of each tab name (in the status bar when only one tab is open) shows the state of the tab's port at a glance:
+
+- hollow dot: open, waiting for data or data received recently; **green dot**: receiving; **red dot**: connection lost;
+- spinner: connecting (TCP client, or TCP server waiting for a client), red while reconnecting;
+- **Zzz**: idle, data was received then nothing for the *idle* delay; **skull** and greyed name: no data at all for the *no data* delay since the port
+  opened, or reconnection failing for that long;
+- a tab that receives data while it is not shown has its name in bold until you show it.
+
+Both delays are per profile, in the port dialog › **Advanced Configuration Options › Port activity** (defaults 10 s and 60 s, 0 disables the state).
 
 ### Projects
 

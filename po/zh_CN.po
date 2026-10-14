@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-12 18:31+0200\n"
+"POT-Creation-Date: 2026-10-14 23:11+0200\n"
 "PO-Revision-Date: 2020-03-10 14:11+0800\n"
 "Last-Translator: 玉堂白鹤 <yjwork@qq.com>\n"
 "Language-Team: \n"
@@ -335,42 +335,47 @@ msgstr ""
 msgid "Cannot save macros file: %s"
 msgstr "无法读取文件 %s: %s\n"
 
-#: src/port_form.c:74
+#: src/port_form.c:76
 msgid "Enter the serial port to open (for example /dev/ttyUSB0)."
 msgstr ""
 
-#: src/port_form.c:79
+#: src/port_form.c:81
 #, c-format
 msgid "The baud rate must be a whole number between 1 and %d."
 msgstr ""
 
-#: src/port_form.c:84
+#: src/port_form.c:86
 msgid "Invalid number of data bits or stop bits."
 msgstr ""
 
-#: src/port_form.c:89 src/port_form.c:108
+#: src/port_form.c:91 src/port_form.c:110
 #, c-format
 msgid "Delays must be between 0 and %d ms."
 msgstr ""
 
-#: src/port_form.c:97
+#: src/port_form.c:99
 msgid "Enter the host to connect to."
 msgstr ""
 
-#: src/port_form.c:102
+#: src/port_form.c:104
 msgid "The TCP port must be a number between 1 and 65535."
 msgstr ""
 
-#: src/port_form.c:118
+#: src/port_form.c:120
 msgid "Enter the character to wait for: exactly one ASCII character."
 msgstr ""
 
-#: src/profile.c:83
+#: src/port_form.c:127
+#, c-format
+msgid "Activity delays must be between 0 and %d s."
+msgstr ""
+
+#: src/profile.c:85
 #, fuzzy, c-format
 msgid "Baud rate %u may not be supported by all hardware"
 msgstr "不是所有硬件都支持波特率 %d"
 
-#: src/profile.c:87
+#: src/profile.c:89
 #, c-format
 msgid ""
 "Invalid number of stop-bits: %d\n"
@@ -379,7 +384,7 @@ msgstr ""
 "无效的停止位：%d\n"
 "退回到默认的停止位：%d\n"
 
-#: src/profile.c:94
+#: src/profile.c:96
 #, c-format
 msgid ""
 "Invalid number of bits: %d\n"
@@ -388,7 +393,7 @@ msgstr ""
 "无效的数据位：%d\n"
 "退回到默认的数据位：%d\n"
 
-#: src/profile.c:100
+#: src/profile.c:102
 #, c-format
 msgid ""
 "Invalid delay: %d ms\n"
@@ -398,22 +403,42 @@ msgstr ""
 "退回到默认延迟：%d ms\n"
 "\n"
 
-#: src/profile.c:141 src/profile.c:165
+#: src/profile.c:108
+#, fuzzy, c-format
+msgid ""
+"Invalid idle delay: %d s\n"
+"Falling back to default idle delay: %d s\n"
+msgstr ""
+"无效的延迟： %d ms\n"
+"退回到默认延迟：%d ms\n"
+"\n"
+
+#: src/profile.c:114
+#, fuzzy, c-format
+msgid ""
+"Invalid no data delay: %d s\n"
+"Falling back to default no data delay: %d s\n"
+msgstr ""
+"无效的延迟： %d ms\n"
+"退回到默认延迟：%d ms\n"
+"\n"
+
+#: src/profile.c:156 src/profile.c:180
 msgid ""
 "The configuration name cannot contain \"[\", \"]\" or control characters."
 msgstr ""
 
-#: src/profile.c:147
+#: src/profile.c:162
 #, fuzzy
 msgid "The configuration name cannot be empty."
 msgstr "配置名称： "
 
-#: src/profile.c:153
+#: src/profile.c:168
 #, c-format
 msgid "The configuration name is too long (%d characters at most)."
 msgstr ""
 
-#: src/profile.c:173
+#: src/profile.c:188
 #, c-format
 msgid "\"%s\" is a reserved name."
 msgstr ""
@@ -495,7 +520,7 @@ msgstr ""
 msgid "Script already running."
 msgstr ""
 
-#: src/session.c:115
+#: src/session.c:116
 msgid "Break signal sent!"
 msgstr "中断信号发送！"
 
@@ -589,100 +614,137 @@ msgstr "GTKTerm 是一个简单的 GTK+ 终端，用于与串行端口进行通�
 msgid "About GTKTerm"
 msgstr ""
 
-#: src/ui/app.c:509
+#: src/ui/activity_icon.c:35
+msgid "Connecting"
+msgstr ""
+
+#: src/ui/activity_icon.c:36
+msgid "Waiting for data"
+msgstr ""
+
+#: src/ui/activity_icon.c:37
+#, fuzzy
+msgid "Port open"
+msgstr "端口(_P)"
+
+#: src/ui/activity_icon.c:38
+msgid "Receiving data"
+msgstr ""
+
+#: src/ui/activity_icon.c:39
+msgid "Idle"
+msgstr ""
+
+#: src/ui/activity_icon.c:40
+msgid "Connection lost"
+msgstr ""
+
+#: src/ui/activity_icon.c:41
+msgid "Reconnecting"
+msgstr ""
+
+#: src/ui/activity_icon.c:42
+msgid "No data received"
+msgstr ""
+
+#: src/ui/activity_icon.c:43
+msgid "Port closed"
+msgstr ""
+
+#: src/ui/app.c:524
 msgid "Close this tab?"
 msgstr ""
 
-#: src/ui/app.c:509
+#: src/ui/app.c:524
 msgid "A script is running or a file is being sent in this tab."
 msgstr ""
 
-#: src/ui/app.c:509 src/ui/menus.ui:152 src/ui/tab_label.c:57
-#: src/ui/tab_label.c:58
+#: src/ui/app.c:524 src/ui/menus.ui:152 src/ui/tab_label.c:74
+#: src/ui/tab_label.c:75
 #, fuzzy
 msgid "Close tab"
 msgstr "关闭端口(_C)"
 
-#: src/ui/app.c:761 src/ui/app.c:938
+#: src/ui/app.c:776 src/ui/app.c:953
 #, fuzzy
 msgid "Close all tabs?"
 msgstr "关闭端口(_C)"
 
-#: src/ui/app.c:761 src/ui/app.c:938
+#: src/ui/app.c:776 src/ui/app.c:953
 msgid "A script is running or a file is being sent."
 msgstr ""
 
-#: src/ui/app.c:761 src/ui/app.c:938
+#: src/ui/app.c:776 src/ui/app.c:953
 #, fuzzy
 msgid "Close tabs"
 msgstr "关闭端口(_C)"
 
-#: src/ui/app.c:821
+#: src/ui/app.c:836
 msgid "A project file with this name already exists. Replace it?"
 msgstr ""
 
-#: src/ui/app.c:821
+#: src/ui/app.c:836
 msgid "Replace"
 msgstr ""
 
-#: src/ui/app.c:854 src/ui/menus.ui:19
+#: src/ui/app.c:869 src/ui/menus.ui:19
 msgid "Save project"
 msgstr ""
 
-#: src/ui/app.c:862 src/ui/macros_save.c:55 src/ui/profile_dialogs.c:209
+#: src/ui/app.c:877 src/ui/macros_save.c:55 src/ui/profile_dialogs.c:209
 msgid "Overwrite"
 msgstr ""
 
-#: src/ui/app.c:862 src/ui/macros_save.c:55
+#: src/ui/app.c:877 src/ui/macros_save.c:55
 msgid "Reload"
 msgstr ""
 
-#: src/ui/app.c:862 src/ui/app.c:893 src/ui/macro_editor.c:842
+#: src/ui/app.c:877 src/ui/app.c:908 src/ui/macro_editor.c:842
 #: src/ui/macros_save.c:55
 msgid "Cancel"
 msgstr "取消"
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
-#: src/ui/app.c:865
+#: src/ui/app.c:880
 msgid "The project file changed on disk."
 msgstr ""
 
-#: src/ui/app.c:893 src/ui/script_panel.c:951
+#: src/ui/app.c:908 src/ui/script_panel.c:951
 msgid "Save"
 msgstr ""
 
-#: src/ui/app.c:893
+#: src/ui/app.c:908
 msgid "Don't save"
 msgstr ""
 
-#: src/ui/app.c:896
+#: src/ui/app.c:911
 msgid "Save changes to the project?"
 msgstr ""
 
-#: src/ui/app.c:1099
+#: src/ui/app.c:1129
 #, c-format
 msgid ""
 "Cannot open the project: %s\n"
 "It is no longer reopened at start-up."
 msgstr ""
 
-#: src/ui/app.c:1102
+#: src/ui/app.c:1132
 #, fuzzy, c-format
 msgid "Cannot open the project: %s"
 msgstr "无法打开文件 %s: %s\n"
 
-#: src/ui/app.c:1209
+#: src/ui/app.c:1239
 #, fuzzy
 msgid "GTKTerm projects"
 msgstr ""
 "\n"
 "GTKTerm 版本 %s\n"
 
-#: src/ui/app.c:1214 src/ui/script_panel.c:464
+#: src/ui/app.c:1244 src/ui/script_panel.c:464
 msgid "All files"
 msgstr ""
 
-#: src/ui/app.c:1218
+#: src/ui/app.c:1248
 #, fuzzy
 msgid "Open project"
 msgstr "打开端口(_O)"
@@ -700,11 +762,11 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: src/ui/dialogs.c:169 src/ui/port_dialog.c:543 src/ui/profile_dialogs.c:344
+#: src/ui/dialogs.c:169 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:344
 msgid "_OK"
 msgstr ""
 
-#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:540
+#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
 #: src/ui/profile_dialogs.c:341 src/ui/script_panel.c:805
 #, fuzzy
 msgid "_Cancel"
@@ -793,7 +855,7 @@ msgid ""
 "same; \"SPEED %d\\r\" asks for a number."
 msgstr ""
 
-#: src/ui/macro_editor.c:188 src/ui/macro_panel.c:258 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:188 src/ui/macro_panel.c:268 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr ""
@@ -925,36 +987,36 @@ msgstr "帮助(_F)"
 msgid "OK"
 msgstr ""
 
-#: src/ui/macro_panel.c:70
+#: src/ui/macro_panel.c:80
 msgid "General"
 msgstr ""
 
-#: src/ui/macro_panel.c:258
+#: src/ui/macro_panel.c:268
 #, c-format
 msgid ""
 "Shortcut: %s\n"
 "Action: %s"
 msgstr ""
 
-#: src/ui/macro_panel.c:489
+#: src/ui/macro_panel.c:510
 msgid ""
 "No macros defined\n"
 "with labels"
 msgstr ""
 
-#: src/ui/macro_panel.c:545
+#: src/ui/macro_panel.c:566
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 
-#: src/ui/macro_panel.c:723
+#: src/ui/macro_panel.c:744
 msgid "Period (ms)"
 msgstr ""
 
-#: src/ui/macro_panel.c:731
+#: src/ui/macro_panel.c:752
 msgid "Polling Mode"
 msgstr ""
 
-#: src/ui/macro_panel.c:750 src/ui/macro_panel.c:752
+#: src/ui/macro_panel.c:771 src/ui/macro_panel.c:773
 msgid "Reset arguments"
 msgstr ""
 
@@ -1234,54 +1296,54 @@ msgstr ""
 msgid "RS-485 half-duplex (RTS)"
 msgstr "RS-485 半双工参数(用于发送RTS信号)"
 
-#: src/ui/port_dialog.c:356
+#: src/ui/port_dialog.c:370
 msgid "_Host:"
 msgstr ""
 
-#: src/ui/port_dialog.c:358 src/ui/port_dialog.c:388
+#: src/ui/port_dialog.c:372 src/ui/port_dialog.c:402
 #, fuzzy
 msgid "_Port:"
 msgstr "端口(_P)"
 
-#: src/ui/port_dialog.c:360
+#: src/ui/port_dialog.c:374
 msgid "TCP"
 msgstr ""
 
-#: src/ui/port_dialog.c:373
+#: src/ui/port_dialog.c:387
 #, fuzzy
 msgid "Detected serial ports"
 msgstr "串行端口"
 
-#: src/ui/port_dialog.c:378
+#: src/ui/port_dialog.c:392
 msgid "Standard baud rates"
 msgstr ""
 
-#: src/ui/port_dialog.c:390
+#: src/ui/port_dialog.c:404
 #, fuzzy
 msgid "_Baud Rate:"
 msgstr "波特率:"
 
-#: src/ui/port_dialog.c:392
+#: src/ui/port_dialog.c:406
 #, fuzzy
 msgid "P_arity:"
 msgstr "奇偶校验:"
 
-#: src/ui/port_dialog.c:394
+#: src/ui/port_dialog.c:408
 #, fuzzy
 msgid "B_its:"
 msgstr "数据位:"
 
-#: src/ui/port_dialog.c:396
+#: src/ui/port_dialog.c:410
 #, fuzzy
 msgid "_Stopbits:"
 msgstr "停止位:"
 
-#: src/ui/port_dialog.c:398
+#: src/ui/port_dialog.c:412
 #, fuzzy
 msgid "_Flow control:"
 msgstr "数据流控制:"
 
-#: src/ui/port_dialog.c:403
+#: src/ui/port_dialog.c:417
 #, fuzzy, c-format
 msgid ""
 "No serial devices found. Searched the following device path patterns:\n"
@@ -1297,55 +1359,67 @@ msgstr ""
 "\n"
 "在“端口”框中输入其他设备路径。\n"
 
-#: src/ui/port_dialog.c:415
+#: src/ui/port_dialog.c:429
 msgid "Serial port"
 msgstr "串行端口"
 
-#: src/ui/port_dialog.c:420
+#: src/ui/port_dialog.c:434
 #, fuzzy
 msgid "_Advanced Configuration Options"
 msgstr "高级配置选项"
 
-#: src/ui/port_dialog.c:427
+#: src/ui/port_dialog.c:441
 #, fuzzy
 msgid "End of line _delay (milliseconds):"
 msgstr "行末延迟 (毫秒)："
 
-#: src/ui/port_dialog.c:429
+#: src/ui/port_dialog.c:443
 #, fuzzy
 msgid "_Wait for this special character before passing to next line:"
 msgstr "传递到下一行之前等待这个特殊字符:"
 
-#: src/ui/port_dialog.c:436
+#: src/ui/port_dialog.c:450
 msgid "ASCII file transfer"
 msgstr "ASCII 文件传输"
 
-#: src/ui/port_dialog.c:440
+#: src/ui/port_dialog.c:454
+msgid "Id_le after (seconds, 0: never):"
+msgstr ""
+
+#: src/ui/port_dialog.c:457
+msgid "_No data after (seconds, 0: never):"
+msgstr ""
+
+#: src/ui/port_dialog.c:459
+msgid "Port activity"
+msgstr ""
+
+#: src/ui/port_dialog.c:463
 msgid "Time with RTS 'on' _before transmit (milliseconds):"
 msgstr ""
 
-#: src/ui/port_dialog.c:442
+#: src/ui/port_dialog.c:465
 msgid "Time with RTS 'on' a_fter transmit (milliseconds):"
 msgstr ""
 
-#: src/ui/port_dialog.c:444
+#: src/ui/port_dialog.c:467
 msgid "RS-485 half-duplex parameters (RTS signal used to send)"
 msgstr "RS-485 半双工参数(用于发送RTS信号)"
 
-#: src/ui/port_dialog.c:499
+#: src/ui/port_dialog.c:522
 #, fuzzy
 msgid "Port configuration"
 msgstr "加载配置"
 
-#: src/ui/port_dialog.c:499
+#: src/ui/port_dialog.c:522
 msgid "New tab"
 msgstr ""
 
-#: src/ui/port_dialog.c:520
+#: src/ui/port_dialog.c:543
 msgid "_Type:"
 msgstr ""
 
-#: src/ui/port_dialog.c:522
+#: src/ui/port_dialog.c:545
 #, fuzzy
 msgid "Transport"
 msgstr "串行端口"
@@ -1605,124 +1679,124 @@ msgstr ""
 msgid "You are leaving these versions:"
 msgstr ""
 
-#: src/ui/update_window.c:217
+#: src/ui/update_window.c:221
 #, c-format
 msgid "Update to %s"
 msgstr ""
 
-#: src/ui/update_window.c:219
+#: src/ui/update_window.c:223
 #, c-format
 msgid "Roll back to %s"
 msgstr ""
 
-#: src/ui/update_window.c:221
+#: src/ui/update_window.c:225
 #, c-format
 msgid "Reinstall %s"
 msgstr ""
 
-#: src/ui/update_window.c:243
+#: src/ui/update_window.c:247
 msgid "No published version found."
 msgstr ""
 
-#: src/ui/update_window.c:246
+#: src/ui/update_window.c:250
 #, c-format
 msgid "A new version is available (%s)."
 msgstr ""
 
-#: src/ui/update_window.c:252
+#: src/ui/update_window.c:256
 msgid "GTKTerm is up to date."
-msgstr ""
-
-#: src/ui/update_window.c:279
-#, c-format
-msgid "%s — latest, installed"
-msgstr ""
-
-#: src/ui/update_window.c:281
-#, c-format
-msgid "%s — latest"
 msgstr ""
 
 #: src/ui/update_window.c:283
 #, c-format
+msgid "%s — latest, installed"
+msgstr ""
+
+#: src/ui/update_window.c:285
+#, c-format
+msgid "%s — latest"
+msgstr ""
+
+#: src/ui/update_window.c:287
+#, c-format
 msgid "%s — installed"
 msgstr ""
 
-#: src/ui/update_window.c:333
+#: src/ui/update_window.c:337
 #, c-format
 msgid "Could not check for updates: %s"
 msgstr ""
 
-#: src/ui/update_window.c:373
+#: src/ui/update_window.c:377
 msgid "Please enter the URL of the source repository."
 msgstr ""
 
-#: src/ui/update_window.c:385
+#: src/ui/update_window.c:390
 msgid "Checking…"
 msgstr ""
 
-#: src/ui/update_window.c:460
+#: src/ui/update_window.c:465
 #, c-format
 msgid "Install %s?"
 msgstr ""
 
-#: src/ui/update_window.c:462
+#: src/ui/update_window.c:467
 msgid ""
 "See the warnings above. GTKTerm will be closed and restarted at the end of "
 "the update: unsaved project changes and running operations will be lost."
 msgstr ""
 
-#: src/ui/update_window.c:464
+#: src/ui/update_window.c:469
 msgid ""
 "GTKTerm will be closed and restarted at the end of the update: unsaved "
 "project changes and running operations will be lost."
 msgstr ""
 
-#: src/ui/update_window.c:466
+#: src/ui/update_window.c:471
 msgid "See the warnings above."
 msgstr ""
 
-#: src/ui/update_window.c:467 src/ui/update_window.c:643
+#: src/ui/update_window.c:472 src/ui/update_window.c:648
 msgid "Install"
 msgstr ""
 
-#: src/ui/update_window.c:572
+#: src/ui/update_window.c:577
 msgid "Updates"
 msgstr ""
 
-#: src/ui/update_window.c:584
+#: src/ui/update_window.c:589
 msgid "Installed version:"
 msgstr ""
 
-#: src/ui/update_window.c:593
+#: src/ui/update_window.c:598
 msgid "Update source:"
 msgstr ""
 
-#: src/ui/update_window.c:599
+#: src/ui/update_window.c:604
 msgid "Update source"
 msgstr ""
 
-#: src/ui/update_window.c:603
+#: src/ui/update_window.c:608
 msgid "Check for updates at startup"
 msgstr ""
 
-#: src/ui/update_window.c:608
+#: src/ui/update_window.c:613
 msgid "Check now"
 msgstr ""
 
-#: src/ui/update_window.c:614
+#: src/ui/update_window.c:619
 msgid "Version:"
 msgstr ""
 
-#: src/ui/update_window.c:618
+#: src/ui/update_window.c:623
 msgid "Version"
 msgstr ""
 
-#: src/ui/update_window.c:638
+#: src/ui/update_window.c:643
 msgid "Skip this version"
 msgstr ""
 
-#: src/ui/update_window.c:647
+#: src/ui/update_window.c:652
 #, fuzzy
 msgid "Close"
 msgstr "关闭端口(_C)"

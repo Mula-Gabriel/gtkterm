@@ -34,6 +34,8 @@ void gt_profile_init_defaults(GtProfile *p)
 	p->tcp_port = g_strdup("");
 	p->wait_delay_ms = 0;
 	p->wait_char = -1;
+	p->idle_timeout_s = 10;
+	p->no_data_timeout_s = 60;
 	p->font = g_strdup(GT_PROFILE_DEFAULT_FONT);
 	p->block_cursor = TRUE;
 	p->columns = 80;
@@ -99,6 +101,19 @@ gboolean gt_profile_validate(GtProfile *p, GPtrArray *warnings)
 	{
 		g_ptr_array_add(warnings, g_strdup_printf(_("Invalid delay: %d ms\nFalling back to default delay: %d ms\n"), p->wait_delay_ms, 0));
 		p->wait_delay_ms = 0;
+	}
+
+	if(p->idle_timeout_s < 0 || p->idle_timeout_s > GT_PROFILE_ACTIVITY_MAX)
+	{
+		g_ptr_array_add(warnings, g_strdup_printf(_("Invalid idle delay: %d s\nFalling back to default idle delay: %d s\n"), p->idle_timeout_s, 10));
+		p->idle_timeout_s = 10;
+	}
+
+	if(p->no_data_timeout_s < 0 || p->no_data_timeout_s > GT_PROFILE_ACTIVITY_MAX)
+	{
+		g_ptr_array_add(warnings, g_strdup_printf(_("Invalid no data delay: %d s\nFalling back to default no data delay: %d s\n"),
+		                                          p->no_data_timeout_s, 60));
+		p->no_data_timeout_s = 60;
 	}
 
 	/* Corrections silencieuses : valeurs absurdes d'un fichier modifié à la main */

@@ -2,13 +2,15 @@
 #include <config.h>
 #include <glib/gi18n.h>
 
+#include "activity_icon.h"
 #include "app.h"
 #include "link.h"
 #include "tab_label.h"
 
 #define TAB_CLOSE_KEY "gt-tab-close"	/* sur la boîte : son bouton de fermeture (enfant, non possédé) */
 
-/* notify::state de la liaison : peut tourner sous la surveillance du transport (link.h), ne fait que changer une classe CSS */
+/* notify::state de la liaison : peut tourner sous la surveillance du transport (link.h), ne fait que changer une classe CSS (« lost », sans
+ * effet visible : l'indicateur d'activité montre la perte ; gardée pour les tests) */
 static void on_link_state(GtkTermLink *link, GParamSpec *pspec, gpointer box)
 {
 	GtLinkState st = gt_link_get_state(link);
@@ -17,6 +19,19 @@ static void on_link_state(GtkTermLink *link, GParamSpec *pspec, gpointer box)
 		gtk_widget_add_css_class(GTK_WIDGET(box), "lost");
 	else
 		gtk_widget_remove_css_class(GTK_WIDGET(box), "lost");
+}
+
+/* notify::state et notify::unread de l'activité : nom grisé (port muet) ou en gras (reçu hors vue) */
+static void on_activity(GtPortActivity *activity, GParamSpec *pspec, gpointer box)
+{
+	if(gt_port_activity_get_state(activity) == GT_PORT_ACTIVITY_DEAD)
+		gtk_widget_add_css_class(GTK_WIDGET(box), "dead");
+	else
+		gtk_widget_remove_css_class(GTK_WIDGET(box), "dead");
+	if(gt_port_activity_get_unread(activity))
+		gtk_widget_add_css_class(GTK_WIDGET(box), "unread");
+	else
+		gtk_widget_remove_css_class(GTK_WIDGET(box), "unread");
 }
 
 /* Bouton de fermeture : même chemin que app.close-tab (confirmation si l'onglet est occupé) ; session gardée par référence faible */
@@ -43,12 +58,14 @@ GtkWidget *gt_tab_label_new(GtSession *s)
 	GtkWidget *name = gtk_label_new(NULL);
 	GtkWidget *close = gtk_button_new_from_icon_name("window-close-symbolic");
 	GtkTermLink *link = gt_session_get_link(s);
+	GtPortActivity *activity = gt_session_get_activity(s);
 	GWeakRef *ref = g_new0(GWeakRef, 1);
 
 	gtk_widget_set_name(box, "tab-label");
 	gtk_widget_set_name(name, "tab-name");
 	g_object_bind_property(s, "short-name", name, "label", G_BINDING_SYNC_CREATE);
 	g_object_bind_property(s, "status-text", box, "tooltip-text", G_BINDING_SYNC_CREATE);
+	gtk_box_append(GTK_BOX(box), gt_activity_icon_new(activity, "tab-activity"));	/* à gauche du nom */
 	gtk_box_append(GTK_BOX(box), name);
 
 	gtk_widget_set_name(close, "tab-close");
@@ -64,6 +81,9 @@ GtkWidget *gt_tab_label_new(GtSession *s)
 	/* Déconnecté automatiquement à la destruction de l'étiquette */
 	g_signal_connect_object(link, "notify::state", G_CALLBACK(on_link_state), box, 0);
 	on_link_state(link, NULL, box);
+	g_signal_connect_object(activity, "notify::state", G_CALLBACK(on_activity), box, 0);
+	g_signal_connect_object(activity, "notify::unread", G_CALLBACK(on_activity), box, 0);
+	on_activity(activity, NULL, box);
 	return box;
 }
 

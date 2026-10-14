@@ -8,8 +8,10 @@
 
 G_BEGIN_DECLS
 
-/* GtkBox horizontale nommée « tab-label » : GtkLabel « tab-name » lié à short-name, infobulle liée à status-text, bouton plat « tab-close »
- * (nom accessible « Close tab ») qui appelle gt_app_close_session(s). Classe CSS « lost » tant que la liaison est perdue ou en reconnexion. */
+/* GtkBox horizontale nommée « tab-label » : indicateur d'activité « tab-activity » (activity_icon.h), GtkLabel « tab-name » lié à short-name,
+ * infobulle liée à status-text, bouton plat « tab-close » (nom accessible « Close tab ») qui appelle gt_app_close_session(s). Classes CSS :
+ * « lost » tant que la liaison est perdue ou en reconnexion (sans rendu propre), « dead » (port muet : nom grisé), « unread » (reçu hors vue :
+ * nom en gras). */
 GtkWidget *gt_tab_label_new(GtSession *s);
 void       gt_tab_label_set_closable(GtkWidget *label, gboolean closable);	/* bouton de fermeture sensible ou non (suivi par app.c) */
 

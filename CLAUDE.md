@@ -42,7 +42,7 @@ Dependencies: `gtk4` ≥ 4.14, `vte-2.91-gtk4` ≥ 0.76, `gtksourceview-5` ≥ 5
    (`macro_set.c`, `macros_format.c`, `macros_list.c`, `macro_file.c`, `macro_poller.c`), Lua ports (`rx_queue.c`, `script_port.c`), and the sub-project 6a
    modules: `term_options.c` (`GtTermOptions`), `hex_input.c`, `capture.c`, `file_sender.c` (`GtFileSender`), `rx_logger.c` (`GtRxLogger`), `update_check.c`, `update_versions.c`, `update_fetch.c`,
    `app_ui.c` (`GtAppUi`), `serial_ports.c` (serial device discovery), `port_form.c` (Port dialog validation), `macro_view.c` (macro panel display rules),
-   `action_relay.c` (`GtActionRelay`, 6b), and the sub-project 6c modules: `profile_keyfile.c` (`GtProfile` ↔ named GKeyFile group, shared by `.gtktermrc`, the macro `.ini` and the
+   `action_relay.c` (`GtActionRelay`, 6b), `port_activity.c` (`GtPortActivity`: activity state of a port, see below), and the sub-project 6c modules: `profile_keyfile.c` (`GtProfile` ↔ named GKeyFile group, shared by `.gtktermrc`, the macro `.ini` and the
    project), `file_stamp.c` (`GtFileStamp`), `project_file.c` (`GtProjectData` ↔ `.gtkterm` file), `window_state.h` (`GtWindowState`, shared), plus `i18n.c`.
 2. **Application** (static library `gtkterm_app`; GLib + gudev + Lua, still no GTK header): `link.c` (`GtkTermLink`), `session.c` (`GtSession`),
    `session_manager.c` (`GtSessionManager`), `script_engine.c` (`GtScriptEngine`), `macros.c` (`GtMacros`), `app_config.c` (store facade, profiles of a
@@ -113,10 +113,14 @@ frees the rest. Always page first, then session.
 pages reorderable; default size 1000 × 600; state through `GtWindowState`), `session_view.c` (the page of a session, `GtkBox` named `session-view`: search
 bar, vertical `GtkPaned` [horizontal `GtkPaned` (terminal | macro panel) / script panel], hex send bar, status bar; slots `macro-panel`, `script-panel`,
 `hex-bar`, `status-bar`, `search-bar`; `gt_session_view_new(app, session, state, layout_from)`, `gt_session_view_lookup(session)`,
-`gt_session_view_shutdown()`), `tab_label.c` (`tab-label` box: `tab-name` bound to `short-name`, tooltip bound to `status-text`, CSS class `lost` (italic)
-while the link is lost or reconnecting, `tab-close` button → `gt_app_close_session()`, insensitive with one tab),
+`gt_session_view_shutdown()`), `tab_label.c` (`tab-label` box: activity indicator `tab-activity` left of `tab-name` bound to `short-name`, tooltip
+bound to `status-text`, CSS classes `lost` (no style of its own) while the link is lost or reconnecting, `dead` (name greyed) and `unread` (name in bold)
+from the session's `GtPortActivity`, `tab-close` button → `gt_app_close_session()`, insensitive with one tab), `activity_icon.c` (activity indicator:
+fixed 18 × 16 `GtkOverlay`, accessible role image named after the state, one opaque indicator among dot, spinner, Zzz and skull, CSS class
+`activity-<nick>`; animated by timers (66 ms spinner, 800 ms Zzz), not CSS, only while that state is shown and the widget mapped),
 `terminal_view.c` (VTE; renders the link history through `view_render.c`; keyboard → `gt_link_send(GT_SEND_KEYBOARD)`), `app_actions.c`, `status_bar.c`
-(label bound to the link's `status-text`, temporary message without a stack, DTR/RTS/CTS/CD/DSR/RI LEDs polled only while a serial link is open),
+(label bound to the link's `status-text`, temporary message without a stack, DTR/RTS/CTS/CD/DSR/RI LEDs polled only while a serial link is open,
+activity indicator `status-activity` shown only with a single tab: `gt_status_bar_set_activity_visible()` from `update_tab_state()` of `app.c`),
 `search_bar.c`, `hex_send_bar.c` (parsing by `hex_input.c`), `dialogs.c` (`gt_ui_message`, `gt_ui_confirm`, `gt_ui_choose`, `gt_ui_open_file`, `gt_ui_save_file`),
 `port_dialog.c`, `terminal_dialog.c` + `terminal_dialog.ui`, `profile_dialogs.c`, `file_actions.c` + `file_send_window.c`, `macro_shortcuts.c`, `macro_panel.c`,
 `macro_editor.c` (with `macro_row.c`, GLib/GIO rows, and `macro_accel.c`, key logic; both unit-tested without a display), `macro_arg_widget.c` (one argument field, shared by the macro panel and the
@@ -170,6 +174,18 @@ udev reports the device back. With `auto-reconnect`, a failed user-requested ope
 too (device plugged in / server started after GTKTerm). The udev monitor lives here and matches by device number, then path/links (`device_match.c`).
 **Re-entrancy (see `link.h`):** handlers of `received`, `sent` and `notify::state`/`notify::status-text` may run inside the transport's fd watch or inside
 `gt_link_send`; they must not call `gt_link_open`/`gt_link_close` — defer with `g_idle_add`.
+
+**Port activity (`port_activity.c` + `src/ui/activity_icon.c`):** `GtPortActivity` (core, no `link.h`: it gets dated events, `GtPortActivityLink`
+converted by the session) computes one state per tab, by priority `closed`, `dead`, `reconnecting`, `lost`, `connecting` (`CONNECTING` or
+`LISTENING`), `receiving` (last byte < 300 ms ago), `idle`, `waiting` (open, nothing received yet), `active`; plus `unread` (byte received while the
+tab is not viewed, cleared by `set_viewed(TRUE)` from `notify::active` in `app.c`). A port that has received since entering `OPEN` never goes `dead`
+while open (it goes `idle`); every (re)connection and `gt_session_open_port()` (`gt_port_activity_reset()` before `gt_link_open()`) starts from zero;
+the lost delay counts from entering {`LOST`, `RECONNECTING`}, not reset between them. Properties notify only on change (a continuous stream stays
+`receiving` without a notification per packet); one GLib timeout armed on the nearest deadline, re-armed only when an event brings it closer;
+monotonic clock only; `use-timer` false lets tests drive time by `tick`. Delays: `GtProfile` `idle_timeout_s` (default 10) and `no_data_timeout_s`
+(default 60), 0 – 3600 s, 0 disables the state, keys `activity_idle_timeout` / `activity_no_data_timeout`, edited in Port › Advanced Configuration
+Options › Port activity (spin buttons `port-idle-timeout`, `port-no-data-timeout`, carried by `GtPortForm`), applied by `gt_session_apply_profile()`
+and `gt_session_open_port()`; closing the link (`gt_session_shutdown()` included) gives `closed`, which has no deadline, so no timeout.
 
 **Lua scripting (`script_engine.c` + `src/ui/script_panel.c`, sub-project 5):** one `GtScriptEngine` per session (`gt_script_engine_new(link, macros)`:
 port 0 is that session's link, `send_macro`/`get_macros`/`get_lists` use its `GtMacros`); engines are independent (thread, ports 1–15, queues, log, stop
@@ -340,13 +356,13 @@ prefix, fake `pkexec` counting authorizations) and `publier_version`, `test_upda
 `settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`). Release: `tools/publier-version.sh vX.Y.Z` (clean tree, `meson.build`
 version, `NEWS` section; annotated tag, no push).
 
-**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 66 scenarios drive
+**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 67 scenarios drive
 GTKTerm through three bricks: (1) **D-Bus actions** — `org.gtk.Actions` (`Activate`, `SetState`, `Describe`) on the private session bus; start-up is detected
 when the name `eu.mulagabriel.gtkterm.test.p<PID>` appears; (2) the **test hook** (`src/ui/test_hooks.c`, compiled unless `-Dtest_hooks=false`, active only
 when `GTKTERM_TEST_HOOKS=1`, which also switches the application id to `eu.mulagabriel.gtkterm.test.p<PID>` without `NON_UNIQUE`): actions `app.test-dump`
 (every widget of the visible windows and popovers: type, accessible role, label, widget name, CSS classes `css`, flags, geometry), `app.test-terminal-text`,
 `app.test-terminal-props` (both on the active tab), `app.test-activate(s)`, `app.test-set-text((ss))`, `app.test-sessions` (state `aa{sv}`, one dict per tab in
-order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name`); the dump also gives
+order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`, `activity` (state nick), `unread`), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name`); the dump also gives
 `natural_w` (natural width measured by `gtk_widget_measure`, for mapped widgets); (3) a **fake broadway browser** (`tests/gui/broadway.py`, `gtk4-broadwayd`'s protocol) for real gestures:
 typing in the terminal, shortcuts, menus by clicks, file choosers by Ctrl+L, context menus (a click waits for the widget's geometry to be stable), tab
 drags (`drag_in_surface`). Widgets a test must reach carry a stable `gtk_widget_set_name()` and an accessible name: name them when adding UI; `find`/`find1`

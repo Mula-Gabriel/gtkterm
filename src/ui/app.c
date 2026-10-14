@@ -44,6 +44,7 @@
 #include "script_engine.h"
 #include "script_panel.h"
 #include "session_view.h"
+#include "status_bar.h"
 #include "tab_label.h"
 #include "terminal_view.h"
 #include "update_window.h"
@@ -150,7 +151,8 @@ static void view_shutdown(gpointer view, gpointer user_data)
 
 /* ---------- Onglets : état des actions, focus ---------- */
 
-/* close-tab (et boutons de fermeture des étiquettes) sensibles à partir de deux onglets ; état de app.active-tab = index de la page affichée */
+/* close-tab (et boutons de fermeture des étiquettes) sensibles à partir de deux onglets ; indicateur d'activité de la barre d'état seulement avec
+ * un onglet (sinon il est dans les onglets) ; état de app.active-tab = index de la page affichée. Appelée après tout ajout ou retrait de page */
 static void update_tab_state(void)
 {
 	GtkNotebook *nb = gt_app.notebook != NULL ? GTK_NOTEBOOK(gt_app.notebook) : NULL;
@@ -160,7 +162,13 @@ static void update_tab_state(void)
 	if(gt_app.close_tab_action != NULL)
 		g_simple_action_set_enabled(gt_app.close_tab_action, n > 1 && !gt_app.services_stopped);
 	for(gint i = 0; i < n; i++)
-		gt_tab_label_set_closable(gtk_notebook_get_tab_label(nb, gtk_notebook_get_nth_page(nb, i)), n > 1);
+	{
+		GtkWidget *view = gtk_notebook_get_nth_page(nb, i);
+
+		gt_tab_label_set_closable(gtk_notebook_get_tab_label(nb, view), n > 1);
+		if(!gt_session_view_is_shut_down(view))
+			gt_status_bar_set_activity_visible(gt_session_view_get_slot(view, "status-bar"), n == 1);
+	}
 	if(gt_app.active_tab_action != NULL && cur >= 0)
 	{
 		GVariant *st = g_action_get_state(G_ACTION(gt_app.active_tab_action));
@@ -277,6 +285,13 @@ static void on_active_session(GObject *sessions, GParamSpec *pspec, gpointer use
 	gt_app_retarget_relays(s);
 	if(gt_app.services_stopped)
 		return;
+	/* « Non lu » : seule la session affichée est vue (une réception ailleurs met son nom en gras) */
+	for(guint i = 0; i < gt_session_manager_get_n(GT_SESSION_MANAGER(sessions)); i++)
+	{
+		GtSession *other = gt_session_manager_get_nth(GT_SESSION_MANAGER(sessions), i);
+
+		gt_port_activity_set_viewed(gt_session_get_activity(other), other == s);
+	}
 	title_bind(s);
 	update_tab_state();
 	view = gt_session_view_lookup(s);
@@ -1070,12 +1085,27 @@ static void on_activate(GApplication *app, gpointer user_data)
 	g_signal_connect(gt_app.main_window, "close-request", G_CALLBACK(on_main_close_request), NULL);
 	gt_app.notebook = GTK_WIDGET(gt_main_window_get_notebook(gt_app.main_window));
 	g_object_add_weak_pointer(G_OBJECT(gt_app.notebook), (gpointer *)&gt_app.notebook);
-	/* Étiquette d'un onglet dont la liaison est perdue : en italique */
+	/* Indicateurs d'activité des ports (activity_icon.c) ; onglet muet grisé, onglet non lu en gras. Couleurs fixes : @accent_color n'existe
+	 * pas dans tous les thèmes */
 	css = gtk_css_provider_new();
-	gtk_css_provider_load_from_string(css, ".lost label { font-style: italic; }");
+	gtk_css_provider_load_from_string(css,
+		".activity-dot { min-width: 8px; min-height: 8px; border-radius: 9999px; border: 1px solid alpha(currentColor, 0.4); }\n"
+		".activity-dot.receiving { background-color: #2ec27e; border-color: #2ec27e; }\n"
+		".activity-dot.lost { background-color: #e01b24; border-color: #e01b24; }\n"
+		".activity-spinner.connecting { color: #3584e4; }\n"
+		".activity-spinner.reconnecting { color: #e01b24; }\n"
+		".activity-zzz { color: #3584e4; font-weight: 800; }\n"
+		".activity-zzz .z1 { font-size: 10px; }\n"
+		".activity-zzz .z2 { font-size: 8px; }\n"
+		".activity-zzz .z3 { font-size: 6px; }\n"
+		".dead #tab-name { opacity: 0.55; }\n"
+		".unread #tab-name { font-weight: bold; }\n");
 	gtk_style_context_add_provider_for_display(gtk_widget_get_display(gt_app.main_window), GTK_STYLE_PROVIDER(css),
 	                                           GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 	g_object_unref(css);
+	/* Tête de mort symbolique (recolorée) : icons/scalable/actions/ de la ressource */
+	gtk_icon_theme_add_resource_path(gtk_icon_theme_get_for_display(gtk_widget_get_display(gt_app.main_window)),
+	                                 "/eu/mulagabriel/gtkterm/ui/icons");
 
 	/* Projet de démarrage lu en entier ; refus : message (mis en file, affiché après la présentation) et démarrage 6b */
 	project_path = startup_project_path();

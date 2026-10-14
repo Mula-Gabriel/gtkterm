@@ -3,6 +3,7 @@
   <gresource prefix="/eu/mulagabriel/gtkterm/ui">
     <file preprocess="xml-stripblanks">menus.ui</file>
     <file preprocess="xml-stripblanks">terminal_dialog.ui</file>
+    <file preprocess="xml-stripblanks">icons/scalable/actions/skull-symbolic.svg</file>
     <file alias="gtkterm_64x64.png">../../data/gtkterm_64x64.png</file>
   </gresource>
 </gresources>

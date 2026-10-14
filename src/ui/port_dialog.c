@@ -1,6 +1,6 @@
 /* Dialogue Port (§6.4, action app.port, Ctrl+Maj+S) : type de liaison, port série et ses réglages, hôte et port TCP, envoi de fichier (délai de fin de
- * ligne, attente d'un caractère), RS-485. Instance unique, modale, transitoire de la fenêtre principale (C12). Saisie contrôlée sans widget par
- * gt_port_form_apply (port_form.c). Deux modes (6b) : réglage de la session active à l'ouverture (OK copie dans son profil et rouvre son port ;
+ * ligne, attente d'un caractère), RS-485, délais d'activité du port (repos, sans données : indicateurs d'onglet). Instance unique, modale,
+ * transitoire de la fenêtre principale (C12). Saisie contrôlée sans widget par gt_port_form_apply (port_form.c). Deux modes (6b) : réglage de la session active à l'ouverture (OK copie dans son profil et rouvre son port ;
  * session fermée pendant le dialogue : fermé sans rien appliquer), ou création d'onglet (gt_port_dialog_show_new : OK rend le profil au rappel).
  * Annuler ne change rien. Remplace Config_Port_Fenetre / Lis_Config (GTK 3). */
 #include <config.h>
@@ -47,6 +47,7 @@ typedef struct
 	GtkCheckButton *wait_char_check;
 	GtkEntry *wait_char;
 	GtkSpinButton *rs485_before, *rs485_after;
+	GtkSpinButton *idle_timeout, *no_data_timeout;	/* secondes, 0 : jamais */
 	GtkLabel *error;
 	GWeakRef session;	/* réglage : session active à l'ouverture (spec §3.2-12) */
 	GtProfile *base;	/* création d'onglet : copie du profil initial (possédée) ; NULL en réglage */
@@ -101,6 +102,17 @@ static GtkEntry *entry_new(const char *name, const char *text, gint max_length, 
 static GtkSpinButton *delay_spin_new(const char *name, gint value)
 {
 	GtkWidget *spin = gtk_spin_button_new_with_range(0, GT_PORT_FORM_DELAY_MAX, 10);
+
+	gtk_widget_set_name(spin, name);
+	gtk_spin_button_set_digits(GTK_SPIN_BUTTON(spin), 0);
+	gtk_spin_button_set_numeric(GTK_SPIN_BUTTON(spin), TRUE);
+	gtk_spin_button_set_value(GTK_SPIN_BUTTON(spin), value);
+	return GTK_SPIN_BUTTON(spin);
+}
+
+static GtkSpinButton *seconds_spin_new(const char *name, gint value)
+{
+	GtkWidget *spin = gtk_spin_button_new_with_range(0, GT_PROFILE_ACTIVITY_MAX, 1);
 
 	gtk_widget_set_name(spin, name);
 	gtk_spin_button_set_digits(GTK_SPIN_BUTTON(spin), 0);
@@ -260,6 +272,8 @@ static void read_form(PortDialog *pd, GtPortForm *f)
 	f->wait_char = g_strdup(gtk_editable_get_text(GTK_EDITABLE(pd->wait_char)));
 	f->rs485_before_ms = spin_value(pd->rs485_before);
 	f->rs485_after_ms = spin_value(pd->rs485_after);
+	f->idle_timeout_s = spin_value(pd->idle_timeout);
+	f->no_data_timeout_s = spin_value(pd->no_data_timeout);
 }
 
 /* Session du dialogue en réglage (référence à rendre), NULL si elle n'existe plus ou est arrêtée */
@@ -419,7 +433,7 @@ static GtkWidget *build_advanced(PortDialog *pd, const GtPortForm *form)
 {
 	GtkWidget *expander = gtk_expander_new_with_mnemonic(_("_Advanced Configuration Options"));
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-	GtkWidget *file_grid = grid_new(), *rs485_grid = grid_new();
+	GtkWidget *file_grid = grid_new(), *rs485_grid = grid_new(), *activity_grid = grid_new();
 	GtkWidget *check;
 
 	gtk_widget_set_name(expander, "port-advanced");
@@ -434,6 +448,15 @@ static GtkWidget *build_advanced(PortDialog *pd, const GtPortForm *form)
 	gtk_grid_attach(GTK_GRID(file_grid), check, 0, 1, 1, 1);
 	gtk_grid_attach(GTK_GRID(file_grid), GTK_WIDGET(pd->wait_char), 1, 1, 1, 1);
 	gtk_box_append(GTK_BOX(box), frame_new(_("ASCII file transfer"), file_grid));
+
+	/* Mnémoniques l et n : libres dans le dialogue (i est pris par « B_its ») */
+	pd->idle_timeout = seconds_spin_new("port-idle-timeout", form->idle_timeout_s);
+	grid_label(activity_grid, _("Id_le after (seconds, 0: never):"), GTK_WIDGET(pd->idle_timeout), 0, 0);
+	gtk_grid_attach(GTK_GRID(activity_grid), GTK_WIDGET(pd->idle_timeout), 1, 0, 1, 1);
+	pd->no_data_timeout = seconds_spin_new("port-no-data-timeout", form->no_data_timeout_s);
+	grid_label(activity_grid, _("_No data after (seconds, 0: never):"), GTK_WIDGET(pd->no_data_timeout), 0, 1);
+	gtk_grid_attach(GTK_GRID(activity_grid), GTK_WIDGET(pd->no_data_timeout), 1, 1, 1, 1);
+	gtk_box_append(GTK_BOX(box), frame_new(_("Port activity"), activity_grid));
 
 	pd->rs485_before = delay_spin_new("port-rs485-before", form->rs485_before_ms);
 	pd->rs485_after = delay_spin_new("port-rs485-after", form->rs485_after_ms);

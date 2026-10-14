@@ -419,6 +419,98 @@ test_occupee(void)
 	g_object_unref(s);
 }
 
+/* ---- Activité du port ----------------------------------------------------------- */
+
+static const gchar *
+activite_nick(GtSession *s)
+{
+	return gt_port_activity_state_nick(gt_port_activity_get_state(gt_session_get_activity(s)));
+}
+
+static gboolean
+activite_est(GtSession *s, const gchar *nick)
+{
+	return g_strcmp0(activite_nick(s), nick) == 0;
+}
+
+static gboolean
+activite_idle(gpointer data)
+{
+	return activite_est(data, "idle");
+}
+
+static gboolean
+activite_dead(gpointer data)
+{
+	return activite_est(data, "dead");
+}
+
+static gboolean
+activite_recue(gpointer data)
+{
+	return activite_est(data, "receiving") || activite_est(data, "active");
+}
+
+static void
+test_activite(void)
+{
+	Pty p;
+	GtSession *s;
+
+	pty_ouvrir(&p);
+	s = session_sur_pty(&p);
+	gt_session_get_profile(s)->idle_timeout_s = 1;
+	gt_session_get_profile(s)->no_data_timeout_s = 2;
+	g_assert_cmpstr(activite_nick(s), ==, "closed");
+	gt_session_open_port(s);
+	g_assert_true(iterate_until(liaison_ouverte, s, 5000));
+	g_assert_cmpstr(activite_nick(s), ==, "waiting");
+
+	g_assert_cmpint(write(p.maitre, "x", 1), ==, 1);
+	g_assert_true(iterate_until(activite_recue, s, 5000));
+	g_assert_true(iterate_until(activite_idle, s, 10000));
+
+	/* Réouverture d'un port déjà ouvert : repart de zéro, puis muet jusqu'au délai sans données */
+	gt_session_open_port(s);
+	g_assert_cmpstr(activite_nick(s), ==, "waiting");
+	g_assert_true(iterate_until(activite_dead, s, 12000));
+
+	gt_session_close_port(s);
+	g_assert_cmpstr(activite_nick(s), ==, "closed");
+	g_object_unref(s);
+	pty_fermer(&p);
+}
+
+static gboolean
+une_seconde_ecoulee(gpointer data)
+{
+	return g_get_monotonic_time() >= *(gint64 *)data;
+}
+
+static void
+test_activite_delais_profil(void)
+{
+	Pty p;
+	GtSession *s;
+	gint64 fin;
+
+	pty_ouvrir(&p);
+	s = session_sur_pty(&p);
+	gt_session_get_profile(s)->idle_timeout_s = 1;
+	gt_session_get_profile(s)->no_data_timeout_s = 1;
+	gt_session_apply_profile(s);
+	gt_session_get_profile(s)->idle_timeout_s = 0;
+	gt_session_get_profile(s)->no_data_timeout_s = 0;
+	gt_session_apply_profile(s);	/* les nouveaux délais remplacent les anciens */
+	gt_session_open_port(s);
+	g_assert_true(iterate_until(liaison_ouverte, s, 5000));
+	fin = g_get_monotonic_time() + 1500000;
+	iterate_until(une_seconde_ecoulee, &fin, 3000);
+	g_assert_cmpstr(activite_nick(s), ==, "waiting");	/* désactivés : jamais dead */
+	g_object_unref(s);
+	pty_fermer(&p);
+}
+
 /* ---- Projet (6c) : in-project, script-text, signal edited ---- */
 
 static void
@@ -523,6 +615,8 @@ main(int argc, char *argv[])
 	g_test_add_func("/session/arret", test_arret);
 	g_test_add_func("/session/occupee", test_occupee);
 	g_test_add_func("/session/actions", test_actions);
+	g_test_add_func("/session/activite", test_activite);
+	g_test_add_func("/session/activite-delais-profil", test_activite_delais_profil);
 	g_test_add_func("/session/in-project", test_in_project);
 	g_test_add_func("/session/script-text", test_script_text);
 	g_test_add_func("/session/edited", test_edited);

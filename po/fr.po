@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 1.3.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-12 18:31+0200\n"
+"POT-Creation-Date: 2026-10-14 23:11+0200\n"
 "PO-Revision-Date: 2026-10-10 12:00+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -356,43 +356,48 @@ msgstr "%s existe déjà : non écrasé"
 msgid "Cannot save macros file: %s"
 msgstr "Impossible d'enregistrer le fichier de macros : %s"
 
-#: src/port_form.c:74
+#: src/port_form.c:76
 msgid "Enter the serial port to open (for example /dev/ttyUSB0)."
 msgstr "Saisissez le port série à ouvrir (par exemple /dev/ttyUSB0)."
 
-#: src/port_form.c:79
+#: src/port_form.c:81
 #, c-format
 msgid "The baud rate must be a whole number between 1 and %d."
 msgstr "Le débit doit être un nombre entier compris entre 1 et %d."
 
-#: src/port_form.c:84
+#: src/port_form.c:86
 msgid "Invalid number of data bits or stop bits."
 msgstr "Nombre de bits de données ou de bits de stop non valide."
 
-#: src/port_form.c:89 src/port_form.c:108
+#: src/port_form.c:91 src/port_form.c:110
 #, c-format
 msgid "Delays must be between 0 and %d ms."
 msgstr "Les délais doivent être compris entre 0 et %d ms."
 
-#: src/port_form.c:97
+#: src/port_form.c:99
 msgid "Enter the host to connect to."
 msgstr "Saisissez l'hôte auquel se connecter."
 
-#: src/port_form.c:102
+#: src/port_form.c:104
 msgid "The TCP port must be a number between 1 and 65535."
 msgstr "Le port TCP doit être un nombre compris entre 1 et 65535."
 
-#: src/port_form.c:118
+#: src/port_form.c:120
 msgid "Enter the character to wait for: exactly one ASCII character."
 msgstr ""
 "Saisissez le caractère à attendre : un seul caractère ASCII exactement."
 
-#: src/profile.c:83
+#: src/port_form.c:127
+#, c-format
+msgid "Activity delays must be between 0 and %d s."
+msgstr "Les délais d'activité doivent être compris entre 0 et %d s."
+
+#: src/profile.c:85
 #, c-format
 msgid "Baud rate %u may not be supported by all hardware"
 msgstr "Le débit %u peut ne pas être pris en charge par tous les matériels"
 
-#: src/profile.c:87
+#: src/profile.c:89
 #, c-format
 msgid ""
 "Invalid number of stop-bits: %d\n"
@@ -401,7 +406,7 @@ msgstr ""
 "Nombre de bits de stop impossible: %d\n"
 "Retour au nombre de bits de stop par défaut: %d\n"
 
-#: src/profile.c:94
+#: src/profile.c:96
 #, c-format
 msgid ""
 "Invalid number of bits: %d\n"
@@ -410,7 +415,7 @@ msgstr ""
 "Nombre de bits impossible: %d\n"
 "Retour au nombre de bits par défaut: %d\n"
 
-#: src/profile.c:100
+#: src/profile.c:102
 #, c-format
 msgid ""
 "Invalid delay: %d ms\n"
@@ -419,23 +424,41 @@ msgstr ""
 "Délai impossible: %d ms\n"
 "Retour au délai par défaut: %d ms\n"
 
-#: src/profile.c:141 src/profile.c:165
+#: src/profile.c:108
+#, c-format
+msgid ""
+"Invalid idle delay: %d s\n"
+"Falling back to default idle delay: %d s\n"
+msgstr ""
+"Délai de repos impossible: %d s\n"
+"Retour au délai de repos par défaut: %d s\n"
+
+#: src/profile.c:114
+#, c-format
+msgid ""
+"Invalid no data delay: %d s\n"
+"Falling back to default no data delay: %d s\n"
+msgstr ""
+"Délai sans données impossible: %d s\n"
+"Retour au délai sans données par défaut: %d s\n"
+
+#: src/profile.c:156 src/profile.c:180
 msgid ""
 "The configuration name cannot contain \"[\", \"]\" or control characters."
 msgstr ""
 "Le nom de la configuration ne peut contenir ni « [ », ni « ] », ni caractère "
 "de contrôle."
 
-#: src/profile.c:147
+#: src/profile.c:162
 msgid "The configuration name cannot be empty."
 msgstr "Le nom de la configuration ne peut pas être vide."
 
-#: src/profile.c:153
+#: src/profile.c:168
 #, c-format
 msgid "The configuration name is too long (%d characters at most)."
 msgstr "Le nom de la configuration est trop long (%d caractères au plus)."
 
-#: src/profile.c:173
+#: src/profile.c:188
 #, c-format
 msgid "\"%s\" is a reserved name."
 msgstr "« %s » est un nom réservé."
@@ -519,7 +542,7 @@ msgstr "Erreur Lua : %s"
 msgid "Script already running."
 msgstr "Un script est déjà en cours."
 
-#: src/session.c:115
+#: src/session.c:116
 msgid "Break signal sent!"
 msgstr "Signal break envoyé !"
 
@@ -616,74 +639,110 @@ msgstr ""
 msgid "About GTKTerm"
 msgstr "À propos de GTKTerm"
 
-#: src/ui/app.c:509
+#: src/ui/activity_icon.c:35
+msgid "Connecting"
+msgstr "Connexion"
+
+#: src/ui/activity_icon.c:36
+msgid "Waiting for data"
+msgstr "En attente de données"
+
+#: src/ui/activity_icon.c:37
+msgid "Port open"
+msgstr "Port ouvert"
+
+#: src/ui/activity_icon.c:38
+msgid "Receiving data"
+msgstr "Réception de données"
+
+#: src/ui/activity_icon.c:39
+msgid "Idle"
+msgstr "Au repos"
+
+#: src/ui/activity_icon.c:40
+msgid "Connection lost"
+msgstr "Liaison perdue"
+
+#: src/ui/activity_icon.c:41
+msgid "Reconnecting"
+msgstr "Reconnexion"
+
+#: src/ui/activity_icon.c:42
+msgid "No data received"
+msgstr "Aucune donnée reçue"
+
+#: src/ui/activity_icon.c:43
+msgid "Port closed"
+msgstr "Port fermé"
+
+#: src/ui/app.c:524
 msgid "Close this tab?"
 msgstr "Fermer cet onglet ?"
 
-#: src/ui/app.c:509
+#: src/ui/app.c:524
 msgid "A script is running or a file is being sent in this tab."
 msgstr "Un script tourne ou un fichier est en cours d'envoi dans cet onglet."
 
-#: src/ui/app.c:509 src/ui/menus.ui:152 src/ui/tab_label.c:57
-#: src/ui/tab_label.c:58
+#: src/ui/app.c:524 src/ui/menus.ui:152 src/ui/tab_label.c:74
+#: src/ui/tab_label.c:75
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
-#: src/ui/app.c:761 src/ui/app.c:938
+#: src/ui/app.c:776 src/ui/app.c:953
 msgid "Close all tabs?"
 msgstr "Fermer tous les onglets ?"
 
-#: src/ui/app.c:761 src/ui/app.c:938
+#: src/ui/app.c:776 src/ui/app.c:953
 msgid "A script is running or a file is being sent."
 msgstr "Un script tourne ou un fichier est en cours d'envoi."
 
-#: src/ui/app.c:761 src/ui/app.c:938
+#: src/ui/app.c:776 src/ui/app.c:953
 msgid "Close tabs"
 msgstr "Fermer les onglets"
 
-#: src/ui/app.c:821
+#: src/ui/app.c:836
 msgid "A project file with this name already exists. Replace it?"
 msgstr "Un fichier projet de ce nom existe déjà. Le remplacer ?"
 
-#: src/ui/app.c:821
+#: src/ui/app.c:836
 msgid "Replace"
 msgstr "Remplacer"
 
-#: src/ui/app.c:854 src/ui/menus.ui:19
+#: src/ui/app.c:869 src/ui/menus.ui:19
 msgid "Save project"
 msgstr "Enregistrer le projet"
 
-#: src/ui/app.c:862 src/ui/macros_save.c:55 src/ui/profile_dialogs.c:209
+#: src/ui/app.c:877 src/ui/macros_save.c:55 src/ui/profile_dialogs.c:209
 msgid "Overwrite"
 msgstr "Écraser"
 
-#: src/ui/app.c:862 src/ui/macros_save.c:55
+#: src/ui/app.c:877 src/ui/macros_save.c:55
 msgid "Reload"
 msgstr "Recharger"
 
-#: src/ui/app.c:862 src/ui/app.c:893 src/ui/macro_editor.c:842
+#: src/ui/app.c:877 src/ui/app.c:908 src/ui/macro_editor.c:842
 #: src/ui/macros_save.c:55
 msgid "Cancel"
 msgstr "Annuler"
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
-#: src/ui/app.c:865
+#: src/ui/app.c:880
 msgid "The project file changed on disk."
 msgstr "Le fichier du projet a changé sur le disque."
 
-#: src/ui/app.c:893 src/ui/script_panel.c:951
+#: src/ui/app.c:908 src/ui/script_panel.c:951
 msgid "Save"
 msgstr "Enregistrer"
 
-#: src/ui/app.c:893
+#: src/ui/app.c:908
 msgid "Don't save"
 msgstr "Ne pas enregistrer"
 
-#: src/ui/app.c:896
+#: src/ui/app.c:911
 msgid "Save changes to the project?"
 msgstr "Enregistrer les modifications du projet ?"
 
-#: src/ui/app.c:1099
+#: src/ui/app.c:1129
 #, c-format
 msgid ""
 "Cannot open the project: %s\n"
@@ -692,20 +751,20 @@ msgstr ""
 "Impossible d'ouvrir le projet : %s\n"
 "Il ne sera plus rouvert au démarrage."
 
-#: src/ui/app.c:1102
+#: src/ui/app.c:1132
 #, c-format
 msgid "Cannot open the project: %s"
 msgstr "Impossible d'ouvrir le projet : %s"
 
-#: src/ui/app.c:1209
+#: src/ui/app.c:1239
 msgid "GTKTerm projects"
 msgstr "Projets GTKTerm"
 
-#: src/ui/app.c:1214 src/ui/script_panel.c:464
+#: src/ui/app.c:1244 src/ui/script_panel.c:464
 msgid "All files"
 msgstr "Tous les fichiers"
 
-#: src/ui/app.c:1218
+#: src/ui/app.c:1248
 msgid "Open project"
 msgstr "Ouvrir un projet"
 
@@ -721,11 +780,11 @@ msgstr "Avertissement"
 msgid "Error"
 msgstr "Erreur"
 
-#: src/ui/dialogs.c:169 src/ui/port_dialog.c:543 src/ui/profile_dialogs.c:344
+#: src/ui/dialogs.c:169 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:344
 msgid "_OK"
 msgstr "_OK"
 
-#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:540
+#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
 #: src/ui/profile_dialogs.c:341 src/ui/script_panel.c:805
 msgid "_Cancel"
 msgstr "_Annuler"
@@ -845,7 +904,7 @@ msgstr ""
 "Exemples : « Hello\\n » envoie Hello et un saut de ligne ; « Hello\\x0A » "
 "fait de même ; « SPEED %d\\r » demande un nombre."
 
-#: src/ui/macro_editor.c:188 src/ui/macro_panel.c:258 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:188 src/ui/macro_panel.c:268 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr "Aucun"
@@ -979,11 +1038,11 @@ msgstr "Aide"
 msgid "OK"
 msgstr "OK"
 
-#: src/ui/macro_panel.c:70
+#: src/ui/macro_panel.c:80
 msgid "General"
 msgstr "Général"
 
-#: src/ui/macro_panel.c:258
+#: src/ui/macro_panel.c:268
 #, c-format
 msgid ""
 "Shortcut: %s\n"
@@ -992,7 +1051,7 @@ msgstr ""
 "Raccourci : %s\n"
 "Action : %s"
 
-#: src/ui/macro_panel.c:489
+#: src/ui/macro_panel.c:510
 msgid ""
 "No macros defined\n"
 "with labels"
@@ -1000,20 +1059,20 @@ msgstr ""
 "Aucune macro définie\n"
 "avec un libellé"
 
-#: src/ui/macro_panel.c:545
+#: src/ui/macro_panel.c:566
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 "La période doit être un nombre entier de millisecondes de 1 à 86400000."
 
-#: src/ui/macro_panel.c:723
+#: src/ui/macro_panel.c:744
 msgid "Period (ms)"
 msgstr "Période (ms)"
 
-#: src/ui/macro_panel.c:731
+#: src/ui/macro_panel.c:752
 msgid "Polling Mode"
 msgstr "Interrogation périodique"
 
-#: src/ui/macro_panel.c:750 src/ui/macro_panel.c:752
+#: src/ui/macro_panel.c:771 src/ui/macro_panel.c:773
 msgid "Reset arguments"
 msgstr "Réinitialiser les arguments"
 
@@ -1262,47 +1321,47 @@ msgstr "Xon/Xoff"
 msgid "RS-485 half-duplex (RTS)"
 msgstr "RS-485 semi-duplex (RTS)"
 
-#: src/ui/port_dialog.c:356
+#: src/ui/port_dialog.c:370
 msgid "_Host:"
 msgstr "_Hôte :"
 
-#: src/ui/port_dialog.c:358 src/ui/port_dialog.c:388
+#: src/ui/port_dialog.c:372 src/ui/port_dialog.c:402
 msgid "_Port:"
 msgstr "_Port :"
 
-#: src/ui/port_dialog.c:360
+#: src/ui/port_dialog.c:374
 msgid "TCP"
 msgstr "TCP"
 
-#: src/ui/port_dialog.c:373
+#: src/ui/port_dialog.c:387
 msgid "Detected serial ports"
 msgstr "Ports série détectés"
 
-#: src/ui/port_dialog.c:378
+#: src/ui/port_dialog.c:392
 msgid "Standard baud rates"
 msgstr "Débits standard"
 
-#: src/ui/port_dialog.c:390
+#: src/ui/port_dialog.c:404
 msgid "_Baud Rate:"
 msgstr "_Débit :"
 
-#: src/ui/port_dialog.c:392
+#: src/ui/port_dialog.c:406
 msgid "P_arity:"
 msgstr "Par_ité :"
 
-#: src/ui/port_dialog.c:394
+#: src/ui/port_dialog.c:408
 msgid "B_its:"
 msgstr "_Bits :"
 
-#: src/ui/port_dialog.c:396
+#: src/ui/port_dialog.c:410
 msgid "_Stopbits:"
 msgstr "Bits de _stop :"
 
-#: src/ui/port_dialog.c:398
+#: src/ui/port_dialog.c:412
 msgid "_Flow control:"
 msgstr "Contrôle de _flux :"
 
-#: src/ui/port_dialog.c:403
+#: src/ui/port_dialog.c:417
 #, c-format
 msgid ""
 "No serial devices found. Searched the following device path patterns:\n"
@@ -1311,51 +1370,63 @@ msgstr ""
 "Aucun périphérique série trouvé. Motifs de chemins recherchés :\n"
 "%sSaisissez un chemin de périphérique dans la zone Port."
 
-#: src/ui/port_dialog.c:415
+#: src/ui/port_dialog.c:429
 msgid "Serial port"
 msgstr "Port série"
 
-#: src/ui/port_dialog.c:420
+#: src/ui/port_dialog.c:434
 msgid "_Advanced Configuration Options"
-msgstr "Options de configuration _avancées"
+msgstr "Options de confi_guration avancées"
 
-#: src/ui/port_dialog.c:427
+#: src/ui/port_dialog.c:441
 msgid "End of line _delay (milliseconds):"
 msgstr "Délai de fin de _ligne (millisecondes) :"
 
-#: src/ui/port_dialog.c:429
+#: src/ui/port_dialog.c:443
 msgid "_Wait for this special character before passing to next line:"
 msgstr "Attendre ce _caractère spécial avant de passer à la ligne suivante :"
 
-#: src/ui/port_dialog.c:436
+#: src/ui/port_dialog.c:450
 msgid "ASCII file transfer"
 msgstr "Transfert de fichier ASCII"
 
-#: src/ui/port_dialog.c:440
+#: src/ui/port_dialog.c:454
+msgid "Id_le after (seconds, 0: never):"
+msgstr "R_epos après (secondes, 0 : jamais) :"
+
+#: src/ui/port_dialog.c:457
+msgid "_No data after (seconds, 0: never):"
+msgstr "Sa_ns données après (secondes, 0 : jamais) :"
+
+#: src/ui/port_dialog.c:459
+msgid "Port activity"
+msgstr "Activité du port"
+
+#: src/ui/port_dialog.c:463
 msgid "Time with RTS 'on' _before transmit (milliseconds):"
 msgstr "Durée avec RTS actif a_vant la transmission (millisecondes) :"
 
-#: src/ui/port_dialog.c:442
+#: src/ui/port_dialog.c:465
 msgid "Time with RTS 'on' a_fter transmit (milliseconds):"
 msgstr "Durée avec RTS actif ap_rès la transmission (millisecondes) :"
 
-#: src/ui/port_dialog.c:444
+#: src/ui/port_dialog.c:467
 msgid "RS-485 half-duplex parameters (RTS signal used to send)"
 msgstr "Paramètres RS-485 semi-duplex (utilisant signal RTS pour envoi)"
 
-#: src/ui/port_dialog.c:499
+#: src/ui/port_dialog.c:522
 msgid "Port configuration"
 msgstr "Configuration du port"
 
-#: src/ui/port_dialog.c:499
+#: src/ui/port_dialog.c:522
 msgid "New tab"
 msgstr "Nouvel onglet"
 
-#: src/ui/port_dialog.c:520
+#: src/ui/port_dialog.c:543
 msgid "_Type:"
 msgstr "_Type :"
 
-#: src/ui/port_dialog.c:522
+#: src/ui/port_dialog.c:545
 msgid "Transport"
 msgstr "Transport"
 
@@ -1602,68 +1673,68 @@ msgstr "Avertissements"
 msgid "You are leaving these versions:"
 msgstr "Vous quittez ces versions :"
 
-#: src/ui/update_window.c:217
+#: src/ui/update_window.c:221
 #, c-format
 msgid "Update to %s"
 msgstr "Mettre à jour vers %s"
 
-#: src/ui/update_window.c:219
+#: src/ui/update_window.c:223
 #, c-format
 msgid "Roll back to %s"
 msgstr "Revenir à %s"
 
-#: src/ui/update_window.c:221
+#: src/ui/update_window.c:225
 #, c-format
 msgid "Reinstall %s"
 msgstr "Réinstaller %s"
 
-#: src/ui/update_window.c:243
+#: src/ui/update_window.c:247
 msgid "No published version found."
 msgstr "Aucune version publiée trouvée."
 
-#: src/ui/update_window.c:246
+#: src/ui/update_window.c:250
 #, c-format
 msgid "A new version is available (%s)."
 msgstr "Une nouvelle version est disponible (%s)."
 
-#: src/ui/update_window.c:252
+#: src/ui/update_window.c:256
 msgid "GTKTerm is up to date."
 msgstr "GTKTerm est à jour."
 
-#: src/ui/update_window.c:279
+#: src/ui/update_window.c:283
 #, c-format
 msgid "%s — latest, installed"
 msgstr "%s — la plus récente, installée"
 
-#: src/ui/update_window.c:281
+#: src/ui/update_window.c:285
 #, c-format
 msgid "%s — latest"
 msgstr "%s — la plus récente"
 
-#: src/ui/update_window.c:283
+#: src/ui/update_window.c:287
 #, c-format
 msgid "%s — installed"
 msgstr "%s — installée"
 
-#: src/ui/update_window.c:333
+#: src/ui/update_window.c:337
 #, c-format
 msgid "Could not check for updates: %s"
 msgstr "Impossible de vérifier les mises à jour : %s"
 
-#: src/ui/update_window.c:373
+#: src/ui/update_window.c:377
 msgid "Please enter the URL of the source repository."
 msgstr "Saisissez l'URL du dépôt source."
 
-#: src/ui/update_window.c:385
+#: src/ui/update_window.c:390
 msgid "Checking…"
 msgstr "Vérification…"
 
-#: src/ui/update_window.c:460
+#: src/ui/update_window.c:465
 #, c-format
 msgid "Install %s?"
 msgstr "Installer %s ?"
 
-#: src/ui/update_window.c:462
+#: src/ui/update_window.c:467
 msgid ""
 "See the warnings above. GTKTerm will be closed and restarted at the end of "
 "the update: unsaved project changes and running operations will be lost."
@@ -1672,7 +1743,7 @@ msgstr ""
 "de la mise à jour : les modifications non enregistrées du projet et les "
 "opérations en cours seront perdues."
 
-#: src/ui/update_window.c:464
+#: src/ui/update_window.c:469
 msgid ""
 "GTKTerm will be closed and restarted at the end of the update: unsaved "
 "project changes and running operations will be lost."
@@ -1681,51 +1752,51 @@ msgstr ""
 "modifications non enregistrées du projet et les opérations en cours seront "
 "perdues."
 
-#: src/ui/update_window.c:466
+#: src/ui/update_window.c:471
 msgid "See the warnings above."
 msgstr "Voir les avertissements ci-dessus."
 
-#: src/ui/update_window.c:467 src/ui/update_window.c:643
+#: src/ui/update_window.c:472 src/ui/update_window.c:648
 msgid "Install"
 msgstr "Installer"
 
-#: src/ui/update_window.c:572
+#: src/ui/update_window.c:577
 msgid "Updates"
 msgstr "Mises à jour"
 
-#: src/ui/update_window.c:584
+#: src/ui/update_window.c:589
 msgid "Installed version:"
 msgstr "Version installée :"
 
-#: src/ui/update_window.c:593
+#: src/ui/update_window.c:598
 msgid "Update source:"
 msgstr "Source des mises à jour :"
 
-#: src/ui/update_window.c:599
+#: src/ui/update_window.c:604
 msgid "Update source"
 msgstr "Source des mises à jour"
 
-#: src/ui/update_window.c:603
+#: src/ui/update_window.c:608
 msgid "Check for updates at startup"
 msgstr "Vérifier au démarrage"
 
-#: src/ui/update_window.c:608
+#: src/ui/update_window.c:613
 msgid "Check now"
 msgstr "Vérifier maintenant"
 
-#: src/ui/update_window.c:614
+#: src/ui/update_window.c:619
 msgid "Version:"
 msgstr "Version :"
 
-#: src/ui/update_window.c:618
+#: src/ui/update_window.c:623
 msgid "Version"
 msgstr "Version"
 
-#: src/ui/update_window.c:638
+#: src/ui/update_window.c:643
 msgid "Skip this version"
 msgstr "Ignorer cette version"
 
-#: src/ui/update_window.c:647
+#: src/ui/update_window.c:652
 msgid "Close"
 msgstr "Fermer"
 

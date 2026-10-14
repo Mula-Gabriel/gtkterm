@@ -31,6 +31,7 @@ gui_scenarios = [
 	'test_horodatage',
 	# barres, liaison
 	'test_lien_perdu',
+	'test_activite_ports',
 	'test_config_verrou',
 	'test_config_valeurs_corrigees',
 	'test_status_bar',

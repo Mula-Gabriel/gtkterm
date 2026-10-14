@@ -9,6 +9,7 @@
 
 #define GT_PROFILE_DEFAULT_PORT "/dev/ttyS0"
 #define GT_PROFILE_DEFAULT_FONT "Monospace 12"
+#define GT_PROFILE_ACTIVITY_MAX 3600	/* s : borne des délais d'activité du port */
 
 typedef struct
 {
@@ -32,6 +33,9 @@ typedef struct
 	gchar *tcp_port;
 	gint wait_delay_ms;		/* envoi de fichier : délai après chaque fin de ligne */
 	gint wait_char;			/* envoi de fichier : caractère attendu 0-255, -1 : aucun */
+	/* activité du port (indicateurs), en secondes, 0 à GT_PROFILE_ACTIVITY_MAX, 0 : désactivé */
+	gint idle_timeout_s;		/* repos (Zzz) après ce silence ; défaut 10 */
+	gint no_data_timeout_s;		/* port muet ou perdu (tête de mort) après ce délai ; défaut 60 */
 	/* comportement */
 	gboolean echo;
 	gboolean crlf_auto;

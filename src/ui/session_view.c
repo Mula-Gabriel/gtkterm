@@ -170,7 +170,7 @@ GtkWidget *gt_session_view_new(GtkApplication *app, GtSession *s, const GtWindow
 	g_signal_connect(sv->v_paned, "notify::max-position", G_CALLBACK(on_v_paned_max_position), NULL);
 
 	/* Barres de la page et leurs actions, dans le groupe de la session */
-	status = gt_status_bar_new(link);
+	status = gt_status_bar_new(link, gt_session_get_activity(s));
 	search = gt_search_bar_new(gt_terminal_view_get_vte(sv->terminal_view));
 	hex = gt_hex_send_bar_new(link, s);
 	gt_session_view_set_slot(view, "status-bar", status);

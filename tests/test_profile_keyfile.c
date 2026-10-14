@@ -4,7 +4,8 @@
 
 #include "profile_keyfile.h"
 
-/* Texte exact écrit par config_store.c de 6b pour un profil par défaut avec macros_file=/tmp/m.ini (référence figée) */
+/* Texte exact écrit par config_store.c de 6b pour un profil par défaut avec macros_file=/tmp/m.ini (référence figée), plus les deux clés
+ * d'activité du port ajoutées après les délais RS-485 (indicateurs d'activité) */
 static const gchar *const reference_6b =
 	"[profile:default]\n"
 	"transport=serial\n"
@@ -18,6 +19,8 @@ static const gchar *const reference_6b =
 	"wait_char=-1\n"
 	"rs485_rts_time_before_tx=30\n"
 	"rs485_rts_time_after_tx=30\n"
+	"activity_idle_timeout=10\n"
+	"activity_no_data_timeout=60\n"
 	"socket_host=\n"
 	"socket_port=\n"
 	"echo=false\n"
