@@ -1,7 +1,8 @@
 /* Indicateur d'activité d'un port : voir activity_icon.h. Les indicateurs sont superposés dans un GtkOverlay de taille fixe et un seul est
  * opaque : changer d'indicateur ne change ni la visibilité ni la taille d'un widget. Une GtkStack (changement d'enfant visible) dans l'étiquette
  * d'un onglet d'un GtkNotebook défilable fait allouer ses flèches de défilement à une largeur nulle (avertissements « Trying to measure
- * GtkImage … for width of 0 », vu avec GTK 4.24). */
+ * GtkImage … for width of 0 », vu avec GTK 4.24). L'overlay a le rôle accessible « image » et porte le nom de l'état ; les indicateurs
+ * sont cachés à l'accessibilité (sinon un lecteur d'écran lirait « Z z z »). */
 #include <config.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
@@ -9,7 +10,7 @@
 #include "activity_icon.h"
 
 #define ICON_KEY "gt-activity-icon"
-#define SPIN_FRAME_US 66000	/* ≈ 15 images par seconde */
+#define SPIN_FRAME_MS 66	/* ≈ 15 images par seconde */
 #define SPIN_PERIOD_US 900000	/* un tour */
 #define ZZZ_STEP_MS 800
 
@@ -17,12 +18,11 @@ typedef struct
 {
 	GtkWidget *overlay;	/* le widget rendu (non possédé) */
 	GtPortActivity *activity;	/* référence */
-	GtkWidget *spinner;	/* référence : son rappel par image est retiré à la destruction, même si l'overlay l'a déjà détaché */
+	GtkWidget *spinner;	/* référence : sa fonction de dessin est retirée à la destruction, même si l'overlay l'a déjà détaché */
 	GtkWidget *dot, *skull, *zzz;	/* superposés : un seul opaque (aucun pour l'état fermé) */
 	GtkWidget *z[3];
 	GtPortActivityState state;
-	guint tick_id;
-	gint64 last_frame_us;
+	guint spin_id;
 	gdouble angle;
 	guint zzz_id;
 	gint zzz_step;
@@ -61,18 +61,19 @@ static void draw_spinner(GtkDrawingArea *area, cairo_t *cr, int w, int h, gpoint
 	cairo_stroke(cr);
 }
 
-/* Rotation : redessin limité à SPIN_FRAME_US (un serveur en attente affiché tourne indéfiniment) */
-static gboolean on_spin_tick(GtkWidget *widget, GdkFrameClock *clock, gpointer data)
+static void spin_angle_update(ActivityIcon *icon)
+{
+	icon->angle = (gdouble)(g_get_monotonic_time() % SPIN_PERIOD_US) / SPIN_PERIOD_US * 2 * G_PI;
+}
+
+/* Rotation : une minuterie de SPIN_FRAME_MS plutôt qu'un rappel par image (≈ 60 réveils par seconde pour 15 redessins) ; un serveur en
+ * attente affiché tourne indéfiniment. Angle tiré de l'horloge monotone : un réveil en retard ne ralentit pas la rotation. */
+static gboolean on_spin_step(gpointer data)
 {
 	ActivityIcon *icon = data;
-	gint64 now = gdk_frame_clock_get_frame_time(clock);
 
-	if(now - icon->last_frame_us >= SPIN_FRAME_US)
-	{
-		icon->last_frame_us = now;
-		icon->angle = (gdouble)(now % SPIN_PERIOD_US) / SPIN_PERIOD_US * 2 * G_PI;
-		gtk_widget_queue_draw(widget);
-	}
+	spin_angle_update(icon);
+	gtk_widget_queue_draw(icon->spinner);
 	return G_SOURCE_CONTINUE;
 }
 
@@ -98,16 +99,14 @@ static void update_animations(ActivityIcon *icon)
 	gboolean spin = mapped && (icon->state == GT_PORT_ACTIVITY_CONNECTING || icon->state == GT_PORT_ACTIVITY_RECONNECTING);
 	gboolean zzz = mapped && icon->state == GT_PORT_ACTIVITY_IDLE;
 
-	if(spin && icon->tick_id == 0)
+	if(spin && icon->spin_id == 0)
 	{
-		icon->last_frame_us = 0;
-		icon->tick_id = gtk_widget_add_tick_callback(icon->spinner, on_spin_tick, icon, NULL);
+		spin_angle_update(icon);
+		gtk_widget_queue_draw(icon->spinner);
+		icon->spin_id = g_timeout_add(SPIN_FRAME_MS, on_spin_step, icon);
 	}
-	else if(!spin && icon->tick_id != 0)
-	{
-		gtk_widget_remove_tick_callback(icon->spinner, icon->tick_id);
-		icon->tick_id = 0;
-	}
+	else if(!spin)
+		g_clear_handle_id(&icon->spin_id, g_source_remove);
 	if(zzz && icon->zzz_id == 0)
 	{
 		icon->zzz_step = 0;
@@ -189,8 +188,7 @@ static void on_destroy(GtkWidget *widget, gpointer data)
 	ActivityIcon *icon = data;
 
 	g_clear_handle_id(&icon->zzz_id, g_source_remove);
-	if(icon->tick_id != 0)
-		gtk_widget_remove_tick_callback(icon->spinner, icon->tick_id);
+	g_clear_handle_id(&icon->spin_id, g_source_remove);
 	gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(icon->spinner), NULL, NULL, NULL);
 	g_object_unref(icon->spinner);
 	g_signal_handlers_disconnect_by_data(icon->activity, icon);
@@ -208,7 +206,7 @@ GtkWidget *gt_activity_icon_new(GtPortActivity *activity, const char *name)
 
 	icon->activity = g_object_ref(activity);
 	icon->state = GT_PORT_ACTIVITY_CLOSED;
-	icon->overlay = gtk_overlay_new();
+	icon->overlay = g_object_new(GTK_TYPE_OVERLAY, "accessible-role", GTK_ACCESSIBLE_ROLE_IMG, NULL);
 	gtk_widget_set_name(icon->overlay, name);
 	gtk_widget_add_css_class(icon->overlay, "activity-icon");
 	gtk_widget_set_valign(icon->overlay, GTK_ALIGN_CENTER);
@@ -254,6 +252,12 @@ GtkWidget *gt_activity_icon_new(GtPortActivity *activity, const char *name)
 		g_free(cls);
 	}
 	gtk_overlay_add_overlay(GTK_OVERLAY(icon->overlay), icon->zzz);
+	{
+		GtkWidget *hidden[5] = { base, icon->dot, icon->spinner, icon->skull, icon->zzz };	/* seul le nom de l'état est exposé */
+
+		for(guint i = 0; i < G_N_ELEMENTS(hidden); i++)
+			gtk_accessible_update_state(GTK_ACCESSIBLE(hidden[i]), GTK_ACCESSIBLE_STATE_HIDDEN, TRUE, -1);
+	}
 
 	g_object_set_data(G_OBJECT(icon->overlay), ICON_KEY, icon);
 	g_signal_connect(activity, "notify::state", G_CALLBACK(on_state), icon);	/* déconnecté par on_destroy */
