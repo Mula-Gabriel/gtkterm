@@ -509,12 +509,27 @@ static void on_activate(GApplication *app, gpointer user_data)
 	g_signal_connect(gt_app.main_window, "close-request", G_CALLBACK(on_main_close_request), NULL);
 	gt_app.notebook = GTK_WIDGET(gt_main_window_get_notebook(gt_app.main_window));
 	g_object_add_weak_pointer(G_OBJECT(gt_app.notebook), (gpointer *)&gt_app.notebook);
-	/* Étiquette d'un onglet dont la liaison est perdue : en italique */
+	/* Indicateurs d'activité des ports (activity_icon.c) ; onglet muet grisé, onglet non lu en gras. Couleurs fixes : @accent_color n'existe
+	 * pas dans tous les thèmes */
 	css = gtk_css_provider_new();
-	gtk_css_provider_load_from_string(css, ".lost label { font-style: italic; }");
+	gtk_css_provider_load_from_string(css,
+		".activity-dot { min-width: 8px; min-height: 8px; border-radius: 9999px; border: 1px solid alpha(currentColor, 0.4); }\n"
+		".activity-dot.receiving { background-color: #2ec27e; border-color: #2ec27e; }\n"
+		".activity-dot.lost { background-color: #e01b24; border-color: #e01b24; }\n"
+		".activity-spinner.connecting { color: #3584e4; }\n"
+		".activity-spinner.reconnecting { color: #e01b24; }\n"
+		".activity-zzz { color: #3584e4; font-weight: 800; }\n"
+		".activity-zzz .z1 { font-size: 10px; }\n"
+		".activity-zzz .z2 { font-size: 8px; }\n"
+		".activity-zzz .z3 { font-size: 6px; }\n"
+		".dead #tab-name { opacity: 0.55; }\n"
+		".unread #tab-name { font-weight: bold; }\n");
 	gtk_style_context_add_provider_for_display(gtk_widget_get_display(gt_app.main_window), GTK_STYLE_PROVIDER(css),
 	                                           GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 	g_object_unref(css);
+	/* Tête de mort symbolique (recolorée) : icons/scalable/actions/ de la ressource */
+	gtk_icon_theme_add_resource_path(gtk_icon_theme_get_for_display(gtk_widget_get_display(gt_app.main_window)),
+	                                 "/eu/mulagabriel/gtkterm/ui/icons");
 
 	/* Page de la session : terminal, barres, panneaux, raccourcis de macros, actions de page ; séparateurs et visibilités de [window],
 	 * disposition du panneau de script de [layout] et [session] (première page) */

@@ -17,6 +17,7 @@ src/script_engine.c
 src/session.c
 src/transport.c
 src/ui/about.c
+src/ui/activity_icon.c
 src/ui/app.c
 src/ui/dialogs.c
 src/ui/file_actions.c
