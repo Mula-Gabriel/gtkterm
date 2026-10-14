@@ -43,8 +43,10 @@ void           gt_macros_replace_set     (GtMacros *m, GtMacroSet *set);
 /* Modifications de la fenêtre d'édition (OK) appliquées au jeu courant (gt_macro_set_apply_edits) ; une macro dont les valeurs par défaut changent
  * perd ses valeurs d'usage. Ni reconstruction ni enregistrement : à l'appelant (gt_macros_changed, enregistrement). */
 void           gt_macros_apply_edits     (GtMacros *m, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists);
-/* Envoi de macro de l'interface (clic, raccourci, polling) sur la liaison de m ; n_args < 0 : arguments enregistrés. Macro inconnue ou non envoyable,
- * ou m arrêté : FALSE, rien n'est envoyé. TRUE si tous les octets ont été écrits. Au moins un octet écrit : « Macro "…" sent! » (status_flash(owner)). */
+/* Envoi de macro de l'interface (clic, raccourci, polling) sur la liaison de m ; n_args < 0 : arguments résolus (gt_macros_get_args). Macro inconnue
+ * ou non envoyable, m arrêté, ou argument refusé par gt_macros_check_args : FALSE, rien n'est envoyé. TRUE si tous les octets ont été écrits. Au moins un
+ * octet écrit : « Macro "…" sent! » (status_flash(owner)). Argument refusé : « Macro "…" not sent: argument N: raison » (3 s), au plus une fois toutes
+ * les 3 s par macro (délai remis à zéro par un changement des valeurs d'usage ou du jeu) ; gt_macros_send_quiet n'affiche aucun des deux. */
 gboolean       gt_macros_send            (GtMacros *m, guint id, const gchar *const *args, gint n_args);
 gboolean       gt_macros_send_quiet      (GtMacros *m, guint id, const gchar *const *args, gint n_args);	/* moteur Lua : sans message */
 /* NULL : chemin courant (ou défaut). Fichier absent : jeu vide, TRUE. Fichier illisible : FALSE ; interactif (menu), message, jeu et chemin inchangés ;
@@ -67,8 +69,16 @@ void           gt_macros_changed         (GtMacros *m);	/* crochet macros_change
 void                gt_macros_set_usage_arg  (GtMacros *m, guint id, gint arg_index, const gchar *value);	/* initialisées depuis les défauts */
 void                gt_macros_reset_usage    (GtMacros *m, guint id);	/* id 0 : toutes */
 gboolean            gt_macros_has_usage      (GtMacros *m, guint id);
-/* Arguments d'envoi : valeurs d'usage si elles existent et ont le bon nombre, sinon GtMacro.args (défauts), sinon NULL. Empruntés. */
+/* Arguments d'envoi résolus argument par argument (spec arguments §2.7) : valeur d'usage non vide, sinon défaut, sinon "". Un vecteur d'usage de
+ * mauvaise longueur est ignoré en entier. NULL : macro inconnue, ou ni défaut (GtMacro.args NULL) ni valeur d'usage non vide (l'action part alors
+ * avec ses spécificateurs). Vecteur possédé par m, valable jusqu'au prochain appel pour cette macro ou au prochain changement du jeu ou des valeurs
+ * d'usage. */
 const gchar *const *gt_macros_get_args       (GtMacros *m, guint id);
+/* Valeurs d'usage brutes ("" : champ vide) ; NULL si aucune ou de mauvaise longueur. Empruntées (même durée que gt_macros_get_args). */
+const gchar *const *gt_macros_get_usage      (GtMacros *m, guint id);
+/* Vérifie les arguments (gt_macro_check_args, limites de la macro) ; n_args < 0 : arguments résolus. -1 : valides, ou macro inconnue ; sinon rang (0..)
+ * du premier argument refusé et *reason (peut être NULL) = raison traduite (g_free), NULL quand -1. */
+gint                gt_macros_check_args     (GtMacros *m, guint id, const gchar *const *args, gint n_args, gchar **reason);
 /* Mode intégré (onglet de projet, spec §3.2-4) : chemin oublié ; load/save visent alors un fichier sans le retenir (import/export). */
 void                gt_macros_set_embedded   (GtMacros *m, gboolean embedded);
 gboolean            gt_macros_is_embedded    (GtMacros *m);

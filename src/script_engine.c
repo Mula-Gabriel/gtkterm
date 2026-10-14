@@ -1352,6 +1352,7 @@ typedef struct {
     gchar      **args;
     gboolean     found;
     gboolean     ok;
+    gboolean     invalid;   /* argument refusé (limites de la macro) : rien n'est envoyé */
 } MainMacroData;
 
 /* Résolution et envoi sur le thread principal, par l'envoi de macro de l'application sans message (macros_send_quiet : pas de
@@ -1363,6 +1364,7 @@ static gboolean main_send_macro_cb(gpointer user_data)
 
     d->found = FALSE;
     d->ok = FALSE;
+    d->invalid = FALSE;
     /* Arrêt demandé (« Stop », fermeture de l'onglet ou de GTKTerm, fenêtre peut-être détruite, moteur peut-être abandonné et ses
      * macros libérées) : macros jamais lues, plus aucun envoi, même déjà demandé ; l_send_macro lève alors l'erreur d'arrêt */
     if (g_atomic_int_get(&d->e->stop_requested))
@@ -1371,8 +1373,14 @@ static gboolean main_send_macro_cb(gpointer user_data)
     const GtMacro *m = d->index >= 0 ? gt_macro_set_get(set, (guint)d->index) : gt_macro_set_find_label(set, d->label);
 
     d->found = gt_macro_is_sendable(m);
-    if (d->found)
-        d->ok = gt_macros_send_quiet(d->e->macros, m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
+    if (!d->found)
+        return G_SOURCE_REMOVE;
+    /* Arguments du script, à défaut les arguments résolus, vérifiés avant tout envoi (spec arguments §2.8) */
+    if (gt_macros_check_args(d->e->macros, m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1, NULL) >= 0) {
+        d->invalid = TRUE;
+        return G_SOURCE_REMOVE;
+    }
+    d->ok = gt_macros_send_quiet(d->e->macros, m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
     return G_SOURCE_REMOVE;
 }
 
@@ -1380,7 +1388,7 @@ static gboolean main_send_macro_cb(gpointer user_data)
 static int l_send_macro(lua_State *L)
 {
     GtScriptEngine *e = engine_of(L);
-    MainMacroData d = { e, -1, NULL, 0, NULL, FALSE, FALSE };
+    MainMacroData d = { e, -1, NULL, 0, NULL, FALSE, FALSE, FALSE };
 
     if (lua_type(L, 1) == LUA_TNUMBER) {
         /* luaL_checkinteger refuse 1.5 ; hors 0..G_MAXINT : jamais tronqué en int, simplement introuvable (M4) */
@@ -1399,8 +1407,18 @@ static int l_send_macro(lua_State *L)
     d.n_args = lua_gettop(L) - 1;
     d.args = g_new0(gchar *, d.n_args + 1);
     for (int i = 0; i < d.n_args; i++) {
-        const char *s = lua_tostring(L, i + 2);
-        d.args[i] = g_strdup(s ? s : "");
+        int is_integer = 0;
+        lua_Integer value = 0;
+
+        /* Nombre Lua à valeur entière (5.0) : passé sous forme entière (« 5 »), comme strtol l'acceptait avant la vérification des arguments */
+        if (lua_type(L, i + 2) == LUA_TNUMBER)
+            value = lua_tointegerx(L, i + 2, &is_integer);
+        if (is_integer) {
+            d.args[i] = g_strdup_printf("%lld", (long long)value);
+        } else {
+            const char *s = lua_tostring(L, i + 2);
+            d.args[i] = g_strdup(s ? s : "");
+        }
     }
 
     run_on_main_sync(e, main_send_macro_cb, &d);
@@ -1411,6 +1429,11 @@ static int l_send_macro(lua_State *L)
     if (!d.found) {
         lua_pushboolean(L, 0);
         lua_pushstring(L, "macro not found");
+        return 2;
+    }
+    if (d.invalid) {
+        lua_pushboolean(L, 0);
+        lua_pushstring(L, "invalid argument");
         return 2;
     }
     lua_pushboolean(L, d.ok);

@@ -512,6 +512,134 @@ test_usage_nombre_change(void)
 	desinstaller();
 }
 
+/* §2.7 : champ d'usage vide = valeur par défaut ; vecteur résolu champ par champ */
+static void
+test_champ_vide_defaut(void)
+{
+	guint id = installer_macro_n();
+	const gchar *const *args, *const *usage;
+
+	gt_macros_set_usage_arg(macros, id, 0, "");
+	usage = gt_macros_get_usage(macros, id);
+	g_assert_nonnull(usage);
+	g_assert_cmpstr(usage[0], ==, "");
+	args = gt_macros_get_args(macros, id);
+	g_assert_nonnull(args);
+	g_assert_cmpstr(args[0], ==, "5");
+	verifier_envoi(id, "N5;");
+	gt_macros_set_usage_arg(macros, id, 0, "8");
+	verifier_envoi(id, "N8;");
+	g_assert_cmpstr(gt_macros_get_args(macros, id)[0], ==, "8");
+	gt_macros_reset_usage(macros, id);
+	g_assert_null(gt_macros_get_usage(macros, id));
+	g_assert_cmpstr(gt_macros_get_args(macros, id)[0], ==, "5");
+	desinstaller();
+}
+
+/* Résolution par argument : usage non vide, sinon défaut, sinon "" */
+static void
+test_resolution_par_argument(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint id = gt_macro_set_append(set, "D", NULL, "D%d,%s,%d;", "");
+	const gchar *const defauts[] = { "1", "", "3", NULL };
+	const gchar *const *args;
+
+	g_assert_true(gt_macro_set_set_args(set, id, defauts, 3));
+	gt_macros_replace_set(macros, set);
+	gt_macros_set_usage_arg(macros, id, 1, "x");
+	args = gt_macros_get_args(macros, id);
+	g_assert_cmpstr(args[0], ==, "1");
+	g_assert_cmpstr(args[1], ==, "x");
+	g_assert_cmpstr(args[2], ==, "3");
+	g_assert_null(args[3]);
+	verifier_envoi(id, "D1,x,3;");
+	desinstaller();
+}
+
+/* Sans défaut ni valeur d'usage : NULL, l'action part avec ses spécificateurs */
+static void
+test_sans_defaut_ni_usage(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint id = gt_macro_set_append(set, "W", NULL, "W%d;", "");
+
+	gt_macros_replace_set(macros, set);
+	g_assert_null(gt_macros_get_args(macros, id));
+	g_assert_null(gt_macros_get_usage(macros, id));
+	verifier_envoi(id, "W%d;");
+	/* Champ vidé : toujours aucune valeur, comme sans usage */
+	gt_macros_set_usage_arg(macros, id, 0, "");
+	g_assert_null(gt_macros_get_args(macros, id));
+	verifier_envoi(id, "W%d;");
+	gt_macros_set_usage_arg(macros, id, 0, "7");
+	verifier_envoi(id, "W7;");
+	desinstaller();
+}
+
+/* Vecteur d'usage de mauvaise longueur (action changée sans gt_macros_apply_edits) : ignoré en entier */
+static void
+test_usage_mauvaise_longueur(void)
+{
+	guint id = installer_macro_n();
+	const gchar *const deux[] = { "1", "2", NULL };
+	GtMacroEdit ligne = { .id = id, .label = "N", .shortcut = "", .action = "N%d %d;", .tab = "", .args = deux };
+	const gchar *const *args;
+
+	gt_macros_set_usage_arg(macros, id, 0, "9");
+	gt_macro_set_apply_edits(gt_macros_get_set(macros), &ligne, 1, NULL);
+	g_assert_true(gt_macros_has_usage(macros, id));
+	g_assert_null(gt_macros_get_usage(macros, id));
+	args = gt_macros_get_args(macros, id);
+	g_assert_cmpstr(args[0], ==, "1");
+	g_assert_cmpstr(args[1], ==, "2");
+	verifier_envoi(id, "N1 2;");
+	desinstaller();
+}
+
+/* §2.8 : hors limites, rien n'est écrit ; un seul message par macro en 3 s ; send_quiet sans message */
+static void
+test_refus_hors_limites(void)
+{
+	guint id = installer_macro_n();
+	const gchar *const vide[] = { "", NULL }, *const dix[] = { "10", NULL };
+	const gchar *const cinquante[] = { "50", NULL };
+	gchar *raison = NULL;
+
+	g_assert_cmpint(gt_macro_set_set_limits(gt_macros_get_set(macros), id, vide, dix, vide, 1), ==, 0);
+	g_assert_cmpint(gt_macros_check_args(macros, id, NULL, -1, &raison), ==, -1);
+	g_assert_null(raison);
+	gt_macros_set_usage_arg(macros, id, 0, "50");
+	g_assert_cmpint(gt_macros_check_args(macros, id, NULL, -1, &raison), ==, 0);
+	g_assert_cmpstr(raison, ==, "above maximum 10");
+	g_free(raison);
+	g_assert_cmpint(gt_macros_check_args(macros, 9999, NULL, -1, NULL), ==, -1);
+	g_assert_cmpint(gt_macros_check_args(macros, id, dix, 1, NULL), ==, -1);
+
+	stub_reset();
+	g_assert_false(gt_macros_send(macros, id, NULL, -1));
+	g_assert_cmpuint(stub_sent()->len, ==, 0);
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	g_assert_cmpstr(stub_last("status_flash"), ==, "Macro \"N\" not sent: argument 1: above maximum 10");
+	/* Polling rapide : pas de second message dans les 3 s */
+	g_assert_false(gt_macros_send(macros, id, NULL, -1));
+	g_assert_false(gt_macros_send(macros, id, cinquante, 1));
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	g_assert_false(gt_macros_send_quiet(macros, id, cinquante, 1));
+	g_assert_cmpuint(stub_sent()->len, ==, 0);
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	/* Valeur d'usage changée : le délai repart de zéro pour cette macro */
+	gt_macros_set_usage_arg(macros, id, 0, "60");
+	g_assert_false(gt_macros_send(macros, id, NULL, -1));
+	g_assert_cmpint(stub_count("status_flash"), ==, 2);
+	/* Champ vidé : défaut 5, envoyé */
+	gt_macros_set_usage_arg(macros, id, 0, "");
+	stub_reset();
+	g_assert_true(gt_macros_send(macros, id, NULL, -1));
+	g_assert_cmpuint(stub_sent()->len, ==, 3);
+	desinstaller();
+}
+
 /* Application des modifications de l'éditeur (OK de Configure Macros) : une macro dont les valeurs par défaut changent perd ses valeurs d'usage
  * (sinon elles masqueraient la nouvelle valeur par défaut) ; une macro dont les valeurs par défaut ne changent pas les garde. */
 static void
@@ -708,6 +836,11 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_send/usage-efface-au-remplacement", test_usage_efface_au_remplacement);
 	g_test_add_func("/macros_send/usage-nombre-change", test_usage_nombre_change);
 	g_test_add_func("/macros_send/editeur-efface-usage", test_editeur_efface_usage);
+	g_test_add_func("/macros_send/champ-vide-defaut", test_champ_vide_defaut);
+	g_test_add_func("/macros_send/resolution-par-argument", test_resolution_par_argument);
+	g_test_add_func("/macros_send/sans-defaut-ni-usage", test_sans_defaut_ni_usage);
+	g_test_add_func("/macros_send/usage-mauvaise-longueur", test_usage_mauvaise_longueur);
+	g_test_add_func("/macros_send/refus-hors-limites", test_refus_hors_limites);
 	g_test_add_func("/macros_send/integre-aucune-ecriture", test_integre_aucune_ecriture);
 	g_test_add_func("/macros_send/conflit", test_conflit);
 	g_test_add_func("/macros_send/defaut-existant-conflit", test_defaut_existant_conflit);

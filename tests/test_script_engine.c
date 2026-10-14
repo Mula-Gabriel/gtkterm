@@ -261,6 +261,28 @@ test_send_macro_arguments(void)
 	g_assert_cmpint(stub_count("macros_send"), ==, 0);
 }
 
+/* §2.8 : argument hors limites → false, "invalid argument", rien n'est envoyé ; nombre Lua entier 5.0 passé comme 5 */
+static void
+test_send_macro_argument_invalide(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint l = gt_macro_set_append(set, "L", "", "L%d;", "");
+	const gchar *const vide[] = { "", NULL }, *const dix[] = { "10", NULL };
+	GByteArray *octets;
+
+	g_assert_true(gt_macro_set_set_arg(set, l, 0, "1"));
+	g_assert_cmpint(gt_macro_set_set_limits(set, l, vide, dix, vide, 1), ==, 0);
+	stub_macros_set_set(stub_macros_default(), set);
+	stub_reset();
+	g_assert_true(executer("local ok, err = gtkterm.send_macro('L', 50)\n"
+	                       "gtkterm.log(tostring(ok) .. ' ' .. tostring(err))\n"
+	                       "assert(gtkterm.send_macro('L', 5.0))\n"
+	                       "assert(gtkterm.send_macro('L'))\n", 5000));
+	g_assert_nonnull(strstr(journal->str, "false invalid argument"));
+	octets = stub_sent();
+	g_assert_cmpmem(octets->data, octets->len, "L5;L1;", 6);
+}
+
 /* ---- M26 : wait_for binaire ------------------------------------------- */
 
 static gboolean
@@ -2135,6 +2157,7 @@ main(int argc, char **argv)
 	g_test_add_func("/script_engine/macro-absente", test_macro_absente);
 	g_test_add_func("/script_engine/get-lists", test_get_lists);
 	g_test_add_func("/script_engine/send-macro-arguments", test_send_macro_arguments);
+	g_test_add_func("/script_engine/send-macro-argument-invalide", test_send_macro_argument_invalide);
 	g_test_add_func("/script_engine/wait-for-binaire", test_wait_for_binaire);
 	g_test_add_func("/script_engine/pair-tcp-ferme", test_pair_tcp_ferme);
 	g_test_add_func("/script_engine/executions-successives", test_executions_successives);

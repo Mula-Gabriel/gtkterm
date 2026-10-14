@@ -39,6 +39,8 @@ struct _GtMacros
   gchar *last_save_error;	/* dernier échec d'enregistrement signalé (chemin, domaine, code) : un seul message par échec */
   gboolean shut_down;
   GHashTable *usage;		/* id → gchar ** (possédés) : valeurs d'usage des arguments, jamais enregistrées */
+  GHashTable *resolved;		/* id → gchar ** (possédés) : dernier vecteur rendu par gt_macros_get_args */
+  GHashTable *refused_at;	/* id → gint64 * (possédés) : heure monotone du dernier message de refus */
   gboolean embedded;		/* onglet de projet : aucun fichier retenu */
   GtFileStamp stamp;		/* identité du fichier courant à sa dernière lecture ou écriture */
   void (*edited) (gpointer data);
@@ -70,6 +72,8 @@ gt_macros_new (GtkTermLink *link, GtSession *owner)
   m->owner = owner;
   m->set = gt_macro_set_new ();
   m->usage = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, (GDestroyNotify) g_strfreev);
+  m->resolved = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, (GDestroyNotify) g_strfreev);
+  m->refused_at = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
   m->poller = gt_macro_poller_new (m->set, poller_send, poller_state, m);
   return m;
 }
@@ -121,9 +125,13 @@ gt_macros_free (GtMacros *m)
   g_free (m->path);
   g_free (m->last_save_error);
   g_hash_table_unref (m->usage);
+  g_hash_table_unref (m->resolved);
+  g_hash_table_unref (m->refused_at);
   g_object_unref (m->link);
   g_free (m);
 }
+
+#define REFUSAL_FLASH_US (3 * G_USEC_PER_SEC)
 
 static gboolean
 send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboolean announce)
@@ -135,6 +143,8 @@ send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboole
   gsize len = 0;
   gssize written = 0;
   gchar *name;
+  gchar *reason = NULL;
+  gint bad = -1;
 
   if (m->shut_down || !gt_macro_is_sendable (macro))
     return FALSE;
@@ -145,6 +155,25 @@ send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboole
     {
       use_args = gt_macros_get_args (m, id);
       n_args = use_args != NULL ? (gint) g_strv_length ((gchar **) use_args) : 0;
+    }
+  /* Arguments hors limites (spec arguments §2.8) : rien n'est écrit ; un message au plus toutes les 3 s par macro (polling rapide) */
+  if (!gt_macro_check_args (m->set, macro, use_args, n_args, &bad, &reason))
+    {
+      gint64 now = g_get_monotonic_time ();
+      gint64 *last = g_hash_table_lookup (m->refused_at, GUINT_TO_POINTER (id));
+
+      if (announce && (last == NULL || now - *last >= REFUSAL_FLASH_US))
+        {
+          gint64 *stamp = g_new (gint64, 1);
+
+          *stamp = now;
+          g_hash_table_insert (m->refused_at, GUINT_TO_POINTER (id), stamp);
+          gt_app_status_flash (m->owner, 3000, _ ("Macro \"%s\" not sent: argument %d: %s"), name, bad + 1,
+                               reason != NULL ? reason : "");
+        }
+      g_free (reason);
+      g_free (name);
+      return FALSE;
     }
   bytes = gt_macro_expand (m->set, macro, use_args, n_args);
   data = g_bytes_get_data (bytes, &len);
@@ -211,18 +240,93 @@ gt_macros_is_embedded (GtMacros *m)
   return m->embedded;
 }
 
+/* Valeurs d'usage de la macro si elles ont le bon nombre (n = nombre d'arguments de son action), sinon NULL */
+static gchar **
+usage_of (GtMacros *m, const GtMacro *macro, gint n)
+{
+  gchar **usage = g_hash_table_lookup (m->usage, GUINT_TO_POINTER (macro->id));
+
+  if (usage == NULL || (gint) g_strv_length (usage) != n)
+    return NULL;
+  return usage;
+}
+
+/* Les entrées dérivées des valeurs d'usage ou du jeu (vecteur résolu, délai du message de refus) ; id 0 : toutes */
+static void
+forget_derived (GtMacros *m, guint id)
+{
+  if (id == 0)
+    {
+      g_hash_table_remove_all (m->resolved);
+      g_hash_table_remove_all (m->refused_at);
+    }
+  else
+    {
+      g_hash_table_remove (m->resolved, GUINT_TO_POINTER (id));
+      g_hash_table_remove (m->refused_at, GUINT_TO_POINTER (id));
+    }
+}
+
 const gchar *const *
 gt_macros_get_args (GtMacros *m, guint id)
 {
   const GtMacro *macro = gt_macro_set_find (m->set, id);
-  gchar **usage;
+  gchar **usage, **defaults, **out;
+  gboolean any_usage = FALSE;
+  gint n;
+
+  g_hash_table_remove (m->resolved, GUINT_TO_POINTER (id));
+  if (macro == NULL)
+    return NULL;
+  n = macro_count_format_args (gt_macro_set_get_lists (m->set), macro->action);
+  usage = usage_of (m, macro, n);
+  defaults = macro->args != NULL && (gint) g_strv_length (macro->args) == n ? macro->args : NULL;
+  for (gint i = 0; usage != NULL && i < n; i++)
+    if (usage[i][0] != '\0')
+      any_usage = TRUE;
+  /* Ni défaut ni valeur d'usage : l'action part avec ses spécificateurs (« V%d » envoie « V%d »), comme avant les valeurs d'usage */
+  if (defaults == NULL && !any_usage)
+    return NULL;
+  out = g_new0 (gchar *, n + 1);
+  for (gint i = 0; i < n; i++)
+    {
+      if (usage != NULL && usage[i][0] != '\0')
+        out[i] = g_strdup (usage[i]);
+      else
+        out[i] = g_strdup (defaults != NULL ? defaults[i] : "");
+    }
+  g_hash_table_insert (m->resolved, GUINT_TO_POINTER (id), out);
+  return (const gchar *const *) out;
+}
+
+const gchar *const *
+gt_macros_get_usage (GtMacros *m, guint id)
+{
+  const GtMacro *macro = gt_macro_set_find (m->set, id);
 
   if (macro == NULL)
     return NULL;
-  usage = g_hash_table_lookup (m->usage, GUINT_TO_POINTER (id));
-  if (usage != NULL && (gint) g_strv_length (usage) == macro_count_format_args (gt_macro_set_get_lists (m->set), macro->action))
-    return (const gchar *const *) usage;
-  return (const gchar *const *) macro->args;
+  return (const gchar *const *) usage_of (m, macro, macro_count_format_args (gt_macro_set_get_lists (m->set), macro->action));
+}
+
+gint
+gt_macros_check_args (GtMacros *m, guint id, const gchar *const *args, gint n_args, gchar **reason)
+{
+  const GtMacro *macro = gt_macro_set_find (m->set, id);
+  gint index = -1;
+
+  if (reason != NULL)
+    *reason = NULL;
+  if (macro == NULL)
+    return -1;
+  if (n_args < 0)
+    {
+      args = gt_macros_get_args (m, id);
+      n_args = args != NULL ? (gint) g_strv_length ((gchar **) args) : 0;
+    }
+  if (gt_macro_check_args (m->set, macro, args, n_args, &index, reason))
+    return -1;
+  return index;
 }
 
 void
@@ -250,6 +354,7 @@ gt_macros_set_usage_arg (GtMacros *m, guint id, gint arg_index, const gchar *val
     }
   g_free (usage[arg_index]);
   usage[arg_index] = g_strdup (value != NULL ? value : "");
+  forget_derived (m, id);
 }
 
 void
@@ -259,6 +364,7 @@ gt_macros_reset_usage (GtMacros *m, guint id)
     g_hash_table_remove_all (m->usage);
   else
     g_hash_table_remove (m->usage, GUINT_TO_POINTER (id));
+  forget_derived (m, id);
 }
 
 gboolean
@@ -280,6 +386,7 @@ gt_macros_replace_set (GtMacros *m, GtMacroSet *set)
   m->set = set;
   gt_macro_set_free (old);
   g_hash_table_remove_all (m->usage);
+  forget_derived (m, 0);
   /* Panneau et raccourcis reconstruits par l'interface ; une fenêtre d'édition ouverte sur l'ancien jeu s'y ferme sans enregistrer
      (ses lignes décrivent l'ancien jeu : les appliquer au nouveau perdrait arguments et polling) */
   gt_macros_changed (m);
@@ -318,6 +425,7 @@ gt_macros_apply_edits (GtMacros *m, const GtMacroEdit *rows, guint n_rows, GtMac
         g_hash_table_iter_remove (&iter);
     }
   g_hash_table_unref (before);
+  forget_derived (m, 0);
 }
 
 const gchar *
