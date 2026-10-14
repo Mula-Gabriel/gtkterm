@@ -20,6 +20,8 @@ void gt_port_form_from_profile(GtPortForm *f, const GtProfile *p)
 	f->host = g_strdup((p->host != NULL && p->host[0] != '\0') ? p->host : GT_PORT_FORM_DEFAULT_HOST);
 	f->tcp_port = g_strdup((p->tcp_port != NULL && p->tcp_port[0] != '\0') ? p->tcp_port : GT_PORT_FORM_DEFAULT_TCP_PORT);
 	f->wait_delay_ms = CLAMP(p->wait_delay_ms, 0, GT_PORT_FORM_DELAY_MAX);
+	f->idle_timeout_s = CLAMP(p->idle_timeout_s, 0, GT_PROFILE_ACTIVITY_MAX);
+	f->no_data_timeout_s = CLAMP(p->no_data_timeout_s, 0, GT_PROFILE_ACTIVITY_MAX);
 	f->wait_char_enabled = p->wait_char >= 0 && p->wait_char <= 255;
 	if(p->wait_char >= 1 && p->wait_char <= 127)
 		f->wait_char = g_strdup_printf("%c", (char)p->wait_char);
@@ -120,6 +122,11 @@ gboolean gt_port_form_apply(const GtPortForm *f, const GtProfile *base, GtProfil
 		}
 		wait_char = (guchar)c[0];
 	}
+	if(f->idle_timeout_s < 0 || f->idle_timeout_s > GT_PROFILE_ACTIVITY_MAX || f->no_data_timeout_s < 0 || f->no_data_timeout_s > GT_PROFILE_ACTIVITY_MAX)
+	{
+		g_set_error(error, GT_PORT_FORM_ERROR, GT_PORT_FORM_ERROR_ACTIVITY, _("Activity delays must be between 0 and %d s."), GT_PROFILE_ACTIVITY_MAX);
+		goto out;
+	}
 
 	gt_profile_copy(out, base);
 	out->transport = f->transport;
@@ -144,6 +151,8 @@ gboolean gt_port_form_apply(const GtPortForm *f, const GtProfile *base, GtProfil
 	}
 	out->wait_char = wait_char;
 	out->wait_delay_ms = wait_char >= 0 ? 0 : f->wait_delay_ms;
+	out->idle_timeout_s = f->idle_timeout_s;
+	out->no_data_timeout_s = f->no_data_timeout_s;
 	ok = TRUE;
 out:
 	g_free(device);

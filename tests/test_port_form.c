@@ -228,6 +228,47 @@ test_attente(void)
 	gt_profile_clear(&base);
 }
 
+static void
+test_delais_activite(void)
+{
+	GtProfile base, out = { 0 };
+	GtPortForm f;
+	GError *error = NULL;
+
+	profil_defaut(&base);
+	base.idle_timeout_s = 0;
+	base.no_data_timeout_s = 120;
+	gt_port_form_from_profile(&f, &base);
+	g_assert_cmpint(f.idle_timeout_s, ==, 0);
+	g_assert_cmpint(f.no_data_timeout_s, ==, 120);
+	gt_port_form_clear(&f);
+
+	base.idle_timeout_s = 5000;	/* hors plage dans le fichier : borné à l'affichage */
+	gt_port_form_from_profile(&f, &base);
+	g_assert_cmpint(f.idle_timeout_s, ==, 3600);
+
+	f.idle_timeout_s = 7;
+	f.no_data_timeout_s = 30;
+	g_assert_true(gt_port_form_apply(&f, &base, &out, &error));
+	g_assert_cmpint(out.idle_timeout_s, ==, 7);
+	g_assert_cmpint(out.no_data_timeout_s, ==, 30);
+	f.transport = TRANSPORT_TCP_CLIENT;
+	gt_profile_set_string(&f.host, "localhost");
+	gt_profile_set_string(&f.tcp_port, "80");
+	out.idle_timeout_s = 1;
+	g_assert_true(gt_port_form_apply(&f, &base, &out, &error));
+	g_assert_cmpint(out.idle_timeout_s, ==, 7);
+	g_assert_cmpint(out.no_data_timeout_s, ==, 30);
+
+	f.idle_timeout_s = 3601;
+	out.idle_timeout_s = 1;
+	refuse(&f, &out, GT_PORT_FORM_ERROR_ACTIVITY);
+	g_assert_cmpint(out.idle_timeout_s, ==, 1);	/* sortie inchangée */
+	gt_port_form_clear(&f);
+	gt_profile_clear(&out);
+	gt_profile_clear(&base);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -237,5 +278,6 @@ main(int argc, char **argv)
 	g_test_add_func("/port-form/refus-serie", test_refus_serie);
 	g_test_add_func("/port-form/tcp", test_tcp);
 	g_test_add_func("/port-form/attente", test_attente);
+	g_test_add_func("/port-form/delais-activite", test_delais_activite);
 	return g_test_run();
 }

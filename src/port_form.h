@@ -21,7 +21,8 @@ typedef enum
 	GT_PORT_FORM_ERROR_HOST,	/* client TCP sans hôte */
 	GT_PORT_FORM_ERROR_TCP_PORT,	/* port TCP qui n'est pas un entier de 1 à 65535 */
 	GT_PORT_FORM_ERROR_DELAY,	/* délai hors de 0 à GT_PORT_FORM_DELAY_MAX ms */
-	GT_PORT_FORM_ERROR_WAIT_CHAR	/* attente cochée sans exactement un caractère ASCII */
+	GT_PORT_FORM_ERROR_WAIT_CHAR,	/* attente cochée sans exactement un caractère ASCII */
+	GT_PORT_FORM_ERROR_ACTIVITY	/* délai d'activité hors de 0 à GT_PROFILE_ACTIVITY_MAX s */
 } GtPortFormError;
 GQuark gt_port_form_error_quark(void);
 
@@ -41,10 +42,12 @@ typedef struct
 	gchar *wait_char;	/* texte saisi (UTF-8) */
 	gint rs485_before_ms;
 	gint rs485_after_ms;
+	gint idle_timeout_s;
+	gint no_data_timeout_s;
 } GtPortForm;
 
 /* f non initialisé (ou vidé par gt_port_form_clear). Valeurs affichées : hôte « localhost » et port « 2323 » si le profil n'en a pas, débit 115200 si le
- * profil vaut 0, bits et bits de stop hors plage ramenés à 8 et 1, délais bornés à 0-500 ; attente : cochée si wait_char ≥ 0, texte = le caractère s'il
+ * profil vaut 0, bits et bits de stop hors plage ramenés à 8 et 1, délais bornés à 0-500, délais d'activité bornés à 0-3600 ; attente : cochée si wait_char ≥ 0, texte = le caractère s'il
  * est ASCII imprimable ou espace (1-127), vide sinon (OK la refusera). Le profil n'est jamais modifié. */
 void     gt_port_form_from_profile(GtPortForm *f, const GtProfile *p);
 void     gt_port_form_clear(GtPortForm *f);
