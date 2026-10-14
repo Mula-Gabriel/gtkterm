@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "macro_set.h"
+#include "macros_format.h"
 #include "test_util.h"
 
 static gchar *
@@ -539,6 +540,266 @@ test_limites(void)
 	gt_macro_set_free(set);
 }
 
+
+/* ---- Segments : les octets restent ceux de parse_macro_string(format_action_with_args()) ---- */
+
+typedef struct
+{
+	const gchar *action;
+	const gchar *arg1;	/* NULL : aucun argument */
+	const gchar *arg2;	/* NULL : au plus un argument */
+} cas_octets_t;
+
+/* Actions de test_macros_format.c (expansion), plus les échappements à cheval sur un argument. */
+static const cas_octets_t cas_octets[] =
+{
+	{ "V%d\\r", "42", NULL }, { "%hhd", "200", NULL }, { "%hhu", "300", NULL }, { "%hd", "70000", NULL },
+	{ "%u", "-1", NULL }, { "%lu", "-1", NULL }, { "%d", "-5", NULL }, { "%+d", "5", NULL }, { "%-5d|", "5", NULL },
+	{ "%i", "42", NULL }, { "%d", "12abc", NULL }, { "%d", "", NULL }, { "%x", "255", NULL }, { "%X", "255", NULL },
+	{ "%02X", "10", NULL }, { "%x", "0x1f", NULL }, { "%X", "0x1f", NULL }, { "%d", "0x10", NULL }, { "%u", "0x10", NULL },
+	{ "%d", "010", NULL }, { "%o", "010", NULL }, { "%x", "ff", NULL }, { "%x", "010", NULL }, { "%o", "8", NULL },
+	{ "%#x", "255", NULL }, { "%#08x", "255", NULL }, { "%#o", "8", NULL }, { "%f", "2.00000", NULL }, { "%f", "1e3", NULL },
+	{ "%f", "abc", NULL }, { "%.2f", "3.14159", NULL }, { "%5.1f", "2", NULL }, { "%lf", "2.50", NULL },
+	{ "%e", "1234.5", NULL }, { "%hf", "2.0", NULL }, { "%5s", "abc", NULL }, { "%s%s", "a", "b" },
+	{ "A\\r%sB", "x", NULL }, { "%s", "a\\b", NULL }, { "%s", "\\x41", NULL }, { "%s", "\\r", NULL },
+	{ "%s", "50%", NULL }, { "%5s", "a\\b", NULL }, { "%cn", "\\", NULL }, { "%c", "A", NULL }, { "%c", "", NULL },
+	{ "100%%", "1", NULL }, { "100%%", NULL, NULL }, { "%d %d", "1", NULL }, { "%d", NULL, NULL }, { "plain", NULL, NULL },
+	{ "[Speed] %d", "5", NULL }, { "[a] %d [b] %d", "1", "2" }, { "XY[a]%d", "5", NULL }, { "XY[a%%]%d", "5", NULL },
+	{ "arr[0] %d", "5", NULL }, { "50% off", "9", NULL }, { "%#Mode", "S", NULL }, { "%#Mode", "\\x02", NULL },
+	{ "%d%&", "1", NULL },
+	{ "\\x%02X", "65", NULL }, { "\\x4%d", "1", NULL }, { "\\%c", "r", NULL }, { "[a\\r] %d", "7", NULL },
+	{ "%%d %d", "3", NULL }, { "%#Mode\\r\\n", "R", NULL }, { "[x] %s|%d", "\\", "4" }, { "[%d] %d", "123", "4" },
+	{ "%s\\x4", "1", NULL }, { "\\", NULL, NULL }, { "", NULL, NULL },
+};
+
+/* Jeu à une macro, avec la liste « Mode » (Run=R, Stop=S). */
+static GtMacroSet *
+jeu_une_macro(const gchar *action, guint *id)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	GtMacroLists *lists = gt_macro_lists_new();
+
+	gt_macro_lists_add(lists, "Mode", "Run", "R");
+	gt_macro_lists_add(lists, "Mode", "Stop", "S");
+	gt_macro_set_take_lists(set, lists);
+	*id = gt_macro_set_append(set, "M", "", action, "");
+	return set;
+}
+
+/* Les segments couvrent les octets bout à bout, sans vide, et deux voisins diffèrent par la sorte ou l'argument. */
+static void
+verifier_couverture(const GArray *segs, gsize len)
+{
+	guint pos = 0;
+
+	for(guint i = 0; i < segs->len; i++)
+	{
+		const GtMacroSegment *g = &g_array_index(segs, GtMacroSegment, i);
+
+		g_assert_cmpuint(g->start, ==, pos);
+		g_assert_cmpuint(g->len, >, 0);
+		g_assert_true(g->kind == GT_MACRO_SEG_ARG ? g->arg >= 0 : g->arg == -1);
+		if(i > 0)
+		{
+			const GtMacroSegment *p = &g_array_index(segs, GtMacroSegment, i - 1);
+
+			g_assert_true(p->kind != g->kind || p->arg != g->arg);
+		}
+		pos += g->len;
+	}
+	g_assert_cmpuint(pos, ==, len);
+}
+
+static void
+test_segments_octets(void)
+{
+	for(guint i = 0; i < G_N_ELEMENTS(cas_octets); i++)
+	{
+		const cas_octets_t *c = &cas_octets[i];
+		const gchar *args[2] = { c->arg1, c->arg2 };
+		gint n = c->arg2 ? 2 : (c->arg1 ? 1 : 0);
+		guint id;
+		GtMacroSet *set = jeu_une_macro(c->action, &id);
+		gchar *texte = format_action_with_args(gt_macro_set_get_lists(set), c->action, args, n);
+		GByteArray *attendu = parse_macro_string(texte);
+		GArray *segs = NULL;
+		GBytes *b = gt_macro_expand_segments(set, gt_macro_set_find(set, id), args, n, &segs);
+		GBytes *b2 = gt_macro_expand(set, gt_macro_set_find(set, id), args, n);
+		gsize len = 0;
+		const guint8 *data = g_bytes_get_data(b, &len);
+		gchar *hex_attendu = test_hex(attendu->data, attendu->len);
+		gchar *hex_obtenu = test_hex(data, len);
+
+		if(g_strcmp0(hex_attendu, hex_obtenu) != 0)
+			g_test_fail_printf("cas %u '%s' : attendu %s, obtenu %s", i, c->action, hex_attendu, hex_obtenu);
+		g_assert_true(g_bytes_equal(b, b2));
+		g_assert_nonnull(segs);
+		verifier_couverture(segs, len);
+		g_free(hex_obtenu);
+		g_free(hex_attendu);
+		g_array_unref(segs);
+		g_bytes_unref(b2);
+		g_bytes_unref(b);
+		g_byte_array_free(attendu, TRUE);
+		g_free(texte);
+		gt_macro_set_free(set);
+	}
+}
+
+/* Segments attendus, écrits « sorte:argument:longueur » (T, E, A). */
+static gchar *
+segments_texte(const GtMacroSet *set, guint id, const gchar *const *args, gint n)
+{
+	GArray *segs = NULL;
+	GBytes *b = gt_macro_expand_segments(set, gt_macro_set_find(set, id), args, n, &segs);
+	GString *s = g_string_new(NULL);
+
+	for(guint i = 0; i < segs->len; i++)
+	{
+		const GtMacroSegment *g = &g_array_index(segs, GtMacroSegment, i);
+
+		g_string_append_printf(s, "%s%c:%d:%u", i ? " " : "", "TEA"[g->kind], g->arg, g->len);
+	}
+	g_array_unref(segs);
+	g_bytes_unref(b);
+	return g_string_free(s, FALSE);
+}
+
+static void
+test_segments_sortes(void)
+{
+	guint id;
+	GtMacroSet *set = jeu_une_macro("PWM %d %.1f %#Mode\\r\\n", &id);
+	gchar *t;
+
+	g_assert_cmpint(GT_MACRO_SEG_TEXT, ==, 0);
+	g_assert_cmpint(GT_MACRO_SEG_ESCAPE, ==, 1);
+	g_assert_cmpint(GT_MACRO_SEG_ARG, ==, 2);
+	{
+		const gchar *args[] = { "50", "2.5", "R" };
+
+		/* « PWM » T, « 50 » A0, « » T, « 2.5 » A1, « » T, « R » A2, CR LF E */
+		t = segments_texte(set, id, args, 3);
+		g_assert_cmpstr(t, ==, "T:-1:4 A:0:2 T:-1:1 A:1:3 T:-1:1 A:2:1 E:-1:2");
+		g_free(t);
+	}
+	/* Arguments enregistrés (n < 0) et absents (NULL) : spécificateurs laissés en texte */
+	t = segments_texte(set, id, NULL, 0);
+	g_assert_cmpstr(t, ==, "T:-1:18 E:-1:2");
+	g_free(t);
+	gt_macro_set_free(set);
+
+	/* \x%02X : l'échappement à cheval sur l'argument est un seul segment E */
+	set = jeu_une_macro("\\x%02X", &id);
+	{
+		const gchar *args[] = { "65" };
+
+		t = segments_texte(set, id, args, 1);
+		g_assert_cmpstr(t, ==, "E:-1:1");
+		g_free(t);
+	}
+	gt_macro_set_free(set);
+
+	/* Antislash d'un argument (doublé en interne) : reste dans l'argument */
+	set = jeu_une_macro("<%s>", &id);
+	{
+		const gchar *args[] = { "a\\b" };
+
+		t = segments_texte(set, id, args, 1);
+		g_assert_cmpstr(t, ==, "T:-1:1 A:0:3 T:-1:1");
+		g_free(t);
+	}
+	gt_macro_set_free(set);
+}
+
+/* Jeu latin1 : un octet par caractère ; sans jeu, UTF-8. */
+static void
+test_segments_latin1(void)
+{
+	guint id;
+	GtMacroSet *set = jeu_une_macro("%s|%5s", &id);
+	const gchar *cs[] = { "latin1", "latin1", NULL };
+	const gchar *args[] = { "\xc3\xa9\\", "\xc3\xa9" };
+	gchar *t;
+
+	t = expansion(set, gt_macro_set_find(set, id), args, 2);
+	g_assert_cmpstr(t, ==, "\xc3\xa9\\|   \xc3\xa9");
+	g_free(t);
+	g_assert_cmpint(gt_macro_set_set_limits(set, id, NULL, NULL, cs, 2), ==, 0);
+	t = expansion(set, gt_macro_set_find(set, id), args, 2);
+	g_assert_cmpstr(t, ==, "\xe9\\|    \xe9");
+	g_free(t);
+	t = segments_texte(set, id, args, 2);
+	g_assert_cmpstr(t, ==, "A:0:2 T:-1:1 A:1:5");
+	g_free(t);
+	gt_macro_set_free(set);
+}
+
+/* gt_macro_check_args : rang (0..) et raison du premier argument refusé ; listes ignorées. */
+static void
+test_verification(void)
+{
+	guint id;
+	GtMacroSet *set = jeu_une_macro("%d %#Mode %s %c", &id);
+	const GtMacro *m = gt_macro_set_find(set, id);
+	const gchar *mn[] = { "0", "", "1", "", NULL };
+	const gchar *mx[] = { "100", "", "4", "", NULL };
+	const gchar *cs[] = { "", "", "printable", "", NULL };
+	gint index = 99;
+	gchar *raison = (gchar *)"x";
+
+	/* Sans limites : tout nombre valide passe, un nombre invalide est refusé */
+	{
+		const gchar *ok[] = { "500", "zzz", "abcdefgh", "\xc3\xa9" };
+		const gchar *ko[] = { "abc", "R", "x", "y" };
+
+		g_assert_true(gt_macro_check_args(set, m, ok, 4, &index, &raison));
+		g_assert_cmpint(index, ==, -1);
+		g_assert_null(raison);
+		g_assert_false(gt_macro_check_args(set, m, ko, 4, &index, &raison));
+		g_assert_cmpint(index, ==, 0);
+		g_assert_nonnull(raison);
+		g_free(raison);
+	}
+	g_assert_cmpint(gt_macro_set_set_limits(set, id, mn, mx, cs, 4), ==, 0);
+	m = gt_macro_set_find(set, id);
+	{
+		const gchar *ok[] = { "50", "R", "abcd", "" };
+		const gchar *haut[] = { "101", "R", "abcd", "" };
+		const gchar *long_[] = { "100", "R", "abcde", "" };
+		const gchar *car[] = { "0", "R", "\xc3\xa9", "" };
+
+		g_assert_true(gt_macro_check_args(set, m, ok, 4, &index, NULL));
+		g_assert_cmpint(index, ==, -1);
+		g_assert_false(gt_macro_check_args(set, m, haut, 4, &index, &raison));
+		g_assert_cmpint(index, ==, 0);
+		g_assert_cmpstr(raison, ==, "above maximum 100");
+		g_free(raison);
+		g_assert_false(gt_macro_check_args(set, m, long_, 4, &index, &raison));
+		g_assert_cmpint(index, ==, 2);
+		g_assert_nonnull(raison);
+		g_free(raison);
+		g_assert_false(gt_macro_check_args(set, m, car, 4, NULL, NULL));
+		/* Moins d'arguments que la macro : seuls ceux fournis sont vérifiés ; plus : le surplus est ignoré */
+		g_assert_true(gt_macro_check_args(set, m, ok, 1, &index, NULL));
+		g_assert_false(gt_macro_check_args(set, m, haut, 1, &index, NULL));
+		g_assert_cmpint(index, ==, 0);
+		/* NULL : rien à vérifier */
+		g_assert_true(gt_macro_check_args(set, m, NULL, 4, &index, &raison));
+		g_assert_null(raison);
+	}
+	/* n < 0 : les valeurs par défaut de la macro */
+	{
+		const gchar *defauts[] = { "200", "R", "ab", "c", NULL };
+
+		g_assert_true(gt_macro_set_set_args(set, id, defauts, 4));
+		m = gt_macro_set_find(set, id);
+		g_assert_false(gt_macro_check_args(set, m, NULL, -1, &index, NULL));
+		g_assert_cmpint(index, ==, 0);
+	}
+	gt_macro_set_free(set);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -559,5 +820,9 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/copie", test_copie);
 	g_test_add_func("/macro_set/edits-avec-args", test_edits_avec_args);
 	g_test_add_func("/macro_set/limites", test_limites);
+	g_test_add_func("/macro_set/segments", test_segments_octets);
+	g_test_add_func("/macro_set/segments-sortes", test_segments_sortes);
+	g_test_add_func("/macro_set/segments-latin1", test_segments_latin1);
+	g_test_add_func("/macro_set/verification", test_verification);
 	return g_test_run();
 }

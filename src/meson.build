@@ -20,6 +20,8 @@ core_sources = [
 	'macros_list.h',
 	'macro_set.c',
 	'macro_set.h',
+	'macro_preview.c',
+	'macro_preview.h',
 	'macro_file.c',
 	'macro_file.h',
 	'project_file.c',

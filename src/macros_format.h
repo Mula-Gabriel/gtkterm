@@ -33,4 +33,23 @@ GByteArray *parse_macro_string      (const gchar *string);
 gchar       *format_action_with_args(const GtMacroLists *lists, const gchar *action,
                                      const gchar **args, gint n_args);
 
+/* ─── Usage du cœur (macro_set.c) : variantes tracées ─────────────────
+   Les fonctions publiques ci-dessus en sont les appels sans traçage : leurs octets ne changent pas. */
+
+/* Plage de caractères (octets) dans un texte. */
+typedef struct
+{
+  guint start;
+  guint len;
+} GtMacroRange;
+
+/* format_action_with_args, plus : arg_ranges (nullable, GArray de GtMacroRange) reçoit, pour chaque argument mis en forme (rang 0..),
+   sa plage dans le texte rendu, après le doublement des antislashs ; charsets (nullable, parallèle à args, entrées NULL permises) :
+   un %s en « latin1 » voit sa valeur convertie en ISO-8859-1 avant la mise en forme (gardée telle quelle si la conversion échoue). */
+gchar      *format_action_traced     (const GtMacroLists *lists, const gchar *action, const gchar **args, gint n_args,
+                                      const gchar *const *charsets, GArray *arg_ranges);
+/* parse_macro_string, plus : origins (nullable, GArray de GtMacroRange) reçoit, pour chaque octet produit, la plage des caractères
+   de string dont il est issu. */
+GByteArray *parse_macro_string_traced(const gchar *string, GArray *origins);
+
 #endif

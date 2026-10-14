@@ -66,6 +66,32 @@ void                gt_macro_set_apply_edits  (GtMacroSet *set, const GtMacroEdi
 gboolean            gt_macro_action_is_separator(const gchar *action, gchar **label_out);
 gboolean            gt_macro_is_sendable      (const GtMacro *macro);
 GBytes             *gt_macro_expand           (const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args);
+
+/* Segments des octets envoyés (§2.9 de la spec des arguments) : ESCAPE = octet issu de plusieurs caractères qui ne tiennent pas dans un
+ * seul argument (« \r », « \x%02X ») ; ARG = octet issu de la plage d'un argument ; TEXT sinon. Voisins de même sorte et même argument fusionnés. */
+typedef enum
+{
+	GT_MACRO_SEG_TEXT,
+	GT_MACRO_SEG_ESCAPE,
+	GT_MACRO_SEG_ARG
+} GtMacroSegKind;
+
+typedef struct
+{
+	GtMacroSegKind kind;
+	gint           arg;		/* rang de l'argument (0..) pour ARG, -1 sinon */
+	guint          start, len;	/* en octets, dans les octets rendus */
+} GtMacroSegment;
+
+/* Mêmes octets et mêmes règles d'arguments que gt_macro_expand (n_args < 0 : valeurs par défaut de la macro), jeux de caractères
+ * de macro->arg_charset ; segments_out (nullable) reçoit un GArray de GtMacroSegment couvrant les octets bout à bout (g_array_unref). */
+GBytes             *gt_macro_expand_segments  (const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args,
+                                               GArray **segments_out);
+/* Vérifie (gt_macro_arg_check, limites de la macro) les min(n_args, nombre d'arguments) premiers arguments, listes exceptées ;
+ * n_args < 0 : valeurs par défaut de la macro ; args NULL : TRUE. Refus : *index_out = rang (0..) du premier argument refusé,
+ * *reason_out = raison traduite (g_free) ; sinon -1 et NULL. index_out et reason_out peuvent être NULL. */
+gboolean            gt_macro_check_args       (const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args,
+                                               gint *index_out, gchar **reason_out);
 gboolean            gt_macro_period_parse     (const gchar *text, guint *period_ms);
 
 #endif

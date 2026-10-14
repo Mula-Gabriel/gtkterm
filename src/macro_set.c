@@ -488,14 +488,61 @@ gt_macro_is_sendable(const GtMacro *macro)
 	return macro != NULL && macro->action[0] != '\0' && !gt_macro_action_is_separator(macro->action, NULL);
 }
 
+/* Sorte de l'octet issu des caractères origin du texte mis en forme (§2.9) : origine tenant dans la plage d'un argument → ARG (un
+ * antislash d'argument, doublé en interne, reste à l'argument) ; sinon plusieurs caractères → ESCAPE ; sinon TEXT. */
+static GtMacroSegKind
+segment_kind(const GtMacroRange *origin, const GArray *arg_ranges, gint *arg_out)
+{
+	*arg_out = -1;
+	for(guint k = 0; k < arg_ranges->len; k++)
+	{
+		const GtMacroRange *r = &g_array_index(arg_ranges, GtMacroRange, k);
+
+		if(origin->start >= r->start && origin->start + origin->len <= r->start + r->len)
+		{
+			*arg_out = (gint)k;
+			return GT_MACRO_SEG_ARG;
+		}
+	}
+	return origin->len > 1 ? GT_MACRO_SEG_ESCAPE : GT_MACRO_SEG_TEXT;
+}
+
+static GArray *
+build_segments(const GArray *origins, const GArray *arg_ranges)
+{
+	GArray *segs = g_array_new(FALSE, FALSE, sizeof(GtMacroSegment));
+
+	for(guint b = 0; b < origins->len; b++)
+	{
+		gint arg;
+		GtMacroSegKind kind = segment_kind(&g_array_index(origins, GtMacroRange, b), arg_ranges, &arg);
+		GtMacroSegment *last = segs->len > 0 ? &g_array_index(segs, GtMacroSegment, segs->len - 1) : NULL;
+
+		if(last != NULL && last->kind == kind && last->arg == arg)
+			last->len++;
+		else
+		{
+			GtMacroSegment seg = { kind, arg, b, 1 };
+
+			g_array_append_val(segs, seg);
+		}
+	}
+	return segs;
+}
+
 GBytes *
-gt_macro_expand(const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args)
+gt_macro_expand_segments(const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args,
+                         GArray **segments_out)
 {
 	const gchar *const *use = args;
 	gint n = n_args;
+	const gchar *const *charsets = NULL;
+	GArray *arg_ranges = NULL, *origins = NULL;
 	gchar *formatted;
 	GByteArray *bytes;
 
+	if(segments_out != NULL)
+		*segments_out = NULL;
 	if(macro == NULL)
 		return NULL;
 	if(n_args < 0)
@@ -505,10 +552,76 @@ gt_macro_expand(const GtMacroSet *set, const GtMacro *macro, const gchar *const 
 	}
 	else if(args == NULL)
 		n = 0;
-	formatted = format_action_with_args(gt_macro_set_get_lists(set), macro->action, (const gchar **)use, n);
-	bytes = parse_macro_string(formatted);
+	/* arg_charset a exactement un élément par spécificateur de l'action : la mise en forme n'en lit jamais au-delà */
+	charsets = (const gchar *const *)macro->arg_charset;
+	if(segments_out != NULL)
+	{
+		arg_ranges = g_array_new(FALSE, FALSE, sizeof(GtMacroRange));
+		origins = g_array_new(FALSE, FALSE, sizeof(GtMacroRange));
+	}
+	formatted = format_action_traced(gt_macro_set_get_lists(set), macro->action, (const gchar **)use, n, charsets, arg_ranges);
+	bytes = parse_macro_string_traced(formatted, origins);
+	if(segments_out != NULL)
+	{
+		*segments_out = build_segments(origins, arg_ranges);
+		g_array_unref(origins);
+		g_array_unref(arg_ranges);
+	}
 	g_free(formatted);
 	return g_byte_array_free_to_bytes(bytes);
+}
+
+GBytes *
+gt_macro_expand(const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args)
+{
+	return gt_macro_expand_segments(set, macro, args, n_args, NULL);
+}
+
+/* Entrée k d'un vecteur de limites (NULL : aucune). */
+static const gchar *
+limit_at(gchar **v, gint k)
+{
+	return v != NULL ? v[k] : NULL;
+}
+
+gboolean
+gt_macro_check_args(const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args,
+                    gint *index_out, gchar **reason_out)
+{
+	const gchar *const *use = args;
+	gint n = n_args;
+	gint count = 0;
+	macro_arg_info_t *infos;
+	gboolean ok = TRUE;
+
+	if(index_out != NULL)
+		*index_out = -1;
+	if(reason_out != NULL)
+		*reason_out = NULL;
+	if(macro == NULL)
+		return TRUE;
+	if(n_args < 0)
+	{
+		use = (const gchar *const *)macro->args;
+		n = macro->args != NULL ? (gint)g_strv_length(macro->args) : 0;
+	}
+	if(use == NULL)
+		return TRUE;
+	infos = macro_get_arg_infos(gt_macro_set_get_lists(set), macro->action, &count);
+	for(gint k = 0; k < MIN(n, count) && ok; k++)
+	{
+		if(infos[k].list_name != NULL)
+			continue;
+		if(gt_macro_arg_check(infos[k].type, use[k] != NULL ? use[k] : "", limit_at(macro->arg_min, k), limit_at(macro->arg_max, k),
+		                      limit_at(macro->arg_charset, k), reason_out) != GT_MACRO_ARG_OK)
+		{
+			ok = FALSE;
+			if(index_out != NULL)
+				*index_out = k;
+		}
+	}
+	macro_arg_infos_free(infos, count);
+	return ok;
 }
 
 gboolean
