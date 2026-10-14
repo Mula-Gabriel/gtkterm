@@ -4,6 +4,7 @@
 
 #include "macro_set.h"
 #include "macros_format.h"
+#include "macro_arg.h"
 
 struct _GtMacroSet
 {
@@ -27,6 +28,9 @@ macro_free(gpointer data)
 	g_free(m->action);
 	g_free(m->tab);
 	g_strfreev(m->args);
+	g_strfreev(m->arg_min);
+	g_strfreev(m->arg_max);
+	g_strfreev(m->arg_charset);
 	g_free(m);
 }
 
@@ -77,12 +81,85 @@ macro_new(const gchar *label, const gchar *shortcut, const gchar *action, const 
 	return m;
 }
 
-/* Les arguments enregistrés ne restent que s'ils correspondent encore au nombre de spécificateurs */
+/* Valide en place les trois vecteurs de limites (chacun NULL ou de n éléments, ""-complétés) pour les types des arguments ;
+ * rend le nombre d'entrées remises à "". Une paire min > max est remise à "" des deux côtés. */
+static gint
+sanitize_limits(const macro_arg_info_t *infos, gint n, gchar **min, gchar **max, gchar **charset)
+{
+	gint replaced = 0;
+
+	for(gint k = 0; k < n; k++)
+	{
+		const gchar *type = infos[k].type;
+		gchar **entry[3] = { min, max, charset };
+
+		for(gint v = 0; v < 3; v++)
+		{
+			gboolean ok;
+
+			if(entry[v] == NULL || entry[v][k][0] == '\0')
+				continue;
+			if(v == 2)
+				ok = gt_macro_arg_limits_valid(type, "", "", entry[v][k]);
+			else
+				ok = gt_macro_arg_limit_valid(type, entry[v][k]);
+			if(!ok)
+			{
+				g_free(entry[v][k]);
+				entry[v][k] = g_strdup("");
+				replaced++;
+			}
+		}
+		if(min != NULL && max != NULL && min[k][0] != '\0' && max[k][0] != '\0'
+		   && !gt_macro_arg_limits_valid(type, min[k], max[k], ""))
+		{
+			g_free(min[k]);
+			g_free(max[k]);
+			min[k] = g_strdup("");
+			max[k] = g_strdup("");
+			replaced += 2;
+		}
+	}
+	return replaced;
+}
+
+static gboolean
+vector_all_empty(gchar **v)
+{
+	for(guint k = 0; v[k] != NULL; k++)
+		if(v[k][0] != '\0')
+			return FALSE;
+	return TRUE;
+}
+
+/* Un vecteur dont la longueur ne correspond plus au nombre d'arguments est abandonné */
+static void
+drop_if_length(gchar ***v, gint n)
+{
+	if(*v != NULL && g_strv_length(*v) != (guint)n)
+		g_clear_pointer(v, g_strfreev);
+}
+
+/* Les arguments enregistrés et leurs limites ne restent que s'ils correspondent encore au nombre de spécificateurs ;
+ * chaque limite est revalidée pour le type courant de son argument (sans avertissement) */
 static void
 check_args(const GtMacroSet *set, GtMacro *m)
 {
-	if(m->args != NULL && g_strv_length(m->args) != (guint)macro_count_format_args(set->lists, m->action))
-		g_clear_pointer(&m->args, g_strfreev);
+	gint n = 0;
+	macro_arg_info_t *infos;
+	gchar ***vecs[3] = { &m->arg_min, &m->arg_max, &m->arg_charset };
+
+	if(m->args == NULL && m->arg_min == NULL && m->arg_max == NULL && m->arg_charset == NULL)
+		return;
+	infos = macro_get_arg_infos(set->lists, m->action, &n);
+	drop_if_length(&m->args, n);
+	for(gint v = 0; v < 3; v++)
+		drop_if_length(vecs[v], n);
+	sanitize_limits(infos, n, m->arg_min, m->arg_max, m->arg_charset);
+	for(gint v = 0; v < 3; v++)
+		if(*vecs[v] != NULL && vector_all_empty(*vecs[v]))
+			g_clear_pointer(vecs[v], g_strfreev);
+	macro_arg_infos_free(infos, n);
 }
 
 static GtMacro *
@@ -236,6 +313,61 @@ gt_macro_set_set_args(GtMacroSet *set, guint id, const gchar *const *args, gint 
 	return TRUE;
 }
 
+/* Copie un vecteur de n éléments (NULL entrées → "") ; NULL si le vecteur est NULL ; *ok FALSE si sa longueur n'est pas n */
+static gchar **
+copy_vector(const gchar *const *v, gint n, gboolean *ok)
+{
+	gchar **c;
+
+	if(v == NULL)
+		return NULL;
+	if(g_strv_length((gchar **)v) != (guint)n)
+	{
+		*ok = FALSE;
+		return NULL;
+	}
+	c = g_new0(gchar *, n + 1);
+	for(gint k = 0; k < n; k++)
+		c[k] = g_strdup(v[k]);
+	return c;
+}
+
+gint
+gt_macro_set_set_limits(GtMacroSet *set, guint id, const gchar *const *min, const gchar *const *max,
+                        const gchar *const *charset, gint n_args)
+{
+	GtMacro *m = find_mutable(set, id);
+	macro_arg_info_t *infos;
+	gchar **v[3];
+	const gchar *const *src[3] = { min, max, charset };
+	gboolean ok = TRUE;
+	gint n = 0, replaced = 0;
+
+	if(m == NULL)
+		return -1;
+	infos = macro_get_arg_infos(set->lists, m->action, &n);
+	if(n_args != n)
+		ok = FALSE;
+	for(gint i = 0; i < 3; i++)
+		v[i] = ok ? copy_vector(src[i], n, &ok) : NULL;
+	if(!ok)
+	{
+		for(gint i = 0; i < 3; i++)
+			g_strfreev(v[i]);
+		macro_arg_infos_free(infos, n);
+		return -1;
+	}
+	replaced = sanitize_limits(infos, n, v[0], v[1], v[2]);
+	macro_arg_infos_free(infos, n);
+	g_strfreev(m->arg_min);
+	g_strfreev(m->arg_max);
+	g_strfreev(m->arg_charset);
+	m->arg_min = v[0] != NULL && !vector_all_empty(v[0]) ? v[0] : (g_strfreev(v[0]), NULL);
+	m->arg_max = v[1] != NULL && !vector_all_empty(v[1]) ? v[1] : (g_strfreev(v[1]), NULL);
+	m->arg_charset = v[2] != NULL && !vector_all_empty(v[2]) ? v[2] : (g_strfreev(v[2]), NULL);
+	return replaced;
+}
+
 gboolean
 gt_macro_set_set_polling(GtMacroSet *set, guint id, gboolean polling, guint period_ms)
 {
@@ -262,6 +394,13 @@ gt_macro_set_copy(const GtMacroSet *set)
 
 		if(m->args != NULL)
 			gt_macro_set_set_args(copy, id, (const gchar *const *)m->args, (gint)g_strv_length(m->args));
+		if(m->arg_min != NULL || m->arg_max != NULL || m->arg_charset != NULL)
+		{
+			gint n = (gint)g_strv_length(m->arg_min != NULL ? m->arg_min : m->arg_max != NULL ? m->arg_max : m->arg_charset);
+
+			gt_macro_set_set_limits(copy, id, (const gchar *const *)m->arg_min, (const gchar *const *)m->arg_max,
+			                        (const gchar *const *)m->arg_charset, n);
+		}
 		gt_macro_set_set_polling(copy, id, m->polling, m->polling_period_ms);
 	}
 	return copy;
@@ -303,6 +442,15 @@ gt_macro_set_apply_edits(GtMacroSet *set, const GtMacroEdit *rows, guint n_rows,
 		g_clear_pointer(&m->args, g_strfreev);
 		if(rows[i].args != NULL && rows[i].args[0] != NULL)
 			m->args = g_strdupv((gchar **)rows[i].args);
+		g_clear_pointer(&m->arg_min, g_strfreev);
+		g_clear_pointer(&m->arg_max, g_strfreev);
+		g_clear_pointer(&m->arg_charset, g_strfreev);
+		if(rows[i].arg_min != NULL && rows[i].arg_min[0] != NULL)
+			m->arg_min = g_strdupv((gchar **)rows[i].arg_min);
+		if(rows[i].arg_max != NULL && rows[i].arg_max[0] != NULL)
+			m->arg_max = g_strdupv((gchar **)rows[i].arg_max);
+		if(rows[i].arg_charset != NULL && rows[i].arg_charset[0] != NULL)
+			m->arg_charset = g_strdupv((gchar **)rows[i].arg_charset);
 		g_ptr_array_add(fresh, m);
 	}
 	set->macros = fresh;

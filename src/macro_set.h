@@ -20,6 +20,9 @@ typedef struct
 	gchar   *action;		/* jamais NULL */
 	gchar   *tab;			/* jamais NULL ; "" = onglet par défaut (nom décidé par l'interface) */
 	gchar  **args;			/* NULL, ou exactement macro_count_format_args() éléments */
+	gchar  **arg_min;		/* limites des arguments (macro_arg.h) : NULL, ou exactement autant d'éléments que args ("" = aucune) ; */
+	gchar  **arg_max;		/* jamais un vecteur entièrement vide (il devient NULL) ; longueur en octets pour %s, valeur pour les nombres */
+	gchar  **arg_charset;	/* jeu de caractères d'un %s ("", "printable", "ascii", "latin1", "class:…") */
 	gboolean polling;		/* mode polling activé (persistant) ; la marche n'est jamais persistée */
 	guint    polling_period_ms;	/* toujours dans [GT_MACRO_PERIOD_MIN_MS, GT_MACRO_PERIOD_MAX_MS] */
 } GtMacro;
@@ -35,6 +38,9 @@ typedef struct
 	const gchar *action;
 	const gchar *tab;
 	const gchar *const *args;	/* valeurs par défaut ; NULL : aucune */
+	const gchar *const *arg_min;	/* limites ; NULL : aucune (les initialiseurs positionnels existants restent valides) */
+	const gchar *const *arg_max;
+	const gchar *const *arg_charset;
 } GtMacroEdit;
 
 GtMacroSet         *gt_macro_set_new          (void);
@@ -49,6 +55,10 @@ const GtMacroLists *gt_macro_set_get_lists    (const GtMacroSet *set);
 void                gt_macro_set_take_lists   (GtMacroSet *set, GtMacroLists *lists);
 gboolean            gt_macro_set_set_arg      (GtMacroSet *set, guint id, gint arg_index, const gchar *value);
 gboolean            gt_macro_set_set_args     (GtMacroSet *set, guint id, const gchar *const *args, gint n_args);
+/* Limites d'une macro : chaque vecteur NULL ou de n_args éléments (n_args = nombre d'arguments de la macro), sinon -1 et rien ne change
+ * (macro inconnue : -1). Les entrées invalides pour le type de l'argument de même rang sont remises à "" ; rend leur nombre. */
+gint                gt_macro_set_set_limits   (GtMacroSet *set, guint id, const gchar *const *min, const gchar *const *max,
+                                               const gchar *const *charset, gint n_args);
 gboolean            gt_macro_set_set_polling  (GtMacroSet *set, guint id, gboolean polling, guint period_ms);
 GtMacroSet         *gt_macro_set_copy         (const GtMacroSet *set);	/* copie profonde ; nouveaux identifiants */
 void                gt_macro_set_apply_edits  (GtMacroSet *set, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists);

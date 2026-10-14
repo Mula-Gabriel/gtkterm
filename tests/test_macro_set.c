@@ -426,6 +426,119 @@ test_edits_avec_args(void)
 	gt_macro_set_free(set);
 }
 
+static void
+test_limites(void)
+{
+	GtMacroSet *set = gt_macro_set_new(), *copie;
+	guint a = gt_macro_set_append(set, "A", "", "A%d %s", "");
+	guint b = gt_macro_set_append(set, "B", "", "B", "");
+	const gchar *const mn[] = { "0", "2", NULL };
+	const gchar *const mx[] = { "100", "8", NULL };
+	const gchar *const cs[] = { "", "printable", NULL };
+	const gchar *const court[] = { "0", NULL };
+	const gchar *const mauvais[] = { "abc", "2", NULL };
+	const gchar *const inverse[] = { "50", "9", NULL };
+	const gchar *const bas[] = { "40", "3", NULL };
+	const gchar *const vides[] = { "", "", NULL };
+	const GtMacro *m;
+
+	/* Pose valide */
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, mn, mx, cs, 2), ==, 0);
+	m = gt_macro_set_find(set, a);
+	g_assert_cmpstr(m->arg_min[1], ==, "2");
+	g_assert_cmpstr(m->arg_max[0], ==, "100");
+	g_assert_cmpstr(m->arg_charset[1], ==, "printable");
+	g_assert_cmpstr(m->arg_charset[0], ==, "");
+
+	/* Refus : longueur, macro inconnue, nombre d'arguments faux : rien ne change */
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, court, mx, cs, 2), ==, -1);
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, mn, mx, cs, 3), ==, -1);
+	g_assert_cmpint(gt_macro_set_set_limits(set, 9999, mn, mx, cs, 2), ==, -1);
+	g_assert_cmpint(gt_macro_set_set_limits(set, b, mn, mx, cs, 2), ==, -1);
+	g_assert_cmpstr(m->arg_max[0], ==, "100");
+	g_assert_cmpstr(m->arg_charset[1], ==, "printable");
+
+	/* Entrée invalide : remise à "" et comptée ; le reste est gardé */
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, mauvais, mx, NULL, 2), ==, 1);
+	m = gt_macro_set_find(set, a);
+	g_assert_cmpstr(m->arg_min[0], ==, "");
+	g_assert_cmpstr(m->arg_min[1], ==, "2");
+	g_assert_null(m->arg_charset);
+
+	/* min > max : les deux remis à "" */
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, inverse, mx, NULL, 2), ==, 2);
+	m = gt_macro_set_find(set, a);
+	g_assert_cmpstr(m->arg_min[0], ==, "50");
+	g_assert_cmpstr(m->arg_max[0], ==, "100");
+	g_assert_cmpstr(m->arg_min[1], ==, "");
+	g_assert_cmpstr(m->arg_max[1], ==, "");
+
+	/* Vecteur tout vide : NULL */
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, vides, NULL, NULL, 2), ==, 0);
+	m = gt_macro_set_find(set, a);
+	g_assert_null(m->arg_min);
+	g_assert_null(m->arg_max);
+	g_assert_null(m->arg_charset);
+
+	/* Copie profonde */
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, mn, mx, cs, 2), ==, 0);
+	copie = gt_macro_set_copy(set);
+	m = gt_macro_set_get(copie, 0);
+	g_assert_cmpstr(m->arg_min[1], ==, "2");
+	g_assert_cmpstr(m->arg_max[0], ==, "100");
+	g_assert_cmpstr(m->arg_charset[1], ==, "printable");
+	g_assert_true(m->arg_min != gt_macro_set_find(set, a)->arg_min);
+	gt_macro_set_free(copie);
+
+	/* apply_edits : les limites de la ligne, validées par check_args */
+	{
+		GtMacroEdit lignes[] = { { a, "A", "", "A%d %s", "", NULL, bas, mx, cs } };
+
+		gt_macro_set_apply_edits(set, lignes, 1, NULL);
+		m = gt_macro_set_find(set, a);
+		g_assert_cmpstr(m->arg_min[0], ==, "40");
+		g_assert_cmpstr(m->arg_min[1], ==, "3");
+		g_assert_cmpstr(m->arg_charset[1], ==, "printable");
+	}
+	{
+		/* Pas de limites dans la ligne : abandonnées */
+		GtMacroEdit lignes[] = { { a, "A", "", "A%d %s", "" } };
+
+		gt_macro_set_apply_edits(set, lignes, 1, NULL);
+		m = gt_macro_set_find(set, a);
+		g_assert_null(m->arg_min);
+		g_assert_null(m->arg_max);
+		g_assert_null(m->arg_charset);
+	}
+
+	/* « %s %d » → « %d %s » : même nombre, types échangés ; limites invalides remises à "" */
+	{
+		GtMacroEdit l2[] = { { a, "A", "", "A%s %d", "", NULL, mn, mx, cs } };
+		GtMacroEdit l3[] = { { a, "A", "", "A%d %s", "", NULL, mn, mx, cs } };
+
+		gt_macro_set_apply_edits(set, l2, 1, NULL);
+		m = gt_macro_set_find(set, a);
+		/* %s : min "0" ok, max "100" ok ; %d : min "2" ok, max "8" ok, charset "printable" refusé sur %d */
+		g_assert_cmpstr(m->arg_min[0], ==, "0");
+		g_assert_cmpstr(m->arg_max[1], ==, "8");
+		g_assert_null(m->arg_charset);	/* "printable" refusé sur %d, vecteur tout vide : NULL */
+		gt_macro_set_apply_edits(set, l3, 1, NULL);
+		m = gt_macro_set_find(set, a);
+		g_assert_cmpstr(m->arg_charset[1], ==, "printable");
+	}
+	/* Nombre d'arguments changé : tout abandonné */
+	{
+		GtMacroEdit l[] = { { a, "A", "", "A%d", "", NULL, mn, mx, cs } };
+
+		gt_macro_set_apply_edits(set, l, 1, NULL);
+		m = gt_macro_set_find(set, a);
+		g_assert_null(m->arg_min);
+		g_assert_null(m->arg_max);
+		g_assert_null(m->arg_charset);
+	}
+	gt_macro_set_free(set);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -445,5 +558,6 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/expansion", test_expansion);
 	g_test_add_func("/macro_set/copie", test_copie);
 	g_test_add_func("/macro_set/edits-avec-args", test_edits_avec_args);
+	g_test_add_func("/macro_set/limites", test_limites);
 	return g_test_run();
 }

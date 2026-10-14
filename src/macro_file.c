@@ -131,7 +131,7 @@ gt_macro_set_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar *origi
 	{
 		gchar *label, *shortcut, *action, *tab;
 		gchar **args;
-		gsize n_args = 0;
+		gsize n_args = 0, n_lim = 0;
 		GError *local = NULL;
 		gboolean polling;
 		guint id;
@@ -147,6 +147,35 @@ gt_macro_set_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar *origi
 		/* Refusé (arguments abandonnés) si leur nombre ne correspond pas aux spécificateurs */
 		if(args != NULL)
 			gt_macro_set_set_args(set, id, (const gchar *const *)args, (gint)n_args);
+		/* Limites des arguments : une limite invalide (ou un vecteur de mauvaise longueur) est remplacée par aucune, avec avertissement */
+		{
+			static const gchar *const keys[3] = { "arg_min", "arg_max", "arg_charset" };
+			gchar **vec[3];
+			gint rc;
+
+			for(gint v = 0; v < 3; v++)
+			{
+				gsize len = 0;
+
+				vec[v] = get_list_tolerant(kf, groups[g], keys[v], origin, &len);
+				if(vec[v] != NULL && n_lim == 0)
+					n_lim = len;
+			}
+			if(vec[0] != NULL || vec[1] != NULL || vec[2] != NULL)
+			{
+				rc = gt_macro_set_set_limits(set, id, (const gchar *const *)vec[0], (const gchar *const *)vec[1],
+				                             (const gchar *const *)vec[2], (gint)n_lim);
+				if(rc != 0)
+				{
+					gchar *msg = g_strdup_printf(_("%s: [%s] invalid argument limits replaced by none"), origin, groups[g]);
+
+					g_warning("%s", msg);
+					g_free(msg);
+				}
+			}
+			for(gint v = 0; v < 3; v++)
+				g_strfreev(vec[v]);
+		}
 		polling = g_key_file_get_boolean(kf, groups[g], "polling", &local);
 		if(local != NULL)
 		{
@@ -405,6 +434,12 @@ gt_macro_set_to_key_file(const GtMacroSet *set, GKeyFile *kf, const gchar *prefi
 		g_key_file_set_string(kf, group, "tab", m->tab);
 		if(m->args != NULL)
 			g_key_file_set_string_list(kf, group, "args", (const gchar *const *)m->args, g_strv_length(m->args));
+		if(m->arg_min != NULL)
+			g_key_file_set_string_list(kf, group, "arg_min", (const gchar *const *)m->arg_min, g_strv_length(m->arg_min));
+		if(m->arg_max != NULL)
+			g_key_file_set_string_list(kf, group, "arg_max", (const gchar *const *)m->arg_max, g_strv_length(m->arg_max));
+		if(m->arg_charset != NULL)
+			g_key_file_set_string_list(kf, group, "arg_charset", (const gchar *const *)m->arg_charset, g_strv_length(m->arg_charset));
 		g_key_file_set_boolean(kf, group, "polling", m->polling);
 		g_key_file_set_uint64(kf, group, "polling_period_ms", m->polling_period_ms);
 		g_free(group);

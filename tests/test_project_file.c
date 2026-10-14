@@ -8,6 +8,18 @@
 #include "test_util.h"
 
 static void
+comparer_vecteur(gchar **a, gchar **b)
+{
+	g_assert_cmpint(a == NULL, ==, b == NULL);
+	if(a != NULL)
+	{
+		g_assert_cmpuint(g_strv_length(a), ==, g_strv_length(b));
+		for(guint k = 0; a[k] != NULL; k++)
+			g_assert_cmpstr(a[k], ==, b[k]);
+	}
+}
+
+static void
 comparer_macro(const GtMacro *a, const GtMacro *b)
 {
 	g_assert_cmpstr(a->label, ==, b->label);
@@ -23,6 +35,9 @@ comparer_macro(const GtMacro *a, const GtMacro *b)
 		for(guint k = 0; a->args[k] != NULL; k++)
 			g_assert_cmpstr(a->args[k], ==, b->args[k]);
 	}
+	comparer_vecteur(a->arg_min, b->arg_min);
+	comparer_vecteur(a->arg_max, b->arg_max);
+	comparer_vecteur(a->arg_charset, b->arg_charset);
 }
 
 static GtProjectData *
@@ -44,6 +59,12 @@ deux_onglets(void)
 	id = gt_macro_set_append(t0->macros, "Ping", "", "PING%d\\r", "");
 	gt_macro_set_set_args(t0->macros, id, args, 1);
 	gt_macro_set_set_polling(t0->macros, id, TRUE, 250);
+	{
+		const gchar *const mn[] = { "0", NULL };
+		const gchar *const mx[] = { "99", NULL };
+
+		gt_macro_set_set_limits(t0->macros, id, mn, mx, NULL, 1);
+	}
 	gt_macro_lists_add(lists, "Modes", "Alpha", "a");
 	gt_macro_set_take_lists(t0->macros, lists);
 	gt_profile_set_string(&t0->script, "-- \303\251\nprint(\"a;b\\\\c\")\n\n");
@@ -112,6 +133,10 @@ test_aller_retour(void)
 	}
 	{
 		const GtProjectTab *b = g_ptr_array_index(r->tabs, 0);
+
+		g_assert_nonnull(gt_macro_set_get(b->macros, 0)->arg_max);
+		g_assert_cmpstr(gt_macro_set_get(b->macros, 0)->arg_max[0], ==, "99");
+		g_assert_null(gt_macro_set_get(b->macros, 0)->arg_charset);
 		const GtMacroLists *l = gt_macro_set_get_lists(b->macros);
 
 		g_assert_cmpint(gt_macro_lists_count(l), ==, 1);
