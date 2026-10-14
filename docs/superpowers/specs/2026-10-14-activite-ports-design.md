@@ -61,7 +61,8 @@ entiers du profil :
 - `no_data_timeout_s`, défaut 60 — clé `activity_no_data_timeout`.
 
 Lus et écrits avec les autres clés du profil ; un profil sans ces clés prend les défauts. Ils s'éditent dans la fenêtre Port, expander « Advanced
-Configuration Options », nouveau cadre « Port activity » : « Idle after (seconds): », « No data after (seconds): » (`GtkSpinButton`, 0–3600, noms
+Configuration Options », nouveau cadre « Port activity » : « Id_le after (seconds, 0: never): », « _No data after (seconds, 0: never): »
+(`GtkSpinButton`, 0–3600, noms
 stables `port-idle-timeout`, `port-no-data-timeout`), portés par `GtPortForm` (`port_form.c` : `from_profile`, `apply`) comme les autres
 champs du dialogue, sinon OK les écraserait. OK met à jour le profil de la session (pas `.gtktermrc` : il faut « Save configuration », comme
 pour tout le profil).
@@ -107,22 +108,29 @@ gboolean gt_port_activity_get_unread(GtPortActivity *a);
 
 ### 3.3 Interface (`src/ui/`)
 
-- **`activity_icon.c`** (nouveau) : widget d'emplacement 18 × 16 px, `gt_activity_icon_new(GtPortActivity *)`, lié à `state` par
-  `g_signal_connect_object`. Enfants dans une `GtkStack` sans transition : pastille (`GtkBox` CSS `activity-dot`, classes `receiving`/`lost`),
+- **`activity_icon.c`** (nouveau) : widget d'emplacement 18 × 16 px, `gt_activity_icon_new(GtPortActivity *, const char *name)`, lié à
+  `notify::state` (déconnecté et référence rendue à sa destruction). Indicateurs **superposés dans un `GtkOverlay`** de taille fixe (enfant principal : une boîte 18 × 16), un seul opaque
+  à la fois (`gtk_widget_set_opacity`, aucun pour `closed`) : changer d'état ne change ni la visibilité ni la taille d'un widget. Pas de
+  `GtkStack` : changer son enfant visible dans l'étiquette d'un onglet du `GtkNotebook` défilable fait allouer ses flèches de défilement à une
+  largeur nulle (avertissements « Trying to measure GtkImage … for width of 0 », vu avec GTK 4.24). Indicateurs : pastille (`GtkBox` CSS
+  `activity-dot`, classes `receiving`/`lost`),
   spinner (`GtkDrawingArea` : cercle + arc, couleurs lues par `gtk_widget_get_color()` sur la zone, dont la classe CSS `connecting` ou
   `reconnecting` fixe la couleur : cairo ne voit pas le CSS), tête de mort (`GtkImage` par `gtk_image_new_from_icon_name("skull-symbolic")`,
   SVG ajouté à `gtkterm.gresource.xml` et dossier rendu visible par `gtk_icon_theme_add_resource_path()`, pour la recoloration symbolique), Zzz
   (trois `GtkLabel` « Z », « z », « z », tailles décroissantes, en escalier).
   - **Animations par le code**, pas en CSS : GTK coupe les animations CSS quand le bureau réduit les animations (`gtk-enable-animations`), ce qui
-    est le cas chez l'utilisateur. Spinner : rotation par `gtk_widget_add_tick_callback`, redessin limité à environ 15 images par seconde (un
-    serveur en `LISTENING` affiché tourne indéfiniment) ; Zzz : chenillard par minuteur de 800 ms (Z seul → Z z →
-    Z z z → Z seul…). Minuteur et rappel n'existent que tant que l'état correspondant est affiché **et** le widget est cartographié (`map`/`unmap`).
-  - La classe CSS de l'état (`activity-<nick>`) est posée sur l'emplacement ; nom stable fourni par l'appelant ; nom accessible traduit selon
-    l'état (« Receiving data », « Idle », « No data received », « Connection lost », « Reconnecting », « Connecting », « Waiting for data »).
+    est le cas chez l'utilisateur. Spinner : rotation par une minuterie `g_timeout_add` de 66 ms (≈ 15 images par seconde ; un rappel par
+    image réveillerait ≈ 60 fois par seconde pour 15 redessins, et un serveur en `LISTENING` affiché tourne indéfiniment), angle calculé depuis
+    `g_get_monotonic_time()` ; Zzz : chenillard par minuteur de 800 ms (Z seul → Z z →
+    Z z z → Z seul…). Les deux minuteries n'existent que tant que l'état correspondant est affiché **et** le widget est cartographié (`map`/`unmap`).
+  - La classe CSS de l'état (`activity-<nick>`) est posée sur l'emplacement ; nom stable fourni par l'appelant ; rôle accessible
+    `GTK_ACCESSIBLE_ROLE_IMG` et nom accessible traduit selon l'état (« Receiving data », « Port open » pour `active`, « Idle », « No data
+    received », « Connection lost », « Reconnecting », « Connecting », « Waiting for data », « Port closed ») ; les indicateurs enfants sont
+    cachés à l'accessibilité (`GTK_ACCESSIBLE_STATE_HIDDEN`), sinon « Z z z » serait lu.
   - CSS (un fournisseur pour l'écran, installé une fois dans `app.c`, avec le CSS existant) : pastille 8 px ronde, contour `alpha(currentColor,0.4)`,
     verte `#2ec27e`, rouge `#e01b24` ; Zzz et arc `connecting` en bleu fixe `#3584e4` (pas `@accent_color`, que certains thèmes ne définissent
     pas). La règle italique `.lost label` de `app.c` est supprimée.
-- **`tab_label.c`** : l'emplacement (nom `tab-activity`) à gauche du nom ; classe `dead` sur la boîte (nom grisé, `dim-label`), classe `unread` (nom
+- **`tab_label.c`** : l'emplacement (nom `tab-activity`) à gauche du nom ; classe `dead` sur la boîte (nom grisé : `.dead #tab-name { opacity: 0.55; }`), classe `unread` (nom
   en gras) liée à la propriété `unread`. La classe `lost` est gardée sur la boîte (tests) mais l'italique disparaît.
 - **`status_bar.c`** : `gt_status_bar_new(link, activity)` (signature changée) ; un emplacement (nom `status-activity`) avant le texte d'état,
   visible seulement quand le classeur n'a qu'une page : `gt_status_bar_set_activity_visible(bar, gboolean)`, appelée par `update_tab_state()` de

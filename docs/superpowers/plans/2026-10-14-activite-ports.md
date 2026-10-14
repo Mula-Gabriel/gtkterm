@@ -967,6 +967,13 @@ et retire sa source.)
 
 ### Task 5 : widget `activity_icon` (UI)
 
+> **Réalisation (écart au code ci-dessous) :** les indicateurs sont superposés dans un `GtkOverlay` (boîte 18 × 16 en enfant principal, un
+> seul indicateur opaque par `gtk_widget_set_opacity`, aucun pour `closed`) au lieu d'une `GtkStack` : changer l'enfant visible d'une
+> `GtkStack` dans l'étiquette d'un onglet du `GtkNotebook` défilable provoquait des avertissements de mesure GTK (« Trying to measure
+> GtkImage … for width of 0 », GTK 4.24). Le spinner tourne par une minuterie `g_timeout_add(66, …)` (angle tiré de `g_get_monotonic_time()`)
+> au lieu de `gtk_widget_add_tick_callback`, armée et retirée aux mêmes conditions. L'overlay a le rôle accessible `GTK_ACCESSIBLE_ROLE_IMG`,
+> ses indicateurs sont cachés à l'accessibilité. Référence : `src/ui/activity_icon.c`.
+
 **Files:**
 - Create: `src/ui/activity_icon.h`, `src/ui/activity_icon.c`, `src/ui/icons/scalable/actions/skull-symbolic.svg`
 - Modify: `src/ui/meson.build` (sources de l'UI, à côté de `tab_label.c`), `src/ui/gtkterm.gresource.xml`, `src/ui/app.c` (CSS, chemin d'icônes), `po/POTFILES.in`
@@ -1405,7 +1412,7 @@ Dans `build_advanced`, après le cadre « ASCII file transfer » :
 ```c
 	activity_grid = grid_new();
 	pd->idle_timeout = seconds_spin_new("port-idle-timeout", form->idle_timeout_s);
-	grid_label(activity_grid, _("_Idle after (seconds, 0: never):"), GTK_WIDGET(pd->idle_timeout), 0, 0);
+	grid_label(activity_grid, _("Id_le after (seconds, 0: never):"), GTK_WIDGET(pd->idle_timeout), 0, 0);
 	gtk_grid_attach(GTK_GRID(activity_grid), GTK_WIDGET(pd->idle_timeout), 1, 0, 1, 1);
 	pd->no_data_timeout = seconds_spin_new("port-no-data-timeout", form->no_data_timeout_s);
 	grid_label(activity_grid, _("_No data after (seconds, 0: never):"), GTK_WIDGET(pd->no_data_timeout), 0, 1);
@@ -1510,9 +1517,9 @@ format rendu par `config_group` (lire `gtktest.py`).
   entrée `fuzzy` ni vide pour elles) : « Connecting » → « Connexion », « Waiting for data » → « En attente de données », « Port open » → « Port
   ouvert », « Receiving data » → « Réception de données », « Idle » → « Au repos », « Connection lost » → « Liaison perdue », « Reconnecting » →
   « Reconnexion », « No data received » → « Aucune donnée reçue », « Port closed » → « Port fermé », « Port activity » → « Activité du port »,
-  « _Idle after (seconds, 0: never): » → « _Repos après (secondes, 0 : jamais) : », « _No data after (seconds, 0: never): » → « _Sans données
+  « Id_le after (seconds, 0: never): » → « R_epos après (secondes, 0 : jamais) : », « _No data after (seconds, 0: never): » → « Sa_ns données
   après (secondes, 0 : jamais) : », les deux messages de validation et « Activity delays must be between 0 and %d s. » → « Les délais d'activité
-  doivent être compris entre 0 et %d s. » (garder les mnémoniques cohérents avec ceux de l'anglais, uniques dans le dialogue).
+  doivent être compris entre 0 et %d s. » (mnémoniques uniques dans le dialogue en français : r, s, p, d, l, a sont pris, d'où « R_epos » et « Sa_ns » ; l'expander devient « Options de confi_guration avancées », dont le « a » doublait « _Annuler »).
 - [ ] **Step 2 :** `README.md` : paragraphe « Port activity indicators » dans la liste des fonctionnalités (états, délais réglables dans Port ›
   Advanced). `CLAUDE.md` : `port_activity.c` (`GtPortActivity`) dans la liste du cœur ; `activity_icon.c` dans les modules UI ; champs du profil
   et clés `activity_*` ; `test-sessions` gagne `activity`, `unread` ; la classe `lost` n'est plus en italique ; indicateur de barre d'état visible
