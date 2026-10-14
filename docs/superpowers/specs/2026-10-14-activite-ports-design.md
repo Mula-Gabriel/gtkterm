@@ -120,9 +120,8 @@ gboolean gt_port_activity_get_unread(GtPortActivity *a);
   - La classe CSS de l'état (`activity-<nick>`) est posée sur l'emplacement ; nom stable fourni par l'appelant ; nom accessible traduit selon
     l'état (« Receiving data », « Idle », « No data received », « Connection lost », « Reconnecting », « Connecting », « Waiting for data »).
   - CSS (un fournisseur pour l'écran, installé une fois dans `app.c`, avec le CSS existant) : pastille 8 px ronde, contour `alpha(currentColor,0.4)`,
-    verte `#2ec27e`, rouge `#e01b24` ; Zzz et arc `connecting` en `@accent_color` (syntaxe GTK 4.14), avec repli `#3584e4` : la règle de repli
-    est écrite d'abord, puis celle en `@accent_color`, qu'un thème sans cette couleur rend invalide (règle ignorée). La règle italique `.lost label`
-    de `app.c` est supprimée.
+    verte `#2ec27e`, rouge `#e01b24` ; Zzz et arc `connecting` en bleu fixe `#3584e4` (pas `@accent_color`, que certains thèmes ne définissent
+    pas). La règle italique `.lost label` de `app.c` est supprimée.
 - **`tab_label.c`** : l'emplacement (nom `tab-activity`) à gauche du nom ; classe `dead` sur la boîte (nom grisé, `dim-label`), classe `unread` (nom
   en gras) liée à la propriété `unread`. La classe `lost` est gardée sur la boîte (tests) mais l'italique disparaît.
 - **`status_bar.c`** : `gt_status_bar_new(link, activity)` (signature changée) ; un emplacement (nom `status-activity`) avant le texte d'état,
