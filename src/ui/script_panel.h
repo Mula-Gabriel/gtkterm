@@ -24,6 +24,9 @@ void       gt_script_panel_refresh_colors(GtkWidget *panel);
  * de la page active ; app_config_save_window_state fait la seule écriture). [session] script_path : écrit si le panneau a un chemin, jamais
  * retiré sinon (un nouvel onglet n'efface pas le script de la première page). NULL : rien. */
 void       gt_script_panel_store_state(GtkWidget *panel, GKeyFile *kf);
+/* Disposition « topbottom » | « leftright » (comme app.script-layout) ; get : « topbottom » sans panneau */
+void        gt_script_panel_set_layout(GtkWidget *panel, const gchar *layout);
+const gchar *gt_script_panel_get_layout(GtkWidget *panel);
 
 G_END_DECLS
 

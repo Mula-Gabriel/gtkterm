@@ -91,8 +91,12 @@ gt_macro_lists_copy (const GtMacroLists *lists)
   GtMacroLists *copy = gt_macro_lists_new ();
 
   for (gint li = 0; li < gt_macro_lists_count (lists); li++)
-    for (gint ei = 0; ei < gt_macro_lists_entry_count (lists, li); ei++)
+    {
+      /* Une liste vide existe aussi dans la copie */
+      gt_macro_lists_add_list (copy, gt_macro_lists_name (lists, li));
+      for (gint ei = 0; ei < gt_macro_lists_entry_count (lists, li); ei++)
       gt_macro_lists_add (copy, gt_macro_lists_name (lists, li), gt_macro_lists_entry_display (lists, li, ei), gt_macro_lists_entry_value (lists, li, ei));
+    }
   return copy;
 }
 
@@ -110,6 +114,24 @@ gt_macro_lists_find (const GtMacroLists *lists, const gchar *name)
   return -1;
 }
 
+gint
+gt_macro_lists_add_list (GtMacroLists *lists, const gchar *name)
+{
+  gint idx;
+  NamedList *nl;
+
+  if (lists == NULL || name == NULL)
+    return -1;
+  idx = gt_macro_lists_find (lists, name);
+  if (idx >= 0)
+    return idx;
+  nl = g_new0 (NamedList, 1);
+  nl->name = g_strdup (name);
+  nl->entries = g_ptr_array_new_with_free_func (list_entry_free);
+  g_ptr_array_add (lists->lists, nl);
+  return (gint) lists->lists->len - 1;
+}
+
 void
 gt_macro_lists_add (GtMacroLists *lists, const gchar *name, const gchar *display, const gchar *value)
 {
@@ -119,16 +141,8 @@ gt_macro_lists_add (GtMacroLists *lists, const gchar *name, const gchar *display
 
   if (lists == NULL || name == NULL || display == NULL)
     return;
-  idx = gt_macro_lists_find (lists, name);
-  if (idx < 0)
-    {
-      nl = g_new0 (NamedList, 1);
-      nl->name = g_strdup (name);
-      nl->entries = g_ptr_array_new_with_free_func (list_entry_free);
-      g_ptr_array_add (lists->lists, nl);
-    }
-  else
-    nl = g_ptr_array_index (lists->lists, idx);
+  idx = gt_macro_lists_add_list (lists, name);
+  nl = g_ptr_array_index (lists->lists, idx);
 
   entry = g_new0 (ListEntry, 1);
   entry->display = g_strdup (display);

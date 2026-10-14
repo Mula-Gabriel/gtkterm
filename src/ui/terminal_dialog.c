@@ -54,6 +54,7 @@ static void apply_changes(GtSession *s)
 
 	if(view != NULL)
 		gt_session_view_apply_profile(view);	/* terminal ← profil de la session, couleurs de son panneau de script */
+	gt_session_edited(s);	/* le profil de la session a changé (projet : état modifié) */
 	g_object_unref(s);
 }
 

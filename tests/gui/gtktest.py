@@ -68,6 +68,16 @@ def local_revision():
         return 'unknown'
 
 
+def local_describe():
+    """GIT_DESCRIBE de la construction testée (git_describe.h) ; « unknown » si introuvable."""
+    try:
+        with open(os.environ.get('GTKTERM_GIT_DESCRIBE_H', ''), encoding='utf-8') as f:
+            m = re.search(r'#define GIT_DESCRIBE "([^"]*)"', f.read())
+        return m.group(1) if m else 'unknown'
+    except OSError:
+        return 'unknown'
+
+
 def _broadway_crash():
     """Assertion interne de gtk4-broadwayd (défaut de GTK, ex. GTK 4.24.1 : broadway-server.c decode_nodes, broadway-output.c append_node_ops),
     relevée dans le journal d'un serveur du scénario ; None sinon."""
@@ -221,7 +231,7 @@ class Env:
         self.macros_path = os.path.join(self.cfg, 'gtkterm_macros.ini')
         self.stderr_path = os.path.join(self.root, 'gtkterm.stderr')
         self.fakegit_log = os.path.join(self.root, 'fakegit.log')
-        self.fakegit_dir = os.path.join(self.root, 'fakegit')	# réponse du faux git : fichiers « sha » et « delay » (fake_git)
+        self.fakegit_dir = os.path.join(self.root, 'fakegit')	# réponse du faux git : fichiers « tags », « news » et « delay » (fake_git)
         os.makedirs(self.fakegit_dir)
         self.bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 
@@ -259,15 +269,16 @@ class Env:
                 out[k.strip()] = v.strip()
         return out
 
-    def fake_git(self, sha=None, delay=0):
-        """Réponse du faux git pour les appels suivants : SHA de HEAD (None : échec, code 128), délai en secondes avant la réponse."""
-        for nom, val in (('sha', sha), ('delay', str(delay) if delay else None)):
+    def fake_git(self, tags=None, news=None, delay=0):
+        """Réponses du faux git pour les appels suivants : tags servis (liste ; None : clone et fetch échouent, code 128), texte de NEWS
+        (None : absent), délai en secondes avant de répondre à clone et fetch."""
+        for nom, val in (('tags', '\n'.join(tags) + '\n' if tags is not None else None), ('news', news), ('delay', str(delay) if delay else None)):
             p = os.path.join(self.fakegit_dir, nom)
             if val is None:
                 if os.path.exists(p):
                     os.remove(p)
             else:
-                with open(p, 'w') as f:
+                with open(p, 'w', encoding='utf-8') as f:
                     f.write(val)
 
     def fake_calls(self, prog='git'):
@@ -532,13 +543,23 @@ class Env:
 
     # ---------- onglets ----------
     def sessions(self):
-        """Onglets (crochet test-sessions) : liste de dict index, id, name, state, profile, macros_file, active, busy,
+        """Onglets (crochet test-sessions) : liste de dict index, id, name, state, profile, macros_file, active, busy, in_project, script,
         activity (pseudo de GtPortActivityState), unread, dans l'ordre."""
         self.action('test-sessions')
         return self.state('test-sessions') or []
 
     def active_session(self):
         return [s for s in self.sessions() if s['active']][0]
+
+    # ---------- projet (6c) ----------
+    def project(self):
+        """Projet de la fenêtre (crochet test-project) : dict open (b), path (s, vide sans fichier), modified (b), name (s)."""
+        self.action('test-project')
+        return self.state('test-project') or {}
+
+    def project_path(self, name):
+        """Chemin d'un fichier projet dans le HOME privé du scénario."""
+        return os.path.join(self.home, name)
 
     # ---------- port derrière un lien symbolique (perte et retour du périphérique) ----------
     def use_link(self):
@@ -608,6 +629,18 @@ def open_tab(env, port, timeout=8):
     ok = wait_until(lambda: len(env.sessions()) == avant + 1 and env.active_session()['name'] == os.path.basename(port), timeout)
     check(ok, 'onglet ouvert sur %s' % port, env.sessions())
     return ok
+
+
+def save_project_as(env, path):
+    """File › Save project as… (app.project-save-as) : chemin absolu saisi dans le sélecteur « Save project »."""
+    env.action('project-save-as')
+    file_dialog(env, 'Save project', path)
+
+
+def open_project(env, path):
+    """File › Open project… (app.project-open) : chemin absolu saisi dans le sélecteur « Open project »."""
+    env.action('project-open')
+    file_dialog(env, 'Open project', path)
 
 
 def macros_v2_text(*libelles):

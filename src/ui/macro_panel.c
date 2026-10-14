@@ -8,23 +8,35 @@
 #include <gtk/gtk.h>
 
 #include "app_config.h"
+#include "macro_arg_widget.h"
 #include "macro_panel.h"
 #include "macro_view.h"
 #include "macros.h"
 #include "macros_format.h"
+#include "macros_save.h"
 #include "session_view.h"
 
 #define BLINK_MS 500
 #define ARG_WIDTH_MAX 24	/* largeur d'un champ d'argument, en caractères : le texte reste entier dans le champ */
 
+#define ROW_MARGIN 2	/* marge haute et basse d'une ligne de boutons, en pixels */
+#define SEPARATOR_MARGIN_TOP 18	/* au-dessus d'un séparateur : une ligne sautée, la section se détache de la précédente */
+
 #define MACRO_PANEL_KEY "gt-macro-panel"	/* sur la boîte du panneau : MacroPanel, libéré avec elle */
 #define MACRO_PANEL_CSS_KEY "gt-macro-panel-css"	/* sur le GdkDisplay : fournisseur CSS commun à tous les panneaux */
 
-/* Seules couleurs fixes : celles du clignotement ; barre d'onglets et « entry.error » suivent le thème */
+/* Seules couleurs fixes : celles du clignotement. Onglets délimités comme l'interface GTK 3 (bordure, onglet affiché plus clair, trait sous la
+   barre, cadre autour des pages) mais en teintes de la couleur du texte (currentColor) : ils suivent le thème, clair ou sombre. */
 static const char panel_css[] =
 	"button.polling-blink { background: #abf573; color: black; border-color: #00cc00; }\n"
+	".macro-tab-bar { border-bottom: 2px solid alpha(currentColor, 0.4); padding: 3px 3px 0 3px; }\n"
 	".macro-tab-bar flowboxchild { padding: 0; margin: 0; }\n"
-	".macro-tab-bar button.macro-tab { border-radius: 4px 4px 0 0; padding: 3px 6px; min-width: 0; margin: 0; }\n"
+	".macro-tab-bar button.macro-tab { border: 1px solid alpha(currentColor, 0.35); border-bottom-width: 0; border-radius: 4px 4px 0 0; padding: 3px 6px;"
+	" min-width: 0; margin: 0; background: alpha(currentColor, 0.15); box-shadow: none; }\n"
+	".macro-tab-bar button.macro-tab:hover:not(:checked) { background: alpha(currentColor, 0.08); }\n"
+	".macro-tab-bar button.macro-tab:checked { background: transparent; font-weight: bold; }\n"
+	".macro-pages { border: 1px solid alpha(currentColor, 0.25); border-top-width: 0; }\n"
+	".macro-separator-title { font-weight: bold; font-size: 1.25em; }\n"
 	"button.macro-button { min-width: 0; }\n";
 
 typedef struct
@@ -40,6 +52,7 @@ typedef struct
 	GtkWidget      *polling_mode;	/* « polling-mode » */
 	GtkWidget      *polling_period;	/* « polling-period » */
 	GtkWidget      *polling_error;	/* « polling-error » */
+	GtkWidget      *reset_args;	/* « macro-reset-args » */
 	guint           polling_id;	/* macro du popover ouvert, 0 sinon */
 	GtkWidget      *tabs_popover;	/* « tabs-popover », pointeur faible */
 	GtkWidget      *tabs_box;	/* cases du popover des onglets, refaites à chaque ouverture */
@@ -69,8 +82,9 @@ static const gchar *default_tab(void)
 
 static void save_macros(MacroPanel *panel)
 {
-	gt_macros_save_file(panel_macros(panel), NULL, TRUE);
-	config_remember_macros_file(panel->session);
+	GtkRoot *root = gtk_widget_get_root(panel->box);
+
+	gt_ui_macros_save(GTK_IS_WINDOW(root) ? GTK_WINDOW(root) : NULL, panel->session, NULL);
 }
 
 /* Focus au terminal de la page du panneau (rien si elle est arrêtée) */
@@ -169,51 +183,30 @@ static void activate_macro(MacroPanel *panel, guint id)
 
 /* --- Arguments --- */
 
-/* Texte de l'entrée, ou valeur de l'élément choisi du GtkDropDown ("" sans choix) */
-static gchar *arg_value(GtkWidget *w)
-{
-	if(GTK_IS_DROP_DOWN(w))
-	{
-		gchar **values = g_object_get_data(G_OBJECT(w), "values");
-		guint sel = gtk_drop_down_get_selected(GTK_DROP_DOWN(w));
-
-		if(values != NULL && sel != GTK_INVALID_LIST_POSITION && sel < g_strv_length(values))
-			return g_strdup(values[sel]);
-		return g_strdup("");
-	}
-	return g_strdup(gtk_editable_get_text(GTK_EDITABLE(w)));
-}
-
-/* Valeur du champ écrite dans le modèle si elle diffère de l'argument mémorisé ; TRUE si le modèle a changé (rien n'est enregistré ici) */
+/* Valeur du champ écrite parmi les valeurs d'usage (jamais enregistrées) si elle diffère de l'argument courant ; TRUE si elle a changé */
 static gboolean commit_arg(MacroPanel *panel, GtkWidget *w)
 {
 	gint k = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "arg-index"));
-	const GtMacro *m;
+	GtMacros *macros = panel_macros(panel);
+	const gchar *const *current;
 	const gchar *saved;
 	gchar *value;
 	gboolean changed = FALSE;
 
 	if(panel->shut_down || panel->rebuilding)
 		return FALSE;
-	m = gt_macro_set_find(gt_macros_get_set(panel_macros(panel)), widget_id(w));
-	if(m == NULL)
+	if(gt_macro_set_find(gt_macros_get_set(macros), widget_id(w)) == NULL)
 		return FALSE;
-	saved = (m->args != NULL && k < (gint)g_strv_length(m->args)) ? m->args[k] : "";
-	value = arg_value(w);
+	current = gt_macros_get_args(macros, widget_id(w));
+	saved = (current != NULL && k < (gint)g_strv_length((gchar **)current)) ? current[k] : "";
+	value = gt_macro_arg_widget_get_value(w);
 	if(g_strcmp0(value, saved) != 0)
-		changed = gt_macro_set_set_arg(gt_macros_get_set(panel_macros(panel)), m->id, k, value);
+	{
+		gt_macros_set_usage_arg(macros, widget_id(w), k, value);
+		changed = TRUE;
+	}
 	g_free(value);
 	return changed;
-}
-
-static void validate_entry(GtkWidget *entry)
-{
-	const gchar *type = g_object_get_data(G_OBJECT(entry), "arg-type");
-
-	if(macro_type_value_valid(type, gtk_editable_get_text(GTK_EDITABLE(entry))))
-		gtk_widget_remove_css_class(entry, "error");
-	else
-		gtk_widget_add_css_class(entry, "error");
 }
 
 static void on_entry_changed(GtkEditable *editable, gpointer data)
@@ -221,77 +214,41 @@ static void on_entry_changed(GtkEditable *editable, gpointer data)
 	gint len = (gint)g_utf8_strlen(gtk_editable_get_text(editable), -1);
 
 	gtk_editable_set_width_chars(editable, CLAMP(len, 4, ARG_WIDTH_MAX));
-	validate_entry(GTK_WIDGET(editable));
+	gt_macro_arg_widget_validate(GTK_WIDGET(editable));
 }
 
-/* Entrée : enregistre si la valeur a changé ; n'envoie pas la macro (comme l'interface GTK 3) */
+/* Entrée : prend la valeur comme valeur d'usage (rien n'est enregistré) ; n'envoie pas la macro (comme l'interface GTK 3) */
 static void on_entry_activate(GtkEntry *entry, gpointer data)
 {
-	MacroPanel *panel = data;
-
-	if(commit_arg(panel, GTK_WIDGET(entry)))
-		save_macros(panel);
+	commit_arg(data, GTK_WIDGET(entry));
 }
 
 static void on_entry_focus_leave(GtkEventControllerFocus *controller, gpointer data)
 {
-	MacroPanel *panel = data;
-
-	if(commit_arg(panel, gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller))))
-		save_macros(panel);
+	commit_arg(data, gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
 }
 
 static void on_dropdown_selected(GObject *dropdown, GParamSpec *pspec, gpointer data)
 {
-	MacroPanel *panel = data;
-
-	if(commit_arg(panel, GTK_WIDGET(dropdown)))
-		save_macros(panel);
+	commit_arg(data, GTK_WIDGET(dropdown));
 }
 
 static GtkWidget *make_arg_widget(MacroPanel *panel, const GtMacroSet *set, const GtMacro *m, const macro_arg_info_t *info, gint k)
 {
 	const GtMacroLists *lists = gt_macro_set_get_lists(set);
-	const gchar *saved = (m->args != NULL && k < (gint)g_strv_length(m->args)) ? m->args[k] : NULL;
+	const gchar *const *cur = gt_macros_get_args(panel_macros(panel), m->id);
+	const gchar *saved = (cur != NULL && k < (gint)g_strv_length((gchar **)cur)) ? cur[k] : NULL;
 	gchar *name = g_strdup_printf("macro-%u-arg-%d", m->id, k);
 	GtkWidget *w;
 
-	if(g_strcmp0(info->type, "l") == 0 && info->list_name != NULL)
-	{
-		gint li = gt_macro_lists_find(lists, info->list_name);
-		gint n = li >= 0 ? gt_macro_lists_entry_count(lists, li) : 0;
-		gchar **displays = g_new0(gchar *, n + 1);
-		gchar **values = g_new0(gchar *, n + 1);
-		guint selected = 0;
-		gboolean found = FALSE;
-
-		for(gint e = 0; e < n; e++)
-		{
-			displays[e] = g_strdup(gt_macro_lists_entry_display(lists, li, e));
-			values[e] = g_strdup(gt_macro_lists_entry_value(lists, li, e));
-			if(!found && saved != NULL && g_strcmp0(values[e], saved) == 0)
-			{
-				selected = (guint)e;
-				found = TRUE;
-			}
-		}
-		w = gtk_drop_down_new_from_strings((const char *const *)displays);
-		g_strfreev(displays);
-		if(n > 0)
-			gtk_drop_down_set_selected(GTK_DROP_DOWN(w), selected);
-		g_object_set_data_full(G_OBJECT(w), "values", values, (GDestroyNotify)g_strfreev);	/* copies : le jeu peut être remplacé */
+	w = gt_macro_arg_widget_new(lists, info, saved);
+	if(GTK_IS_DROP_DOWN(w))
 		g_signal_connect(w, "notify::selected", G_CALLBACK(on_dropdown_selected), panel);
-	}
 	else
 	{
 		GtkEventController *focus = gtk_event_controller_focus_new();
 
-		w = gtk_entry_new();
-		gtk_entry_set_placeholder_text(GTK_ENTRY(w), g_strcmp0(info->type, "s") == 0 ? "text" : macro_type_is_float(info->type) ? "0.0" : "0");
-		if(saved != NULL)
-			gtk_editable_set_text(GTK_EDITABLE(w), saved);
-		g_object_set_data_full(G_OBJECT(w), "arg-type", g_strdup(info->type), g_free);
-		on_entry_changed(GTK_EDITABLE(w), NULL);	/* largeur et validation initiales */
+		on_entry_changed(GTK_EDITABLE(w), NULL);	/* largeur initiale */
 		g_signal_connect(w, "changed", G_CALLBACK(on_entry_changed), NULL);
 		g_signal_connect(w, "activate", G_CALLBACK(on_entry_activate), panel);
 		g_signal_connect(focus, "leave", G_CALLBACK(on_entry_focus_leave), panel);
@@ -324,14 +281,14 @@ static GtkWidget *make_separator(const gchar *title)
 		GtkWidget *label = gtk_label_new(title);
 		GtkWidget *right = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
 
-		gtk_widget_add_css_class(label, "dim-label");
+		gtk_widget_add_css_class(label, "macro-separator-title");
 		gtk_box_append(GTK_BOX(box), label);
 		gtk_widget_set_hexpand(right, TRUE);
 		gtk_widget_set_valign(right, GTK_ALIGN_CENTER);
 		gtk_box_append(GTK_BOX(box), right);
 	}
-	gtk_widget_set_sensitive(box, FALSE);
-	gtk_widget_set_margin_top(box, 4);
+	gtk_widget_set_can_target(box, FALSE);	/* ni clic ni survol, mais sensible : titre et traits dans la couleur du texte, pas grisés */
+	gtk_widget_set_margin_top(box, SEPARATOR_MARGIN_TOP);
 	gtk_widget_set_margin_bottom(box, 4);
 	return box;
 }
@@ -373,14 +330,11 @@ static void on_args_button_clicked(GtkButton *button, gpointer data)
 	MacroPanel *panel = data;
 	GPtrArray *fields = g_object_get_data(G_OBJECT(button), "arg-widgets");
 	guint id = widget_id(GTK_WIDGET(button));
-	gboolean changed = FALSE;
 
 	if(panel->shut_down)
 		return;
 	for(guint k = 0; fields != NULL && k < fields->len; k++)
-		changed |= commit_arg(panel, g_ptr_array_index(fields, k));
-	if(changed)
-		save_macros(panel);
+		commit_arg(panel, g_ptr_array_index(fields, k));
 	activate_macro(panel, id);
 }
 
@@ -434,6 +388,7 @@ static GtkWidget *make_args_row(MacroPanel *panel, const GtMacroSet *set, const 
 	GtkWidget *button = make_main_button(panel, m);
 	GPtrArray *fields = g_ptr_array_new();	/* champs non possédés */
 
+	gtk_widget_set_vexpand(hbox, FALSE);	/* explicite : le vexpand d'un champ sans libellé ne remonte pas à la page, la ligne garde sa hauteur naturelle */
 	g_signal_connect(button, "clicked", G_CALLBACK(on_args_button_clicked), panel);
 	gtk_box_append(GTK_BOX(hbox), button);
 	for(gint k = 0; k < n_args; k++)
@@ -448,6 +403,8 @@ static GtkWidget *make_args_row(MacroPanel *panel, const GtMacroSet *set, const 
 			gtk_widget_add_css_class(label, "dim-label");
 			gtk_box_append(GTK_BOX(cell), label);
 		}
+		else
+			gtk_widget_set_vexpand(w, TRUE);	/* sans libellé, le champ prend toute la hauteur de la ligne (celle d'un champ à libellé), comme en GTK 3 */
 		gtk_widget_set_hexpand(cell, TRUE);
 		gtk_box_append(GTK_BOX(cell), w);
 		gtk_box_append(GTK_BOX(hbox), cell);
@@ -457,6 +414,14 @@ static GtkWidget *make_args_row(MacroPanel *panel, const GtMacroSet *set, const 
 	update_button_appearance(panel, m->id);
 	macro_arg_infos_free(infos, n_args);
 	return hbox;
+}
+
+/* Ligne de boutons : 2 px au-dessus et au-dessous en plus de l'espacement de la page (7 px entre deux lignes, comme l'interface GTK 3) */
+static void append_row(GtkWidget *vbox, GtkWidget *row)
+{
+	gtk_widget_set_margin_top(row, ROW_MARGIN);
+	gtk_widget_set_margin_bottom(row, ROW_MARGIN);
+	gtk_box_append(GTK_BOX(vbox), row);
 }
 
 static GtkWidget *make_page(MacroPanel *panel, const GtMacroSet *set, const gchar *tab)
@@ -491,14 +456,14 @@ static GtkWidget *make_page(MacroPanel *panel, const GtMacroSet *set, const gcha
 		case GT_MACRO_VIEW_BUTTON:
 			b = make_main_button(panel, m);
 			g_signal_connect(b, "clicked", G_CALLBACK(on_simple_button_clicked), panel);
-			gtk_box_append(GTK_BOX(vbox), b);
+			append_row(vbox, b);
 			update_button_appearance(panel, m->id);
 			break;
 		case GT_MACRO_VIEW_TWO_VALUES:
-			gtk_box_append(GTK_BOX(vbox), make_two_values(panel, set, m));
+			append_row(vbox, make_two_values(panel, set, m));
 			break;
 		case GT_MACRO_VIEW_ARGS:
-			gtk_box_append(GTK_BOX(vbox), make_args_row(panel, set, m));
+			append_row(vbox, make_args_row(panel, set, m));
 			break;
 		default:
 			break;
@@ -634,6 +599,21 @@ static void on_polling_mode_toggled(GtkCheckButton *check, gpointer data)
 	save_macros(panel);
 }
 
+/* « Reset arguments » : valeurs d'usage de la macro du popover effacées (retour aux valeurs par défaut), panneau reconstruit */
+static void on_reset_args_clicked(GtkButton *button, gpointer data)
+{
+	MacroPanel *panel = data;
+	guint id = panel->polling_id;
+	GtkWidget *box = panel->box;
+
+	if(panel->shut_down || id == 0)
+		return;
+	gt_macros_reset_usage(panel_macros(panel), id);
+	if(panel->polling_popover != NULL)
+		gtk_popover_popdown(GTK_POPOVER(panel->polling_popover));
+	gt_macro_panel_rebuild(box);
+}
+
 static void on_polling_period_activate(GtkEntry *entry, gpointer data)
 {
 	MacroPanel *panel = data;
@@ -680,6 +660,7 @@ static void on_button_right_click(GtkGestureClick *gesture, gint n_press, gdoubl
 	gtk_editable_set_text(GTK_EDITABLE(panel->polling_period), buf);
 	gtk_widget_remove_css_class(panel->polling_period, "error");
 	gtk_widget_set_visible(panel->polling_error, FALSE);
+	gtk_widget_set_sensitive(panel->reset_args, macro_count_format_args(gt_macro_set_get_lists(gt_macros_get_set(panel_macros(panel))), m->action) > 0);
 	rect = (GdkRectangle){ (int)bounds.origin.x, (int)bounds.origin.y, (int)bounds.size.width, (int)bounds.size.height };
 	gtk_popover_set_pointing_to(GTK_POPOVER(panel->polling_popover), &rect);
 	gtk_popover_popup(GTK_POPOVER(panel->polling_popover));
@@ -787,6 +768,11 @@ static void build_polling_popover(MacroPanel *panel)
 	gtk_box_append(GTK_BOX(box), label);
 	gtk_box_append(GTK_BOX(box), panel->polling_period);
 	gtk_box_append(GTK_BOX(box), panel->polling_error);
+	panel->reset_args = gtk_button_new_with_label(_("Reset arguments"));
+	gtk_widget_set_name(panel->reset_args, "macro-reset-args");
+	gtk_accessible_update_property(GTK_ACCESSIBLE(panel->reset_args), GTK_ACCESSIBLE_PROPERTY_LABEL, _("Reset arguments"), -1);
+	g_signal_connect(panel->reset_args, "clicked", G_CALLBACK(on_reset_args_clicked), panel);
+	gtk_box_append(GTK_BOX(box), panel->reset_args);
 	gtk_popover_set_child(GTK_POPOVER(panel->polling_popover), box);
 	gtk_widget_set_parent(panel->polling_popover, panel->box);	/* GtkBox : sa disposition présente le popover (gtk_popover_present) */
 	g_object_add_weak_pointer(G_OBJECT(panel->polling_popover), (gpointer *)&panel->polling_popover);
@@ -868,6 +854,7 @@ GtkWidget *gt_macro_panel_new(GtSession *s, GActionMap *tab_actions, gboolean vi
 	gtk_widget_add_controller(panel->tab_bar, GTK_EVENT_CONTROLLER(right));
 	panel->stack = gtk_stack_new();
 	gtk_widget_set_vexpand(panel->stack, TRUE);
+	gtk_widget_add_css_class(panel->stack, "macro-pages");
 	gtk_box_append(GTK_BOX(panel->box), panel->tab_bar);
 	gtk_box_append(GTK_BOX(panel->box), panel->stack);
 	build_polling_popover(panel);

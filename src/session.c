@@ -20,10 +20,12 @@ struct _GtSession
 	gchar *short_name;
 	gboolean file_sending;
 	gboolean shut_down;
+	gboolean in_project;
+	gchar *script_text;	/* jamais NULL */
 };
 
-enum { PROP_0, PROP_SHORT_NAME, PROP_STATUS_TEXT, N_PROPS };
-enum { SIGNAL_CLOSED, N_SIGNALS };
+enum { PROP_0, PROP_SHORT_NAME, PROP_STATUS_TEXT, PROP_IN_PROJECT, PROP_SCRIPT_TEXT, N_PROPS };
+enum { SIGNAL_CLOSED, SIGNAL_EDITED, N_SIGNALS };
 static GParamSpec *props[N_PROPS];
 static guint signals[N_SIGNALS];
 static guint next_id = 1;	/* identifiants jamais réutilisés (compteur du processus, pas un état d'onglet) */
@@ -222,6 +224,10 @@ GtSession *gt_session_new(const GtProfile *profile, const gchar *profile_name)
 	s->actions = g_simple_action_group_new();
 	s->short_name = gt_session_short_name_for(&s->profile);
 	g_signal_connect(s->link, "notify::status-text", G_CALLBACK(on_link_status), s);
+	/* Suivi « modifié » (plan, décision 2) : un seul canal, le signal edited ; déconnecté à l'arrêt */
+	g_signal_connect_swapped(s->options, "changed", G_CALLBACK(gt_session_edited), s);
+	g_signal_connect_swapped(s->link, "notify::auto-reconnect", G_CALLBACK(gt_session_edited), s);
+	gt_macros_set_edited_func(s->macros, (void (*)(gpointer))gt_session_edited, s);
 	install_actions(s);
 	s->activity = gt_port_activity_new();
 	apply_activity_timeouts(s);
@@ -303,6 +309,7 @@ void gt_session_apply_profile(GtSession *s)
 	g_object_set(s->link, "auto-reconnect", s->profile.auto_reconnect, NULL);
 	update_short_name(s);
 	apply_activity_timeouts(s);
+	gt_session_edited(s);
 }
 
 void gt_session_open_port(GtSession *s)
@@ -317,6 +324,46 @@ void gt_session_open_port(GtSession *s)
 	gt_profile_to_transport_params(&s->profile, &params);
 	gt_link_open(s->link, &params, NULL);	/* échec : open-failed de la liaison (l'interface affiche le message) */
 	transport_params_clear(&params);
+	gt_session_edited(s);
+}
+
+gboolean gt_session_get_in_project(GtSession *s)
+{
+	return s->in_project;
+}
+
+void gt_session_set_in_project(GtSession *s, gboolean in_project)
+{
+	in_project = in_project != FALSE;
+	if(in_project == s->in_project)
+		return;
+	s->in_project = in_project;
+	gt_macros_set_embedded(s->macros, in_project);
+	g_object_notify_by_pspec(G_OBJECT(s), props[PROP_IN_PROJECT]);
+	gt_session_edited(s);
+}
+
+const gchar *gt_session_get_script_text(GtSession *s)
+{
+	return s->script_text;
+}
+
+void gt_session_set_script_text(GtSession *s, const gchar *text)
+{
+	if(text == NULL)
+		text = "";
+	if(g_strcmp0(text, s->script_text) == 0)
+		return;
+	g_free(s->script_text);
+	s->script_text = g_strdup(text);
+	g_object_notify_by_pspec(G_OBJECT(s), props[PROP_SCRIPT_TEXT]);
+	gt_session_edited(s);
+}
+
+void gt_session_edited(GtSession *s)
+{
+	if(!s->shut_down)
+		g_signal_emit(s, signals[SIGNAL_EDITED], 0);
 }
 
 void gt_session_close_port(GtSession *s)
@@ -331,6 +378,9 @@ void gt_session_shutdown(GtSession *s)
 	if(s->shut_down)
 		return;
 	s->shut_down = TRUE;
+	g_signal_handlers_disconnect_by_func(s->options, G_CALLBACK(gt_session_edited), s);
+	g_signal_handlers_disconnect_by_func(s->link, G_CALLBACK(gt_session_edited), s);
+	gt_macros_set_edited_func(s->macros, NULL, NULL);
 	/* Jusqu'à 3 s d'attente (interface figée) ; au-delà, thread Lua abandonné : à la fermeture d'un onglet, lui et ses ports Lua 1-15
 	 * vivent jusqu'au retour de l'appel C qui le bloque, l'application continue (voir gt_script_engine_free) */
 	gt_script_engine_shutdown(s->engine);
@@ -364,6 +414,29 @@ static void gt_session_get_property(GObject *object, guint prop_id, GValue *valu
 	case PROP_STATUS_TEXT:
 		g_value_set_string(value, gt_link_get_status_text(s->link));
 		break;
+	case PROP_IN_PROJECT:
+		g_value_set_boolean(value, s->in_project);
+		break;
+	case PROP_SCRIPT_TEXT:
+		g_value_set_string(value, s->script_text);
+		break;
+	default:
+		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+	}
+}
+
+static void gt_session_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
+{
+	GtSession *s = GT_SESSION(object);
+
+	switch(prop_id)
+	{
+	case PROP_IN_PROJECT:
+		gt_session_set_in_project(s, g_value_get_boolean(value));
+		break;
+	case PROP_SCRIPT_TEXT:
+		gt_session_set_script_text(s, g_value_get_string(value));
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 	}
@@ -392,6 +465,7 @@ static void gt_session_finalize(GObject *object)
 	gt_profile_clear(&s->profile);
 	g_free(s->profile_name);
 	g_free(s->short_name);
+	g_free(s->script_text);
 	G_OBJECT_CLASS(gt_session_parent_class)->finalize(object);
 }
 
@@ -400,14 +474,19 @@ static void gt_session_class_init(GtSessionClass *klass)
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
 	object_class->get_property = gt_session_get_property;
+	object_class->set_property = gt_session_set_property;
 	object_class->dispose = gt_session_dispose;
 	object_class->finalize = gt_session_finalize;
 	props[PROP_SHORT_NAME] = g_param_spec_string("short-name", NULL, NULL, NULL, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 	props[PROP_STATUS_TEXT] = g_param_spec_string("status-text", NULL, NULL, NULL, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+	props[PROP_IN_PROJECT] = g_param_spec_boolean("in-project", NULL, NULL, FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+	props[PROP_SCRIPT_TEXT] = g_param_spec_string("script-text", NULL, NULL, "", G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 	g_object_class_install_properties(object_class, N_PROPS, props);
 	signals[SIGNAL_CLOSED] = g_signal_new("closed", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+	signals[SIGNAL_EDITED] = g_signal_new("edited", G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
 static void gt_session_init(GtSession *s)
 {
+	s->script_text = g_strdup("");
 }

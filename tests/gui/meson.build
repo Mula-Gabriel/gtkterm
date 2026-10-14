@@ -11,6 +11,7 @@ gui_env.set('GTKTERM_GUARD', gui_guard.full_path())
 gui_env.set('GTKTERM_GUI_RUNS', meson.current_build_dir() / 'runs')
 # Révision construite (GIT_REVISION) : les scénarios de mise à jour font répondre le faux git « à jour » avec elle.
 gui_env.set('GTKTERM_GIT_REVISION_H', git_revision_h.full_path())
+gui_env.set('GTKTERM_GIT_DESCRIBE_H', git_describe_h.full_path())
 
 gui_scenarios = [
 	# squelette, fermeture, messages de démarrage
@@ -55,6 +56,7 @@ gui_scenarios = [
 	'test_polling',
 	'test_raccourcis_macros',
 	'test_macros_arguments',
+	'test_macros_conflit',
 	'test_focus_terminal',
 	'test_raccourci_non_envoyable',
 	'test_echo_macro',
@@ -69,6 +71,7 @@ gui_scenarios = [
 	'test_fermeture_script',
 	'test_fermeture_script_macro',
 	'test_script_couleurs',
+	'test_script_panneau',
 	# mise à jour et À propos
 	'test_update_window',
 	'test_about',
@@ -83,6 +86,14 @@ gui_scenarios = [
 	'test_onglets_macros_fichier',
 	'test_onglets_macros',
 	'test_onglets_lua',
+	# projets (sous-projet 6c)
+	'test_projet',
+	'test_projet_fermeture',
+	'test_projet_demarrage',
+	'test_projet_macros',
+	'test_projet_conflit',
+	'test_projet_operations',
+	'test_macro_editor_colonnes',
 ]
 
 foreach s : gui_scenarios

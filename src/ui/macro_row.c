@@ -26,9 +26,10 @@ struct _GtMacroRow
 	gchar  *shortcut;
 	gchar  *action;
 	gchar  *tab;
+	gchar **args;	/* valeurs par défaut ; NULL : aucune */
 };
 
-enum { ROW_PROP_0, ROW_PROP_ID, ROW_PROP_LABEL, ROW_PROP_SHORTCUT, ROW_PROP_ACTION, ROW_PROP_TAB, ROW_N_PROPS };
+enum { ROW_PROP_0, ROW_PROP_ID, ROW_PROP_LABEL, ROW_PROP_SHORTCUT, ROW_PROP_ACTION, ROW_PROP_TAB, ROW_PROP_ARGS, ROW_N_PROPS };
 static GParamSpec *row_props[ROW_N_PROPS];
 
 G_DEFINE_FINAL_TYPE(GtMacroRow, gt_macro_row, G_TYPE_OBJECT)
@@ -60,6 +61,17 @@ static void gt_macro_row_set_property(GObject *object, guint prop_id, const GVal
 		row->id = g_value_get_uint(value);
 		return;
 	}
+	if(prop_id == ROW_PROP_ARGS)
+	{
+		const gchar *const *args = g_value_get_boxed(value);
+
+		if((row->args == NULL) == (args == NULL) && (args == NULL || g_strv_equal((const gchar *const *)row->args, args)))
+			return;
+		g_strfreev(row->args);
+		row->args = args != NULL ? g_strdupv((gchar **)args) : NULL;
+		g_object_notify_by_pspec(object, pspec);
+		return;
+	}
 	field = row_field(row, prop_id);
 	if(field == NULL)
 	{
@@ -80,6 +92,11 @@ static void gt_macro_row_get_property(GObject *object, guint prop_id, GValue *va
 		g_value_set_uint(value, row->id);
 		return;
 	}
+	if(prop_id == ROW_PROP_ARGS)
+	{
+		g_value_set_boxed(value, row->args);
+		return;
+	}
 	field = row_field(row, prop_id);
 	if(field == NULL)
 	{
@@ -97,6 +114,7 @@ static void gt_macro_row_finalize(GObject *object)
 	g_free(row->shortcut);
 	g_free(row->action);
 	g_free(row->tab);
+	g_strfreev(row->args);
 	G_OBJECT_CLASS(gt_macro_row_parent_class)->finalize(object);
 }
 
@@ -113,6 +131,7 @@ static void gt_macro_row_class_init(GtMacroRowClass *klass)
 	row_props[ROW_PROP_SHORTCUT] = g_param_spec_string("shortcut", NULL, NULL, "", flags);
 	row_props[ROW_PROP_ACTION] = g_param_spec_string("action", NULL, NULL, "", flags);
 	row_props[ROW_PROP_TAB] = g_param_spec_string("tab", NULL, NULL, "", flags);
+	row_props[ROW_PROP_ARGS] = g_param_spec_boxed("args", NULL, NULL, G_TYPE_STRV, flags);
 	g_object_class_install_properties(object_class, ROW_N_PROPS, row_props);
 }
 
@@ -134,11 +153,21 @@ const gchar *gt_macro_row_get_label(GtMacroRow *row) { return row->label; }
 const gchar *gt_macro_row_get_shortcut(GtMacroRow *row) { return row->shortcut; }
 const gchar *gt_macro_row_get_action(GtMacroRow *row) { return row->action; }
 const gchar *gt_macro_row_get_tab(GtMacroRow *row) { return row->tab; }
+const gchar *const *gt_macro_row_get_args(GtMacroRow *row) { return (const gchar *const *)row->args; }
 
 void gt_macro_row_set_shortcut(GtMacroRow *row, const gchar *shortcut)
 {
 	if(replace_string(&row->shortcut, shortcut))
 		g_object_notify_by_pspec(G_OBJECT(row), row_props[ROW_PROP_SHORTCUT]);
+}
+
+void gt_macro_row_set_args(GtMacroRow *row, const gchar *const *args)
+{
+	if((row->args == NULL) == (args == NULL) && (args == NULL || g_strv_equal((const gchar *const *)row->args, args)))
+		return;
+	g_strfreev(row->args);
+	row->args = args != NULL ? g_strdupv((gchar **)args) : NULL;
+	g_object_notify_by_pspec(G_OBJECT(row), row_props[ROW_PROP_ARGS]);
 }
 
 /* ---- GtMacroListRow ---- */
@@ -247,6 +276,7 @@ GListStore *gt_macro_rows_from_set(const GtMacroSet *set)
 		const GtMacro *m = gt_macro_set_get(set, i);
 		GtMacroRow *row = gt_macro_row_new(m->id, m->label, m->shortcut, m->action, m->tab);
 
+		g_object_set(row, "args", m->args, NULL);
 		g_list_store_append(store, row);
 		g_object_unref(row);
 	}
@@ -283,6 +313,7 @@ GtMacroEdit *gt_macro_rows_to_edits(GListModel *rows, guint *n_out)
 		edits[i].shortcut = row->shortcut;
 		edits[i].action = row->action;
 		edits[i].tab = row->tab;
+		edits[i].args = (const gchar *const *)row->args;
 		g_object_unref(row);	/* le modèle garde sa référence : les chaînes restent valides */
 	}
 	*n_out = n;

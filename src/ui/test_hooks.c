@@ -6,7 +6,8 @@
  *   id (s, adresse), depth (i), native (i, rang du widget natif — fenêtre ou popover — qui porte la surface, -1 avant le premier),
  *   type (s), role (s, GtkAccessibleRole), label (s, si non vide), name (s, si posé par gtk_widget_set_name), title (s, fenêtres),
  *   css (as), visible, mapped, sensitive, focus, selected (b), active (b, widgets à propriété « active » booléenne), modal (b, fenêtres),
- *   x, y, w, h (i, en coordonnées de la surface du natif, si mappé), surface_w, surface_h (i, natifs), popup_x, popup_y (i, popovers),
+ *   x, y, w, h (i, en coordonnées de la surface du natif, si mappé), natural_w (i, si mappé : largeur naturelle mesurée par gtk_widget_measure, indépendante de
+ *   l'allocation), surface_w, surface_h (i, natifs), popup_x, popup_y (i, popovers),
  *   frame (i, natifs : compteur d'images de l'horloge de la surface ; une géométrie lue avant l'image suivante peut être périmée). */
 #include <string.h>
 #include <vte/vte.h>
@@ -158,6 +159,13 @@ static void dump_widget(GtkWidget *w, GtkNative *nat, gint nat_idx, gint *n_nati
 		add_int(&d, "y", (gint)(r.origin.y + sy));
 		add_int(&d, "w", (gint)r.size.width);
 		add_int(&d, "h", (gint)r.size.height);
+	}
+	if(gtk_widget_get_mapped(w))
+	{
+		gint nat_w = 0;
+
+		gtk_widget_measure(w, GTK_ORIENTATION_HORIZONTAL, -1, NULL, &nat_w, NULL, NULL);
+		add_int(&d, "natural_w", nat_w);
 	}
 	if(GTK_IS_NATIVE(w) && gtk_native_get_surface(GTK_NATIVE(w)) != NULL)
 	{
@@ -327,7 +335,8 @@ static void on_test_terminal_props(GSimpleAction *action, GVariant *param, gpoin
 
 /* test-sessions (plan, décision 9) : état aa{sv} recalculé à chaque activation (Activate puis Describe, comme test-dump) ; un dict par onglet,
  * dans l'ordre : index (i), id (u), name (s, nom court), state (s, pseudo de GtLinkState), profile (s), macros_file (s, vide si aucun),
- * active (b), busy (b), activity (s, pseudo de GtPortActivityState), unread (b) */
+ * active (b), busy (b), in_project (b), script (s, texte de l'éditeur de script tenu par la session), activity (s, pseudo de
+ * GtPortActivityState), unread (b) */
 static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
 	GtSessionManager *m = gt_app_get_sessions();
@@ -352,12 +361,33 @@ static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer us
 		g_variant_builder_add(&d, "{sv}", "macros_file", g_variant_new_string(macros != NULL ? macros : ""));
 		g_variant_builder_add(&d, "{sv}", "active", g_variant_new_boolean(s == active));
 		g_variant_builder_add(&d, "{sv}", "busy", g_variant_new_boolean(gt_session_is_busy(s)));
+		g_variant_builder_add(&d, "{sv}", "in_project", g_variant_new_boolean(gt_session_get_in_project(s)));
+		g_variant_builder_add(&d, "{sv}", "script", g_variant_new_string(gt_session_get_script_text(s)));
 		g_variant_builder_add(&d, "{sv}", "activity",
 		                      g_variant_new_string(gt_port_activity_state_nick(gt_port_activity_get_state(gt_session_get_activity(s)))));
 		g_variant_builder_add(&d, "{sv}", "unread", g_variant_new_boolean(gt_port_activity_get_unread(gt_session_get_activity(s))));
 		g_variant_builder_add_value(&b, g_variant_builder_end(&d));
 	}
 	g_type_class_unref(states);
+	g_simple_action_set_state(action, g_variant_builder_end(&b));
+}
+
+/* test-project (plan, décision 13) : état a{sv} recalculé à chaque activation : open (b), path (s, vide sans fichier), modified (b), name (s) */
+static void on_test_project(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+	GtProject *p = gt_app_get_project();
+	GVariantBuilder b;
+
+	g_variant_builder_init(&b, G_VARIANT_TYPE_VARDICT);
+	if(p != NULL)
+	{
+		const gchar *path = gt_project_get_path(p);
+
+		g_variant_builder_add(&b, "{sv}", "open", g_variant_new_boolean(gt_project_is_open(p)));
+		g_variant_builder_add(&b, "{sv}", "path", g_variant_new_string(path != NULL ? path : ""));
+		g_variant_builder_add(&b, "{sv}", "modified", g_variant_new_boolean(gt_project_is_modified(p)));
+		g_variant_builder_add(&b, "{sv}", "name", g_variant_new_take_string(gt_project_get_name(p)));
+	}
 	g_simple_action_set_state(action, g_variant_builder_end(&b));
 }
 
@@ -451,6 +481,62 @@ static void on_test_set_text(GSimpleAction *action, GVariant *param, gpointer us
 		g_printerr("GTKTERM-TEST: test-set-text %s : %s\n", key, w == NULL ? "introuvable" : "non éditable");
 }
 
+/* Fenêtre visible qui a le focus (« Configure Macros » n'est pas attachée à l'application), sinon la fenêtre active de l'application */
+static GtkWindow *focused_window(void)
+{
+	GListModel *tops = gtk_window_get_toplevels();
+	GtkApplication *app = GTK_APPLICATION(g_application_get_default());
+	GtkWindow *found = NULL;
+
+	for(guint i = 0; found == NULL && i < g_list_model_get_n_items(tops); i++)
+	{
+		GtkWindow *w = g_list_model_get_item(tops, i);
+
+		if(gtk_widget_get_mapped(GTK_WIDGET(w)) && gtk_window_is_active(w))
+			found = w;
+		g_object_unref(w);
+	}
+	return found != NULL ? found : (app != NULL ? gtk_application_get_active_window(app) : NULL);
+}
+
+/* Capture PNG de la fenêtre qui a le focus (rendu Cairo hors écran) : pour regarder une disposition, aucun test ne la compare */
+static void on_test_screenshot(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+	GtkWindow *win = focused_window();
+	const gchar *path = g_variant_get_string(param, NULL);
+	GdkPaintable *paintable;
+	GtkSnapshot *snapshot;
+	GskRenderNode *node;
+	GskRenderer *renderer;
+	GError *error = NULL;
+
+	if(win == NULL)
+		return;
+	paintable = gtk_widget_paintable_new(GTK_WIDGET(win));
+	snapshot = gtk_snapshot_new();
+	gdk_paintable_snapshot(paintable, snapshot, gtk_widget_get_width(GTK_WIDGET(win)), gtk_widget_get_height(GTK_WIDGET(win)));
+	node = gtk_snapshot_free_to_node(snapshot);
+	renderer = gsk_cairo_renderer_new();
+	if(node != NULL && gsk_renderer_realize_for_display(renderer, gtk_widget_get_display(GTK_WIDGET(win)), &error))
+	{
+		GdkTexture *texture = gsk_renderer_render_texture(renderer, node, NULL);
+
+		if(!gdk_texture_save_to_png(texture, path))
+			g_printerr("GTKTERM-TEST: test-screenshot %s : échec\n", path);
+		g_object_unref(texture);
+		gsk_renderer_unrealize(renderer);
+	}
+	else if(error != NULL)
+	{
+		g_printerr("GTKTERM-TEST: test-screenshot : %s\n", error->message);
+		g_error_free(error);
+	}
+	g_object_unref(renderer);
+	if(node != NULL)
+		gsk_render_node_unref(node);
+	g_object_unref(paintable);
+}
+
 void gt_test_hooks_install(GtkApplication *app)
 {
 	GSimpleAction *a;
@@ -471,8 +557,16 @@ void gt_test_hooks_install(GtkApplication *app)
 	g_signal_connect(a, "activate", G_CALLBACK(on_test_sessions), NULL);
 	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
 	g_object_unref(a);
+	a = g_simple_action_new_stateful("test-project", NULL, g_variant_new_array(G_VARIANT_TYPE("{sv}"), NULL, 0));
+	g_signal_connect(a, "activate", G_CALLBACK(on_test_project), NULL);
+	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
+	g_object_unref(a);
 	a = g_simple_action_new("test-activate", G_VARIANT_TYPE_STRING);
 	g_signal_connect(a, "activate", G_CALLBACK(on_test_activate), NULL);
+	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
+	g_object_unref(a);
+	a = g_simple_action_new("test-screenshot", G_VARIANT_TYPE_STRING);
+	g_signal_connect(a, "activate", G_CALLBACK(on_test_screenshot), NULL);
 	g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(a));
 	g_object_unref(a);
 	a = g_simple_action_new("test-set-text", G_VARIANT_TYPE("(ss)"));

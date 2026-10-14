@@ -1,0 +1,7 @@
+/* Généré par vcs_tag() (src/meson.build) à chaque construction : ne pas modifier git_describe.h. */
+#ifndef GIT_DESCRIBE_H_
+#define GIT_DESCRIBE_H_
+
+#define GIT_DESCRIBE "@GIT_DESCRIBE@"
+
+#endif

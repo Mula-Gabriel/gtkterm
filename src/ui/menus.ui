@@ -1,41 +1,44 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Barre de menus de la fenêtre principale (GMenuModel, chargée par main_window.c) et menu contextuel du terminal (app_actions.c). Chaque élément vise
-     une action app.* ; raccourcis : gtk_application_set_accels_for_action, pas d'attribut « accel » ; libellés sans mnémonique. -->
+     une action app.* ; raccourcis : gtk_application_set_accels_for_action, pas d'attribut « accel » ; libellés sans mnémonique.
+     Ordre (6c, spec §3.2-10) : File (le projet est le document), Edit, View, Port, Terminal, Macros, Log, Help. -->
 <interface>
   <menu id="menubar">
     <submenu>
       <attribute name="label" translatable="yes">File</attribute>
       <section>
         <item>
-          <attribute name="label" translatable="yes">New tab</attribute>
-          <attribute name="action">app.new-tab</attribute>
+          <attribute name="label" translatable="yes">New project</attribute>
+          <attribute name="action">app.project-new</attribute>
         </item>
         <item>
-          <attribute name="label" translatable="yes">Close tab</attribute>
-          <attribute name="action">app.close-tab</attribute>
+          <attribute name="label" translatable="yes">Open project…</attribute>
+          <attribute name="action">app.project-open</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save project</attribute>
+          <attribute name="action">app.project-save</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save project as…</attribute>
+          <attribute name="action">app.project-save-as</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Close project</attribute>
+          <attribute name="action">app.project-close</attribute>
         </item>
       </section>
       <section>
         <item>
-          <attribute name="label" translatable="yes">Clear screen</attribute>
-          <attribute name="action">app.clear-screen</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Clear scrollback</attribute>
-          <attribute name="action">app.clear-scrollback</attribute>
-        </item>
-      </section>
-      <section>
-        <item>
-          <attribute name="label" translatable="yes">Send RAW file</attribute>
+          <attribute name="label" translatable="yes">Send RAW file…</attribute>
           <attribute name="action">app.send-file</attribute>
         </item>
         <item>
-          <attribute name="label" translatable="yes">Save RAW file</attribute>
+          <attribute name="label" translatable="yes">Save RAW file…</attribute>
           <attribute name="action">app.save-raw</attribute>
         </item>
         <item>
-          <attribute name="label" translatable="yes">Save ASCII file</attribute>
+          <attribute name="label" translatable="yes">Save ASCII file…</attribute>
           <attribute name="action">app.save-ascii</attribute>
         </item>
       </section>
@@ -58,123 +61,22 @@
           <attribute name="action">app.paste</attribute>
         </item>
         <item>
+          <attribute name="label" translatable="yes">Select All</attribute>
+          <attribute name="action">app.select-all</attribute>
+        </item>
+        <item>
           <attribute name="label" translatable="yes">Find</attribute>
           <attribute name="action">app.find</attribute>
         </item>
       </section>
       <section>
         <item>
-          <attribute name="label" translatable="yes">Select All</attribute>
-          <attribute name="action">app.select-all</attribute>
-        </item>
-      </section>
-    </submenu>
-    <submenu>
-      <attribute name="label" translatable="yes">Log</attribute>
-      <section>
-        <item>
-          <attribute name="label" translatable="yes">To file...</attribute>
-          <attribute name="action">app.log-start</attribute>
+          <attribute name="label" translatable="yes">Clear screen</attribute>
+          <attribute name="action">app.clear-screen</attribute>
         </item>
         <item>
-          <attribute name="label" translatable="yes">Pause</attribute>
-          <attribute name="action">app.log-paused</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Stop</attribute>
-          <attribute name="action">app.log-stop</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Clear</attribute>
-          <attribute name="action">app.log-clear</attribute>
-        </item>
-      </section>
-    </submenu>
-    <submenu>
-      <attribute name="label" translatable="yes">Configuration</attribute>
-      <section id="configuration-dialogs">
-        <item>
-          <attribute name="label" translatable="yes">Port</attribute>
-          <attribute name="action">app.port</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Main window</attribute>
-          <attribute name="action">app.terminal</attribute>
-        </item>
-      </section>
-      <section>
-        <item>
-          <attribute name="label" translatable="yes">Local echo</attribute>
-          <attribute name="action">app.local-echo</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Autoreconnect</attribute>
-          <attribute name="action">app.auto-reconnect</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">CR LF auto</attribute>
-          <attribute name="action">app.crlf-auto</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">ESC clear screen</attribute>
-          <attribute name="action">app.esc-clear-screen</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Timestamp</attribute>
-          <attribute name="action">app.timestamp</attribute>
-        </item>
-      </section>
-      <section id="configuration-macros">
-        <item>
-          <attribute name="label" translatable="yes">Macros</attribute>
-          <attribute name="action">app.macros</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Load macros file...</attribute>
-          <attribute name="action">app.load-macros</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Save macros file</attribute>
-          <attribute name="action">app.save-macros</attribute>
-        </item>
-      </section>
-      <section id="configuration-profiles">
-        <item>
-          <attribute name="label" translatable="yes">Load configuration</attribute>
-          <attribute name="action">app.load-profile</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Save configuration</attribute>
-          <attribute name="action">app.save-profile</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Delete configuration</attribute>
-          <attribute name="action">app.delete-profile</attribute>
-        </item>
-      </section>
-    </submenu>
-    <submenu>
-      <attribute name="label" translatable="yes">Control signals</attribute>
-      <section>
-        <item>
-          <attribute name="label" translatable="yes">Send break</attribute>
-          <attribute name="action">app.send-break</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Open Port</attribute>
-          <attribute name="action">app.open-port</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Close Port</attribute>
-          <attribute name="action">app.close-port</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Toggle DTR</attribute>
-          <attribute name="action">app.toggle-dtr</attribute>
-        </item>
-        <item>
-          <attribute name="label" translatable="yes">Toggle RTS</attribute>
-          <attribute name="action">app.toggle-rts</attribute>
+          <attribute name="label" translatable="yes">Clear scrollback</attribute>
+          <attribute name="action">app.clear-scrollback</attribute>
         </item>
       </section>
     </submenu>
@@ -236,6 +138,128 @@
         <item>
           <attribute name="label" translatable="yes">Script panel</attribute>
           <attribute name="action">app.show-script-panel</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Port</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">New port…</attribute>
+          <attribute name="action">app.new-tab</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Close tab</attribute>
+          <attribute name="action">app.close-tab</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Settings…</attribute>
+          <attribute name="action">app.port</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Open Port</attribute>
+          <attribute name="action">app.open-port</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Close Port</attribute>
+          <attribute name="action">app.close-port</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Autoreconnect</attribute>
+          <attribute name="action">app.auto-reconnect</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Send break</attribute>
+          <attribute name="action">app.send-break</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Toggle DTR</attribute>
+          <attribute name="action">app.toggle-dtr</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Toggle RTS</attribute>
+          <attribute name="action">app.toggle-rts</attribute>
+        </item>
+      </section>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Load profile…</attribute>
+          <attribute name="action">app.load-profile</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save profile…</attribute>
+          <attribute name="action">app.save-profile</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Delete profile…</attribute>
+          <attribute name="action">app.delete-profile</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Terminal</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Settings…</attribute>
+          <attribute name="action">app.terminal</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Local echo</attribute>
+          <attribute name="action">app.local-echo</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">CR LF auto</attribute>
+          <attribute name="action">app.crlf-auto</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">ESC clear screen</attribute>
+          <attribute name="action">app.esc-clear-screen</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Timestamp</attribute>
+          <attribute name="action">app.timestamp</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Macros</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">Configure macros…</attribute>
+          <attribute name="action">app.macros</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Load macros file…</attribute>
+          <attribute name="action">app.load-macros</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Save macros file…</attribute>
+          <attribute name="action">app.save-macros</attribute>
+        </item>
+      </section>
+    </submenu>
+    <submenu>
+      <attribute name="label" translatable="yes">Log</attribute>
+      <section>
+        <item>
+          <attribute name="label" translatable="yes">To file...</attribute>
+          <attribute name="action">app.log-start</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Pause</attribute>
+          <attribute name="action">app.log-paused</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Stop</attribute>
+          <attribute name="action">app.log-stop</attribute>
+        </item>
+        <item>
+          <attribute name="label" translatable="yes">Clear</attribute>
+          <attribute name="action">app.log-clear</attribute>
         </item>
       </section>
     </submenu>

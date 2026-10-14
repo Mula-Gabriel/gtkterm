@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 1.3.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 22:57+0200\n"
+"POT-Creation-Date: 2026-10-14 23:11+0200\n"
 "PO-Revision-Date: 2026-10-10 12:00+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -18,13 +18,18 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
-#: src/app_config.c:175
+#: src/app_config.c:213
+#, c-format
+msgid "Cannot read the configuration file: %s"
+msgstr "Impossible de lire le fichier de configuration : %s"
+
+#: src/app_config.c:216
 #, c-format
 msgid "No section \"%s\" in configuration file\n"
 msgstr "Pas de section \"%s\" dans le fichier de configuration\n"
 
 #. Le message de lecture contient déjà le chemin du fichier
-#: src/app_config.c:233
+#: src/app_config.c:286
 #, c-format
 msgid ""
 "Cannot read configuration file: %s\n"
@@ -34,7 +39,7 @@ msgstr ""
 "La configuration par défaut est utilisée et rien ne sera écrit dans ce "
 "fichier."
 
-#: src/app_config.c:247
+#: src/app_config.c:300
 #, c-format
 msgid ""
 "Configuration file (%s) with\n"
@@ -43,7 +48,7 @@ msgstr ""
 "Le fichier de configuration %s a été créé\n"
 "avec une configuration [default].\n"
 
-#: src/app_config.c:307
+#: src/app_config.c:372
 msgid "Cannot delete section!"
 msgstr "Impossible de supprimer la section !"
 
@@ -57,7 +62,7 @@ msgstr "Impossible d'ouvrir le fichier %s : %s"
 msgid "Cannot write file %s: %s"
 msgstr "Impossible d'écrire dans le fichier %s : %s"
 
-#: src/cmdline.c:60
+#: src/cmdline.c:61
 #, c-format
 msgid ""
 "\n"
@@ -66,11 +71,11 @@ msgstr ""
 "\n"
 "GTKTerm version %s\n"
 
-#: src/cmdline.c:61
+#: src/cmdline.c:62
 msgid "\t (c) Julien Schmitt\n"
 msgstr "\t (c) Julien Schmitt\n"
 
-#: src/cmdline.c:62
+#: src/cmdline.c:63
 msgid ""
 "\n"
 "This program is released under the terms of the GPL V.2\n"
@@ -78,11 +83,11 @@ msgstr ""
 "\n"
 "Ce programme est distribué selon les termes de la licence GPL V.2\n"
 
-#: src/cmdline.c:63
+#: src/cmdline.c:64
 msgid "\t ** Use at your own risks! **\n"
 msgstr "\t ** Livré sans aucune garantie! **\n"
 
-#: src/cmdline.c:64
+#: src/cmdline.c:65
 msgid ""
 "\n"
 "Command line options\n"
@@ -90,57 +95,57 @@ msgstr ""
 "\n"
 "Options de la ligne de commande\n"
 
-#: src/cmdline.c:65
+#: src/cmdline.c:66
 msgid "--help or -h: this help screen\n"
 msgstr "--help ou -h: cet écran d'aide\n"
 
-#: src/cmdline.c:66
+#: src/cmdline.c:67
 msgid "--config <configuration> or -c: load configuration\n"
 msgstr "--config <configuration> ou -c: charger une configuration\n"
 
-#: src/cmdline.c:67
+#: src/cmdline.c:68
 msgid "--port <device> or -p: serial port device (default /dev/ttyS0)\n"
 msgstr "--port <device> ou -p: device du port série (/dev/ttyS0 par défaut)\n"
 
-#: src/cmdline.c:68
+#: src/cmdline.c:69
 msgid "--speed <speed> or -s: serial port speed (default 9600)\n"
 msgstr "--speed <speed> ou -s: vitesse du port série (9600 par défaut)\n"
 
-#: src/cmdline.c:69
+#: src/cmdline.c:70
 msgid "--bits <bits> or -b: number of bits (default 8)\n"
 msgstr "--bits <bits> ou -b: nombre de bits (8 par défaut)\n"
 
-#: src/cmdline.c:70
+#: src/cmdline.c:71
 msgid "--stopbits <stopbits> or -t: number of stopbits (default 1)\n"
 msgstr "--stopbits <stopbits> ou -t: nombre de bits de stop (1 par défaut)\n"
 
-#: src/cmdline.c:71
+#: src/cmdline.c:72
 msgid "--parity <none | odd | even> or -a: parity (default none)\n"
 msgstr "--parity <none | odd | even> ou -a : parité (aucune par défaut)\n"
 
-#: src/cmdline.c:72
+#: src/cmdline.c:73
 msgid "--flow <none | Xon | RTS | RS485> or -w: flow control (default none)\n"
 msgstr ""
 "--flow <none | Xon | RTS | RS485> ou -w : contrôle de flux (aucun par "
 "défaut)\n"
 
-#: src/cmdline.c:73
+#: src/cmdline.c:74
 msgid "--delay <ms> or -d: end of line delay in ms (default none)\n"
 msgstr "--delay <ms> ou -d: délai de fin de ligne en ms (aucun par défaut)\n"
 
-#: src/cmdline.c:74
+#: src/cmdline.c:75
 msgid ""
 "--char <char> or -r: wait for a special char at end of line (default none)\n"
 msgstr ""
 "--char <char> ou -r: caractère spécial à attendre en fin de ligne (aucun par "
 "défaut)\n"
 
-#: src/cmdline.c:75
+#: src/cmdline.c:76
 msgid "--file <filename> or -f: default file to send (default none)\n"
 msgstr ""
 "--file <filename> ou -f: fichier par défaut à envoyer (aucun par défaut)\n"
 
-#: src/cmdline.c:76
+#: src/cmdline.c:77
 msgid ""
 "--rts_time_before <ms> or -x: for RS-485, time in ms before transmit with "
 "rts on\n"
@@ -148,7 +153,7 @@ msgstr ""
 "--rts_time_before <ms> ou -x: pour RS-485, temps en ms avant transmission "
 "avec rts activé\n"
 
-#: src/cmdline.c:77
+#: src/cmdline.c:78
 msgid ""
 "--rts_time_after <ms> or -y: for RS-485, time in ms after transmit with rts "
 "on\n"
@@ -156,11 +161,11 @@ msgstr ""
 "--rts_time_after <ms> ou -y: pour RS-485, temps en ms après transmission "
 "avec rts activé\n"
 
-#: src/cmdline.c:78
+#: src/cmdline.c:79
 msgid "--echo or -e: switch on local echo\n"
 msgstr "--echo ou -e: écho local\n"
 
-#: src/cmdline.c:79
+#: src/cmdline.c:80
 msgid ""
 "--disable-port-lock or -L: does not lock serial port. Allows to send to "
 "serial port from different terminals\n"
@@ -168,7 +173,7 @@ msgstr ""
 "--disable-port-lock ou -L : ne verrouille pas le port série. Permet "
 "d'envoyer sur le port série depuis plusieurs terminaux\n"
 
-#: src/cmdline.c:80
+#: src/cmdline.c:81
 msgid ""
 "                      Note: incoming data are displayed randomly on only one "
 "terminal\n"
@@ -176,42 +181,51 @@ msgstr ""
 "                      Remarque : les données reçues ne s'affichent, de façon "
 "aléatoire, que sur un seul terminal\n"
 
-#: src/cmdline.c:81
+#: src/cmdline.c:82
 msgid "--transport <serial|tcp-client|tcp-server> or -T: transport type\n"
 msgstr "--transport <serial|tcp-client|tcp-server> ou -T : type de transport\n"
 
-#: src/cmdline.c:82
+#: src/cmdline.c:83
 msgid "--host <hostname> or -H: TCP host\n"
 msgstr "--host <nom d'hôte> ou -H : hôte TCP\n"
 
-#: src/cmdline.c:83
+#: src/cmdline.c:84
 msgid "--tcp-port <port> or -P: TCP port\n"
 msgstr "--tcp-port <port> ou -P : port TCP\n"
 
-#: src/cmdline.c:100
+#: src/cmdline.c:85
+msgid "--project <file>: open this project\n"
+msgstr "--project <fichier> : ouvre ce projet\n"
+
+#: src/cmdline.c:102
 #, c-format
 msgid "Invalid value for option %s: \"%s\""
 msgstr "Valeur non valide pour l'option %s : « %s »"
 
-#: src/cmdline.c:217
+#: src/cmdline.c:222
 #, c-format
 msgid "Missing value for option %s"
 msgstr "Valeur manquante pour l'option %s"
 
 #. Élément fautif tel qu'écrit (« --nimporte », « -Z », « --echo=1 »)
-#: src/cmdline.c:222
+#: src/cmdline.c:227
 #, c-format
 msgid "Unknown command line option: %s"
 msgstr "Option de ligne de commande inconnue : %s"
 
-#: src/config_store.c:721
+#: src/cmdline.c:235
+msgid "--project cannot be combined with --config or port settings"
+msgstr ""
+"--project ne peut pas être combiné avec --config ni avec des réglages de port"
+
+#: src/config_store.c:586
 #, c-format
 msgid ""
 "The configuration file %s could not be read: nothing has been written to it."
 msgstr ""
 "Le fichier de configuration %s n'a pas pu être lu : rien n'y a été écrit."
 
-#: src/config_store.c:730
+#: src/config_store.c:595
 #, c-format
 msgid "Cannot create directory %s: %s"
 msgstr "Impossible de créer le dossier %s : %s"
@@ -276,7 +290,14 @@ msgstr "%s — reconnexion…"
 msgid "device removed"
 msgstr "périphérique retiré"
 
-#: src/macro_file.c:54
+#: src/macro_file.c:62
+#, c-format
+msgid "%s: [%s] %s: invalid escape, value kept as written"
+msgstr ""
+"%s : [%s] %s : séquence d'échappement invalide, valeur conservée telle "
+"qu'écrite"
+
+#: src/macro_file.c:176
 #, c-format
 msgid "Unsupported macros file version (written by a newer GTKTerm?)"
 msgstr ""
@@ -284,21 +305,23 @@ msgstr ""
 "récente de GTKTerm ?)"
 
 #. Des groupes, aucun de connu : fichier étranger refusé, jamais lu comme un jeu vide qui l'écraserait ensuite
-#: src/macro_file.c:245
+#: src/macro_file.c:323
 #, c-format
 msgid "%s is not a GTKTerm macros file"
 msgstr "%s n'est pas un fichier de macros de GTKTerm"
 
-#: src/macro_file.c:302
+#: src/macro_file.c:380
 #, c-format
 msgid ""
 "%s was not overwritten: it is not in the current macros format and its "
-"backup %s already exists with a different content"
+"backup %s already exists with a different content. Rename or delete %s, then "
+"save again."
 msgstr ""
 "%s n'a pas été écrasé : il n'est pas au format actuel des macros et sa copie "
-"%s existe déjà avec un contenu différent"
+"%s existe déjà avec un contenu différent. Renommez ou supprimez %s, puis "
+"enregistrez de nouveau."
 
-#: src/macros.c:138
+#: src/macros.c:156
 #, c-format
 msgid "Macro \"%s\" sent!"
 msgstr "Macro « %s » envoyée !"
@@ -307,12 +330,28 @@ msgstr "Macro « %s » envoyée !"
 #. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
 #. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
 #. et l'utilisateur sait que ses macros n'ont pas été lues.
-#: src/macros.c:231 src/macros.c:246
+#: src/macros.c:379 src/macros.c:394
 #, c-format
 msgid "Cannot load macros file: %s"
 msgstr "Impossible de charger le fichier de macros : %s"
 
-#: src/macros.c:283
+#: src/macros.c:431
+msgid "This tab has no macros file: its macros are saved with the project."
+msgstr ""
+"Cet onglet n'a pas de fichier de macros : ses macros sont enregistrées avec "
+"le projet."
+
+#: src/macros.c:439
+#, c-format
+msgid "%s changed on disk: not overwritten"
+msgstr "%s a changé sur le disque : non écrasé"
+
+#: src/macros.c:453
+#, c-format
+msgid "%s already exists: not overwritten"
+msgstr "%s existe déjà : non écrasé"
+
+#: src/macros.c:466
 #, c-format
 msgid "Cannot save macros file: %s"
 msgstr "Impossible d'enregistrer le fichier de macros : %s"
@@ -424,6 +463,45 @@ msgstr "Le nom de la configuration est trop long (%d caractères au plus)."
 msgid "\"%s\" is a reserved name."
 msgstr "« %s » est un nom réservé."
 
+#: src/project.c:180
+msgid "Untitled project"
+msgstr "Projet sans titre"
+
+#: src/project.c:308
+msgid "No project is open"
+msgstr "Aucun projet n'est ouvert"
+
+#: src/project.c:313
+msgid "The project has no file"
+msgstr "Le projet n'a pas de fichier"
+
+#: src/project_file.c:149
+#, c-format
+msgid "%s: [%s] %s is not valid UTF-8: invalid bytes replaced"
+msgstr "%s : [%s] %s n'est pas en UTF-8 valide : octets invalides remplacés"
+
+#: src/project_file.c:170
+#, c-format
+msgid "%s: tab %u has no valid port settings"
+msgstr "%s : l'onglet %u n'a pas de réglages de port valides"
+
+#: src/project_file.c:229
+#, c-format
+msgid "%s is not a GTKTerm project"
+msgstr "%s n'est pas un projet GTKTerm"
+
+#: src/project_file.c:238
+#, c-format
+msgid "%s: unsupported project version (written by a newer GTKTerm?)"
+msgstr ""
+"%s : version de projet non prise en charge (écrit par une version plus "
+"récente de GTKTerm ?)"
+
+#: src/project_file.c:262
+#, c-format
+msgid "%s: the project has no tab"
+msgstr "%s : le projet n'a aucun onglet"
+
 #: src/rx_logger.c:53
 #, c-format
 msgid "Cannot clear file %s: %s"
@@ -464,7 +542,7 @@ msgstr "Erreur Lua : %s"
 msgid "Script already running."
 msgstr "Un script est déjà en cours."
 
-#: src/session.c:114
+#: src/session.c:116
 msgid "Break signal sent!"
 msgstr "Signal break envoyé !"
 
@@ -597,37 +675,117 @@ msgstr "Aucune donnée reçue"
 msgid "Port closed"
 msgstr "Port fermé"
 
-#: src/ui/app.c:456
+#: src/ui/app.c:524
 msgid "Close this tab?"
 msgstr "Fermer cet onglet ?"
 
-#: src/ui/app.c:456
+#: src/ui/app.c:524
 msgid "A script is running or a file is being sent in this tab."
 msgstr "Un script tourne ou un fichier est en cours d'envoi dans cet onglet."
 
-#: src/ui/app.c:456 src/ui/menus.ui:14 src/ui/tab_label.c:74
+#: src/ui/app.c:524 src/ui/menus.ui:152 src/ui/tab_label.c:74
 #: src/ui/tab_label.c:75
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
-#: src/ui/dialogs.c:140
+#: src/ui/app.c:776 src/ui/app.c:953
+msgid "Close all tabs?"
+msgstr "Fermer tous les onglets ?"
+
+#: src/ui/app.c:776 src/ui/app.c:953
+msgid "A script is running or a file is being sent."
+msgstr "Un script tourne ou un fichier est en cours d'envoi."
+
+#: src/ui/app.c:776 src/ui/app.c:953
+msgid "Close tabs"
+msgstr "Fermer les onglets"
+
+#: src/ui/app.c:836
+msgid "A project file with this name already exists. Replace it?"
+msgstr "Un fichier projet de ce nom existe déjà. Le remplacer ?"
+
+#: src/ui/app.c:836
+msgid "Replace"
+msgstr "Remplacer"
+
+#: src/ui/app.c:869 src/ui/menus.ui:19
+msgid "Save project"
+msgstr "Enregistrer le projet"
+
+#: src/ui/app.c:877 src/ui/macros_save.c:55 src/ui/profile_dialogs.c:209
+msgid "Overwrite"
+msgstr "Écraser"
+
+#: src/ui/app.c:877 src/ui/macros_save.c:55
+msgid "Reload"
+msgstr "Recharger"
+
+#: src/ui/app.c:877 src/ui/app.c:908 src/ui/macro_editor.c:842
+#: src/ui/macros_save.c:55
+msgid "Cancel"
+msgstr "Annuler"
+
+#. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
+#: src/ui/app.c:880
+msgid "The project file changed on disk."
+msgstr "Le fichier du projet a changé sur le disque."
+
+#: src/ui/app.c:908 src/ui/script_panel.c:951
+msgid "Save"
+msgstr "Enregistrer"
+
+#: src/ui/app.c:908
+msgid "Don't save"
+msgstr "Ne pas enregistrer"
+
+#: src/ui/app.c:911
+msgid "Save changes to the project?"
+msgstr "Enregistrer les modifications du projet ?"
+
+#: src/ui/app.c:1129
+#, c-format
+msgid ""
+"Cannot open the project: %s\n"
+"It is no longer reopened at start-up."
+msgstr ""
+"Impossible d'ouvrir le projet : %s\n"
+"Il ne sera plus rouvert au démarrage."
+
+#: src/ui/app.c:1132
+#, c-format
+msgid "Cannot open the project: %s"
+msgstr "Impossible d'ouvrir le projet : %s"
+
+#: src/ui/app.c:1239
+msgid "GTKTerm projects"
+msgstr "Projets GTKTerm"
+
+#: src/ui/app.c:1244 src/ui/script_panel.c:464
+msgid "All files"
+msgstr "Tous les fichiers"
+
+#: src/ui/app.c:1248
+msgid "Open project"
+msgstr "Ouvrir un projet"
+
+#: src/ui/dialogs.c:144
 msgid "Information"
 msgstr "Information"
 
-#: src/ui/dialogs.c:142
+#: src/ui/dialogs.c:146
 msgid "Warning"
 msgstr "Avertissement"
 
-#: src/ui/dialogs.c:144
+#: src/ui/dialogs.c:148
 msgid "Error"
 msgstr "Erreur"
 
-#: src/ui/dialogs.c:165 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:343
+#: src/ui/dialogs.c:169 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:344
 msgid "_OK"
 msgstr "_OK"
 
-#: src/ui/dialogs.c:252 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
-#: src/ui/profile_dialogs.c:340 src/ui/script_panel.c:797
+#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
+#: src/ui/profile_dialogs.c:341 src/ui/script_panel.c:805
 msgid "_Cancel"
 msgstr "_Annuler"
 
@@ -679,18 +837,19 @@ msgstr "Octet hexadécimal « %s » non valide, rien n'a été envoyé"
 msgid "%d byte(s) sent!"
 msgstr "%d octet(s) envoyé(s) !"
 
-#: src/ui/macro_editor.c:47
+#: src/ui/macro_editor.c:53
 msgid ""
 "Action: the data sent on the port. Plain text, plus the escapes \\r "
 "(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
 "(backslash) and \\xHH (one byte in hexadecimal, e.g. \\x0D).\n"
 "\n"
-"Arguments: each specifier gets a field in the macro panel; its value is "
-"remembered in the macros file. %d %i (integer), %u %o %x %X (unsigned), %f "
-"%e %g %a (decimal number), %c (character), %s (text), with optional flags, "
-"width, precision and length (e.g. %02X, %.3f, %ld); %% sends a percent sign. "
-"%#Name picks a value from the list \"Name\" of the Lists page; a macro whose "
-"only argument is a list of exactly two values shows two buttons.\n"
+"Arguments: each specifier gets a field in the macro panel; the value typed "
+"there is used for sending but never saved; set default values below the "
+"table. %d %i (integer), %u %o %x %X (unsigned), %f %e %g %a (decimal "
+"number), %c (character), %s (text), with optional flags, width, precision "
+"and length (e.g. %02X, %.3f, %ld); %% sends a percent sign. %#Name picks a "
+"value from the list \"Name\" of the Lists page; a macro whose only argument "
+"is a list of exactly two values shows two buttons.\n"
 "\n"
 "Separators: the action %& draws a line in the panel, [Title] %& a line with "
 "a title.\n"
@@ -716,13 +875,13 @@ msgstr ""
 "\\x0D).\n"
 "\n"
 "Arguments : chaque spécificateur obtient un champ dans le panneau des "
-"macros ; sa valeur est conservée dans le fichier de macros. %d %i (entier), "
-"%u %o %x %X (non signé), %f %e %g %a (nombre décimal), %c (caractère), %s "
-"(texte), avec des options facultatives de drapeaux, largeur, précision et "
-"longueur (par ex. %02X, %.3f, %ld) ; %% envoie un signe pourcent. %#Nom "
-"prend une valeur dans la liste « Nom » de la page Listes ; une macro dont le "
-"seul argument est une liste de deux valeurs exactement affiche deux "
-"boutons.\n"
+"macros ; la valeur saisie sert à l'envoi mais n'est jamais enregistrée ; les "
+"valeurs par défaut se règlent sous le tableau. %d %i (entier), %u %o %x %X "
+"(non signé), %f %e %g %a (nombre décimal), %c (caractère), %s (texte), avec "
+"des options facultatives de drapeaux, largeur, précision et longueur (par "
+"ex. %02X, %.3f, %ld) ; %% envoie un signe pourcent. %#Nom prend une valeur "
+"dans la liste « Nom » de la page Listes ; une macro dont le seul argument "
+"est une liste de deux valeurs exactement affiche deux boutons.\n"
 "\n"
 "Séparateurs : l'action %& trace une ligne dans le panneau, [Titre] %& une "
 "ligne avec un titre.\n"
@@ -745,25 +904,25 @@ msgstr ""
 "Exemples : « Hello\\n » envoie Hello et un saut de ligne ; « Hello\\x0A » "
 "fait de même ; « SPEED %d\\r » demande un nombre."
 
-#: src/ui/macro_editor.c:178 src/ui/macro_panel.c:311 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:188 src/ui/macro_panel.c:268 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr "Aucun"
 
-#: src/ui/macro_editor.c:317
+#: src/ui/macro_editor.c:357
 msgid "Select a macro first."
 msgstr "Sélectionnez d'abord une macro."
 
-#: src/ui/macro_editor.c:323
+#: src/ui/macro_editor.c:363
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr "Appuyez sur le nouveau raccourci de « %s » (Échap annule)."
 
-#: src/ui/macro_editor.c:347
+#: src/ui/macro_editor.c:387
 msgid "(no label)"
 msgstr "(sans libellé)"
 
-#: src/ui/macro_editor.c:353
+#: src/ui/macro_editor.c:393
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
@@ -772,7 +931,7 @@ msgstr ""
 "%s est déjà utilisé par la commande d'application « %s ». Appuyez sur "
 "d'autres touches, ou sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:355
+#: src/ui/macro_editor.c:395
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
@@ -781,7 +940,7 @@ msgstr ""
 "%s est déjà utilisé par la macro « %s ». Appuyez sur d'autres touches, ou "
 "sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:379
+#: src/ui/macro_editor.c:419
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
@@ -789,97 +948,101 @@ msgstr ""
 "Un raccourci exige Ctrl, Alt ou Super, sauf s'il s'agit d'une touche de "
 "fonction (F1 à F35). Appuyez sur d'autres touches, ou sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:522
+#: src/ui/macro_editor.c:715
+msgid "Default values:"
+msgstr "Valeurs par défaut :"
+
+#: src/ui/macro_editor.c:718
+msgid "Default values"
+msgstr "Valeurs par défaut"
+
+#: src/ui/macro_editor.c:739
 msgid "Label"
 msgstr "Libellé"
 
-#: src/ui/macro_editor.c:523
+#: src/ui/macro_editor.c:740
 msgid "Shortcut"
 msgstr "Raccourci"
 
-#: src/ui/macro_editor.c:524
+#: src/ui/macro_editor.c:741
 msgid "Action"
 msgstr "Action"
 
-#: src/ui/macro_editor.c:525
+#: src/ui/macro_editor.c:742
 msgid "Tab"
 msgstr "Onglet"
 
-#: src/ui/macro_editor.c:526
+#: src/ui/macro_editor.c:743
 msgid "_Add"
 msgstr "_Ajouter"
 
-#: src/ui/macro_editor.c:527 src/ui/profile_dialogs.c:343
+#: src/ui/macro_editor.c:744 src/ui/profile_dialogs.c:344
 msgid "_Delete"
 msgstr "_Supprimer"
 
-#: src/ui/macro_editor.c:528
+#: src/ui/macro_editor.c:745
 msgid "_Capture Shortcut"
 msgstr "_Capturer le raccourci"
 
-#: src/ui/macro_editor.c:529
+#: src/ui/macro_editor.c:746
 msgid "Delete Shortcut"
 msgstr "Supprimer le raccourci"
 
-#: src/ui/macro_editor.c:530 src/ui/macro_editor.c:542
+#: src/ui/macro_editor.c:747 src/ui/macro_editor.c:759
 msgid "Move _Up"
 msgstr "_Monter"
 
-#: src/ui/macro_editor.c:531 src/ui/macro_editor.c:543
+#: src/ui/macro_editor.c:748 src/ui/macro_editor.c:760
 msgid "Move _Down"
 msgstr "_Descendre"
 
-#: src/ui/macro_editor.c:537
+#: src/ui/macro_editor.c:754
 msgid "List"
 msgstr "Liste"
 
-#: src/ui/macro_editor.c:538
+#: src/ui/macro_editor.c:755
 msgid "Display"
 msgstr "Affichage"
 
-#: src/ui/macro_editor.c:539
+#: src/ui/macro_editor.c:756
 msgid "Value"
 msgstr "Valeur"
 
-#: src/ui/macro_editor.c:540
+#: src/ui/macro_editor.c:757
 msgid "_Add Entry"
 msgstr "_Ajouter une entrée"
 
-#: src/ui/macro_editor.c:541
+#: src/ui/macro_editor.c:758
 msgid "_Delete Entry"
 msgstr "_Supprimer l'entrée"
 
 #. Titre au nom court de l'onglet (fixé à l'ouverture)
-#: src/ui/macro_editor.c:580
+#: src/ui/macro_editor.c:805
 #, c-format
 msgid "Configure Macros — %s"
 msgstr "Configurer les macros — %s"
 
-#: src/ui/macro_editor.c:604 src/ui/menus.ui:129
+#: src/ui/macro_editor.c:829 src/ui/menus.ui:229
 msgid "Macros"
 msgstr "Macros"
 
-#: src/ui/macro_editor.c:605
+#: src/ui/macro_editor.c:830
 msgid "Lists"
 msgstr "Listes"
 
-#: src/ui/macro_editor.c:615 src/ui/menus.ui:243
+#: src/ui/macro_editor.c:841 src/ui/menus.ui:267
 msgid "Help"
 msgstr "Aide"
 
-#: src/ui/macro_editor.c:616
-msgid "Cancel"
-msgstr "Annuler"
-
-#: src/ui/macro_editor.c:617
+#: src/ui/macro_editor.c:843
 msgid "OK"
 msgstr "OK"
 
-#: src/ui/macro_panel.c:67
+#: src/ui/macro_panel.c:80
 msgid "General"
 msgstr "Général"
 
-#: src/ui/macro_panel.c:311
+#: src/ui/macro_panel.c:268
 #, c-format
 msgid ""
 "Shortcut: %s\n"
@@ -888,7 +1051,7 @@ msgstr ""
 "Raccourci : %s\n"
 "Action : %s"
 
-#: src/ui/macro_panel.c:545
+#: src/ui/macro_panel.c:510
 msgid ""
 "No macros defined\n"
 "with labels"
@@ -896,204 +1059,233 @@ msgstr ""
 "Aucune macro définie\n"
 "avec un libellé"
 
-#: src/ui/macro_panel.c:601
+#: src/ui/macro_panel.c:566
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 "La période doit être un nombre entier de millisecondes de 1 à 86400000."
 
-#: src/ui/macro_panel.c:763
+#: src/ui/macro_panel.c:744
 msgid "Period (ms)"
 msgstr "Période (ms)"
 
-#: src/ui/macro_panel.c:771
+#: src/ui/macro_panel.c:752
 msgid "Polling Mode"
 msgstr "Interrogation périodique"
 
-#: src/ui/menus.ui:7
+#: src/ui/macro_panel.c:771 src/ui/macro_panel.c:773
+msgid "Reset arguments"
+msgstr "Réinitialiser les arguments"
+
+#. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
+#: src/ui/macros_save.c:62
+msgid "The macros file changed on disk."
+msgstr "Le fichier de macros a changé sur le disque."
+
+#: src/ui/macros_save.c:62
+msgid "The macros file already exists."
+msgstr "Le fichier de macros existe déjà."
+
+#: src/ui/menus.ui:8
 msgid "File"
 msgstr "Fichier"
 
-#: src/ui/menus.ui:10 src/ui/port_dialog.c:522
-msgid "New tab"
-msgstr "Nouvel onglet"
+#: src/ui/menus.ui:11
+msgid "New project"
+msgstr "Nouveau projet"
 
-#: src/ui/menus.ui:20
-msgid "Clear screen"
-msgstr "Effacer l'écran"
+#: src/ui/menus.ui:15
+msgid "Open project…"
+msgstr "Ouvrir un projet…"
 
-#: src/ui/menus.ui:24
-msgid "Clear scrollback"
-msgstr "Effacer l'historique de défilement"
+#: src/ui/menus.ui:23
+msgid "Save project as…"
+msgstr "Enregistrer le projet sous…"
 
-#: src/ui/menus.ui:30
-msgid "Send RAW file"
-msgstr "Envoyer un fichier brut"
+#: src/ui/menus.ui:27
+msgid "Close project"
+msgstr "Fermer le projet"
 
-#: src/ui/menus.ui:34
-msgid "Save RAW file"
-msgstr "Enregistrer en fichier brut"
+#: src/ui/menus.ui:33
+msgid "Send RAW file…"
+msgstr "Envoyer un fichier brut…"
 
-#: src/ui/menus.ui:38
-msgid "Save ASCII file"
-msgstr "Enregistrer en fichier ASCII"
+#: src/ui/menus.ui:37
+msgid "Save RAW file…"
+msgstr "Enregistrer en fichier brut…"
 
-#: src/ui/menus.ui:44
+#: src/ui/menus.ui:41
+msgid "Save ASCII file…"
+msgstr "Enregistrer en fichier ASCII…"
+
+#: src/ui/menus.ui:47
 msgid "Quit"
 msgstr "Quitter"
 
-#: src/ui/menus.ui:50
+#: src/ui/menus.ui:53
 msgid "Edit"
 msgstr "Édition"
 
-#: src/ui/menus.ui:53 src/ui/menus.ui:259
+#: src/ui/menus.ui:56 src/ui/menus.ui:283
 msgid "Copy"
 msgstr "Copier"
 
-#: src/ui/menus.ui:57 src/ui/menus.ui:263
+#: src/ui/menus.ui:60 src/ui/menus.ui:287
 msgid "Paste"
 msgstr "Coller"
 
-#: src/ui/menus.ui:61 src/ui/menus.ui:267
-msgid "Find"
-msgstr "Rechercher"
-
-#: src/ui/menus.ui:67 src/ui/menus.ui:273
+#: src/ui/menus.ui:64 src/ui/menus.ui:297
 msgid "Select All"
 msgstr "Tout sélectionner"
 
-#: src/ui/menus.ui:73
-msgid "Log"
-msgstr "Journal"
+#: src/ui/menus.ui:68 src/ui/menus.ui:291
+msgid "Find"
+msgstr "Rechercher"
 
-#: src/ui/menus.ui:76
-msgid "To file..."
-msgstr "Dans un fichier…"
+#: src/ui/menus.ui:74
+msgid "Clear screen"
+msgstr "Effacer l'écran"
 
-#: src/ui/menus.ui:80
-msgid "Pause"
-msgstr "Pause"
+#: src/ui/menus.ui:78
+msgid "Clear scrollback"
+msgstr "Effacer l'historique de défilement"
 
-#: src/ui/menus.ui:84 src/ui/script_panel.c:926
-msgid "Stop"
-msgstr "Arrêter"
-
-#: src/ui/menus.ui:88
-msgid "Clear"
-msgstr "Vider"
-
-#: src/ui/menus.ui:94
-msgid "Configuration"
-msgstr "Configuration"
-
-#: src/ui/menus.ui:97
-msgid "Port"
-msgstr "Port"
-
-#: src/ui/menus.ui:101
-msgid "Main window"
-msgstr "Terminal"
-
-#: src/ui/menus.ui:107
-msgid "Local echo"
-msgstr "Écho local"
-
-#: src/ui/menus.ui:111
-msgid "Autoreconnect"
-msgstr "Reconnexion automatique"
-
-#: src/ui/menus.ui:115
-msgid "CR LF auto"
-msgstr "CR LF automatique"
-
-#: src/ui/menus.ui:119
-msgid "ESC clear screen"
-msgstr "ÉCHAP efface l'écran"
-
-#: src/ui/menus.ui:123
-msgid "Timestamp"
-msgstr "Horodatage"
-
-#: src/ui/menus.ui:133
-msgid "Load macros file..."
-msgstr "Charger un fichier de macros…"
-
-#: src/ui/menus.ui:137 src/ui/profile_dialogs.c:474
-msgid "Save macros file"
-msgstr "Enregistrer le fichier de macros"
-
-#: src/ui/menus.ui:143 src/ui/profile_dialogs.c:279
-msgid "Load configuration"
-msgstr "Charger une configuration"
-
-#: src/ui/menus.ui:147 src/ui/profile_dialogs.c:279
-msgid "Save configuration"
-msgstr "Enregistrer la configuration"
-
-#: src/ui/menus.ui:151 src/ui/profile_dialogs.c:279
-msgid "Delete configuration"
-msgstr "Supprimer une configuration"
-
-#: src/ui/menus.ui:157
-msgid "Control signals"
-msgstr "Signaux de contrôle"
-
-#: src/ui/menus.ui:160
-msgid "Send break"
-msgstr "Envoyer un break"
-
-#: src/ui/menus.ui:164
-msgid "Open Port"
-msgstr "Ouvrir le port"
-
-#: src/ui/menus.ui:168
-msgid "Close Port"
-msgstr "Fermer le port"
-
-#: src/ui/menus.ui:172
-msgid "Toggle DTR"
-msgstr "Inverser DTR"
-
-#: src/ui/menus.ui:176
-msgid "Toggle RTS"
-msgstr "Inverser RTS"
-
-#: src/ui/menus.ui:182
+#: src/ui/menus.ui:84
 msgid "View"
 msgstr "Affichage"
 
-#: src/ui/menus.ui:185
+#: src/ui/menus.ui:87
 msgid "ASCII"
 msgstr "ASCII"
 
-#: src/ui/menus.ui:190
+#: src/ui/menus.ui:92
 msgid "Hexadecimal"
 msgstr "Hexadécimal"
 
-#: src/ui/menus.ui:195
+#: src/ui/menus.ui:97
 msgid "Hexadecimal chars"
 msgstr "Octets par ligne"
 
-#: src/ui/menus.ui:223
+#: src/ui/menus.ui:125
 msgid "Show index"
 msgstr "Afficher l'index"
 
-#: src/ui/menus.ui:229
+#: src/ui/menus.ui:131
 msgid "Send hexadecimal data"
 msgstr "Envoyer des données hexadécimales"
 
-#: src/ui/menus.ui:233
+#: src/ui/menus.ui:135
 msgid "Macro panel"
 msgstr "Panneau des macros"
 
-#: src/ui/menus.ui:237
+#: src/ui/menus.ui:139
 msgid "Script panel"
 msgstr "Panneau de script"
 
+#: src/ui/menus.ui:145
+msgid "Port"
+msgstr "Port"
+
+#: src/ui/menus.ui:148
+msgid "New port…"
+msgstr "Nouveau port…"
+
+#: src/ui/menus.ui:158 src/ui/menus.ui:207
+msgid "Settings…"
+msgstr "Réglages…"
+
+#: src/ui/menus.ui:162
+msgid "Open Port"
+msgstr "Ouvrir le port"
+
+#: src/ui/menus.ui:166
+msgid "Close Port"
+msgstr "Fermer le port"
+
+#: src/ui/menus.ui:170
+msgid "Autoreconnect"
+msgstr "Reconnexion automatique"
+
+#: src/ui/menus.ui:176
+msgid "Send break"
+msgstr "Envoyer un break"
+
+#: src/ui/menus.ui:180
+msgid "Toggle DTR"
+msgstr "Inverser DTR"
+
+#: src/ui/menus.ui:184
+msgid "Toggle RTS"
+msgstr "Inverser RTS"
+
+#: src/ui/menus.ui:190
+msgid "Load profile…"
+msgstr "Charger un profil…"
+
+#: src/ui/menus.ui:194
+msgid "Save profile…"
+msgstr "Enregistrer un profil…"
+
+#: src/ui/menus.ui:198
+msgid "Delete profile…"
+msgstr "Supprimer un profil…"
+
+#: src/ui/menus.ui:204 src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
+msgid "Terminal"
+msgstr "Terminal"
+
+#: src/ui/menus.ui:211
+msgid "Local echo"
+msgstr "Écho local"
+
+#: src/ui/menus.ui:215
+msgid "CR LF auto"
+msgstr "CR LF automatique"
+
+#: src/ui/menus.ui:219
+msgid "ESC clear screen"
+msgstr "ÉCHAP efface l'écran"
+
+#: src/ui/menus.ui:223
+msgid "Timestamp"
+msgstr "Horodatage"
+
+#: src/ui/menus.ui:232
+msgid "Configure macros…"
+msgstr "Configurer les macros…"
+
+#: src/ui/menus.ui:236
+msgid "Load macros file…"
+msgstr "Charger un fichier de macros…"
+
+#: src/ui/menus.ui:240
+msgid "Save macros file…"
+msgstr "Enregistrer le fichier de macros…"
+
 #: src/ui/menus.ui:246
+msgid "Log"
+msgstr "Journal"
+
+#: src/ui/menus.ui:249
+msgid "To file..."
+msgstr "Dans un fichier…"
+
+#: src/ui/menus.ui:253
+msgid "Pause"
+msgstr "Pause"
+
+#: src/ui/menus.ui:257 src/ui/script_panel.c:954
+msgid "Stop"
+msgstr "Arrêter"
+
+#: src/ui/menus.ui:261
+msgid "Clear"
+msgstr "Vider"
+
+#: src/ui/menus.ui:270
 msgid "Check for updates…"
 msgstr "Rechercher des mises à jour…"
 
-#: src/ui/menus.ui:250
+#: src/ui/menus.ui:274
 msgid "About"
 msgstr "À propos"
 
@@ -1226,6 +1418,10 @@ msgstr "Paramètres RS-485 semi-duplex (utilisant signal RTS pour envoi)"
 msgid "Port configuration"
 msgstr "Configuration du port"
 
+#: src/ui/port_dialog.c:522
+msgid "New tab"
+msgstr "Nouvel onglet"
+
 #: src/ui/port_dialog.c:543
 msgid "_Type:"
 msgstr "_Type :"
@@ -1234,55 +1430,67 @@ msgstr "_Type :"
 msgid "Transport"
 msgstr "Transport"
 
-#: src/ui/profile_dialogs.c:153
+#: src/ui/profile_dialogs.c:154
 msgid "Cannot delete this configuration."
 msgstr "Impossible de supprimer cette configuration."
 
-#: src/ui/profile_dialogs.c:179 src/ui/profile_dialogs.c:192
+#: src/ui/profile_dialogs.c:180 src/ui/profile_dialogs.c:193
 msgid "Select a configuration."
 msgstr "Sélectionnez une configuration."
 
-#: src/ui/profile_dialogs.c:184
+#: src/ui/profile_dialogs.c:185
 msgid "Cannot load this configuration."
 msgstr "Impossible de charger cette configuration."
 
-#: src/ui/profile_dialogs.c:195
+#: src/ui/profile_dialogs.c:196
 #, c-format
 msgid "Delete the configuration \"%s\"?"
 msgstr "Supprimer la configuration « %s » ?"
 
-#: src/ui/profile_dialogs.c:196
+#: src/ui/profile_dialogs.c:197
 msgid "This cannot be undone."
 msgstr "Cette action est irréversible."
 
-#: src/ui/profile_dialogs.c:196
+#: src/ui/profile_dialogs.c:197
 msgid "Delete"
 msgstr "Supprimer"
 
-#: src/ui/profile_dialogs.c:207
+#: src/ui/profile_dialogs.c:208
 #, c-format
 msgid "A configuration named \"%s\" already exists."
 msgstr "Une configuration nommée « %s » existe déjà."
 
-#: src/ui/profile_dialogs.c:208
+#: src/ui/profile_dialogs.c:209
 msgid "Do you want to overwrite it?"
 msgstr "Voulez-vous l'écraser ?"
 
-#: src/ui/profile_dialogs.c:208
-msgid "Overwrite"
-msgstr "Écraser"
-
-#: src/ui/profile_dialogs.c:254
+#: src/ui/profile_dialogs.c:255
 msgid "No saved configuration."
 msgstr "Aucune configuration enregistrée."
 
-#: src/ui/profile_dialogs.c:313
+#: src/ui/profile_dialogs.c:280
+msgid "Load configuration"
+msgstr "Charger une configuration"
+
+#: src/ui/profile_dialogs.c:280
+msgid "Save configuration"
+msgstr "Enregistrer la configuration"
+
+#: src/ui/profile_dialogs.c:280
+msgid "Delete configuration"
+msgstr "Supprimer une configuration"
+
+#: src/ui/profile_dialogs.c:314
 msgid "Configuration _name:"
 msgstr "_Nom de la configuration :"
 
 #: src/ui/profile_dialogs.c:462
 msgid "Load macros file"
 msgstr "Charger un fichier de macros"
+
+#: src/ui/profile_dialogs.c:474
+msgid "Save macros file"
+msgstr "Enregistrer le fichier de macros"
 
 #: src/ui/script_panel.c:24
 msgid "Editor background"
@@ -1336,59 +1544,51 @@ msgstr "[Script terminé]\n"
 msgid "Cannot read file"
 msgstr "Impossible de lire le fichier"
 
-#: src/ui/script_panel.c:454
+#: src/ui/script_panel.c:459
 msgid "Lua scripts (*.lua)"
 msgstr "Scripts Lua (*.lua)"
 
-#: src/ui/script_panel.c:459
-msgid "All files"
-msgstr "Tous les fichiers"
-
-#: src/ui/script_panel.c:463
+#: src/ui/script_panel.c:468
 msgid "Open Lua Script"
 msgstr "Ouvrir un script Lua"
 
-#: src/ui/script_panel.c:495
+#: src/ui/script_panel.c:503
 msgid "Cannot write file"
 msgstr "Impossible d'écrire dans le fichier"
 
-#: src/ui/script_panel.c:519
+#: src/ui/script_panel.c:527
 msgid "Save Lua Script"
 msgstr "Enregistrer un script Lua"
 
-#: src/ui/script_panel.c:651
+#: src/ui/script_panel.c:659
 msgid "Editor on top"
 msgstr "Éditeur en haut"
 
-#: src/ui/script_panel.c:657
+#: src/ui/script_panel.c:665
 msgid "Editor on the left"
 msgstr "Éditeur à gauche"
 
-#: src/ui/script_panel.c:759
+#: src/ui/script_panel.c:767
 msgid "Script Editor Colors"
 msgstr "Couleurs de l'éditeur de script"
 
-#: src/ui/script_panel.c:794
+#: src/ui/script_panel.c:802
 msgid "_Reset"
 msgstr "_Réinitialiser"
 
-#: src/ui/script_panel.c:800
+#: src/ui/script_panel.c:808
 msgid "_Apply"
 msgstr "_Appliquer"
 
-#: src/ui/script_panel.c:922
+#: src/ui/script_panel.c:950
 msgid "Open"
 msgstr "Ouvrir"
 
-#: src/ui/script_panel.c:923
-msgid "Save"
-msgstr "Enregistrer"
-
-#: src/ui/script_panel.c:925
+#: src/ui/script_panel.c:953
 msgid "Run"
 msgstr "Exécuter"
 
-#: src/ui/script_panel.c:931
+#: src/ui/script_panel.c:959
 msgid "Colors..."
 msgstr "Couleurs…"
 
@@ -1403,10 +1603,6 @@ msgstr "Occurrence suivante"
 #: src/ui/search_bar.c:148
 msgid "Invalid regular expression"
 msgstr "Expression régulière non valide"
-
-#: src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
-msgid "Terminal"
-msgstr "Terminal"
 
 #: src/ui/terminal_dialog.ui:35
 msgid "Terminal _font"
@@ -1444,11 +1640,11 @@ msgstr "Couleur du fond"
 msgid "_Close"
 msgstr "_Fermer"
 
-#: src/ui/update_window.c:48
+#: src/ui/update_window.c:70
 msgid "No terminal emulator found. Please install xterm or similar."
-msgstr "Aucun émulateur de terminal trouvé. Installez xterm ou un équivalent."
+msgstr "Aucun émulateur de terminal trouvé. Installez xterm ou équivalent."
 
-#: src/ui/update_window.c:53
+#: src/ui/update_window.c:75
 #, c-format
 msgid ""
 "Failed to launch update terminal:\n"
@@ -1457,110 +1653,213 @@ msgstr ""
 "Impossible de lancer le terminal de mise à jour :\n"
 "%s"
 
-#: src/ui/update_window.c:60
+#: src/ui/update_window.c:87
 msgid ""
-"The update is running in a terminal window.\n"
-"Follow the instructions there and restart GTKTerm when done."
+"The update is running in a terminal window. GTKTerm will be closed and "
+"restarted when it finishes."
 msgstr ""
-"La mise à jour s'exécute dans une fenêtre de terminal.\n"
-"Suivez-y les instructions et relancez GTKTerm à la fin."
+"La mise à jour se déroule dans une fenêtre de terminal. GTKTerm sera fermé "
+"puis relancé à la fin."
 
-#: src/ui/update_window.c:97
-msgid "Update now"
-msgstr "Mettre à jour maintenant"
+#: src/ui/update_window.c:178
+msgid "This version is installed."
+msgstr "Cette version est installée."
 
-#: src/ui/update_window.c:97
-msgid "Later"
-msgstr "Plus tard"
+#: src/ui/update_window.c:181
+msgid "Warnings"
+msgstr "Avertissements"
 
-#: src/ui/update_window.c:97
-msgid "Skip this version"
-msgstr "Ignorer cette version"
+#: src/ui/update_window.c:201
+msgid "You are leaving these versions:"
+msgstr "Vous quittez ces versions :"
 
-#: src/ui/update_window.c:103
+#: src/ui/update_window.c:221
 #, c-format
-msgid ""
-"Latest revision: %.12s\n"
-"Installed revision: %.12s"
-msgstr ""
-"Dernière révision : %.12s\n"
-"Révision installée : %.12s"
+msgid "Update to %s"
+msgstr "Mettre à jour vers %s"
 
-#: src/ui/update_window.c:109
-msgid "A new version of GTKTerm is available."
-msgstr "Une nouvelle version de GTKTerm est disponible."
+#: src/ui/update_window.c:223
+#, c-format
+msgid "Roll back to %s"
+msgstr "Revenir à %s"
 
-#: src/ui/update_window.c:152
+#: src/ui/update_window.c:225
+#, c-format
+msgid "Reinstall %s"
+msgstr "Réinstaller %s"
+
+#: src/ui/update_window.c:247
+msgid "No published version found."
+msgstr "Aucune version publiée trouvée."
+
+#: src/ui/update_window.c:250
+#, c-format
+msgid "A new version is available (%s)."
+msgstr "Une nouvelle version est disponible (%s)."
+
+#: src/ui/update_window.c:256
+msgid "GTKTerm is up to date."
+msgstr "GTKTerm est à jour."
+
+#: src/ui/update_window.c:283
+#, c-format
+msgid "%s — latest, installed"
+msgstr "%s — la plus récente, installée"
+
+#: src/ui/update_window.c:285
+#, c-format
+msgid "%s — latest"
+msgstr "%s — la plus récente"
+
+#: src/ui/update_window.c:287
+#, c-format
+msgid "%s — installed"
+msgstr "%s — installée"
+
+#: src/ui/update_window.c:337
 #, c-format
 msgid "Could not check for updates: %s"
 msgstr "Impossible de vérifier les mises à jour : %s"
 
-#: src/ui/update_window.c:165
-msgid "GTKTerm is up to date."
-msgstr "GTKTerm est à jour."
-
-#: src/ui/update_window.c:168
-#, c-format
-msgid "The installed revision is unknown; the latest revision is %.12s."
-msgstr "La révision installée est inconnue ; la dernière révision est %.12s."
-
-#: src/ui/update_window.c:174
-#, c-format
-msgid "A new version is available (%.12s)."
-msgstr "Une nouvelle version est disponible (%.12s)."
-
-#: src/ui/update_window.c:197
+#: src/ui/update_window.c:377
 msgid "Please enter the URL of the source repository."
-msgstr "Saisissez l'URL du dépôt des sources."
+msgstr "Saisissez l'URL du dépôt source."
 
-#: src/ui/update_window.c:205
+#: src/ui/update_window.c:390
 msgid "Checking…"
 msgstr "Vérification…"
 
-#: src/ui/update_window.c:262
+#: src/ui/update_window.c:465
+#, c-format
+msgid "Install %s?"
+msgstr "Installer %s ?"
+
+#: src/ui/update_window.c:467
+msgid ""
+"See the warnings above. GTKTerm will be closed and restarted at the end of "
+"the update: unsaved project changes and running operations will be lost."
+msgstr ""
+"Voir les avertissements ci-dessus. GTKTerm sera fermé puis relancé à la fin "
+"de la mise à jour : les modifications non enregistrées du projet et les "
+"opérations en cours seront perdues."
+
+#: src/ui/update_window.c:469
+msgid ""
+"GTKTerm will be closed and restarted at the end of the update: unsaved "
+"project changes and running operations will be lost."
+msgstr ""
+"GTKTerm sera fermé puis relancé à la fin de la mise à jour : les "
+"modifications non enregistrées du projet et les opérations en cours seront "
+"perdues."
+
+#: src/ui/update_window.c:471
+msgid "See the warnings above."
+msgstr "Voir les avertissements ci-dessus."
+
+#: src/ui/update_window.c:472 src/ui/update_window.c:648
+msgid "Install"
+msgstr "Installer"
+
+#: src/ui/update_window.c:577
 msgid "Updates"
 msgstr "Mises à jour"
 
-#: src/ui/update_window.c:274
-msgid "Installed revision:"
-msgstr "Révision installée :"
+#: src/ui/update_window.c:589
+msgid "Installed version:"
+msgstr "Version installée :"
 
-#: src/ui/update_window.c:279
+#: src/ui/update_window.c:598
 msgid "Update source:"
-msgstr "Source de la mise à jour :"
+msgstr "Source des mises à jour :"
 
-#: src/ui/update_window.c:285
+#: src/ui/update_window.c:604
 msgid "Update source"
-msgstr "Source de la mise à jour"
+msgstr "Source des mises à jour"
 
-#: src/ui/update_window.c:288
+#: src/ui/update_window.c:608
 msgid "Check for updates at startup"
-msgstr "Vérifier les mises à jour au démarrage"
+msgstr "Vérifier au démarrage"
 
-#: src/ui/update_window.c:302
+#: src/ui/update_window.c:613
 msgid "Check now"
 msgstr "Vérifier maintenant"
 
-#: src/ui/update_window.c:304
+#: src/ui/update_window.c:619
+msgid "Version:"
+msgstr "Version :"
+
+#: src/ui/update_window.c:623
+msgid "Version"
+msgstr "Version"
+
+#: src/ui/update_window.c:643
+msgid "Skip this version"
+msgstr "Ignorer cette version"
+
+#: src/ui/update_window.c:652
 msgid "Close"
 msgstr "Fermer"
 
-#: src/update_check.c:121
+#: src/update_fetch.c:316
 #, c-format
-msgid "git ls-remote failed (exit status %d)"
-msgstr "git ls-remote a échoué (code de sortie %d)"
+msgid "git failed (exit status %d)"
+msgstr "git a échoué (code de sortie %d)"
 
-#: src/update_check.c:131
-msgid "The remote repository did not report a HEAD revision."
-msgstr "Le dépôt distant n'a indiqué aucune révision HEAD."
+#: src/update_fetch.c:318
+#, c-format
+msgid "git was killed by signal %d"
+msgstr "git a été tué par le signal %d"
+
+#: src/update_fetch.c:396
+msgid "Another update check is in progress."
+msgstr "Une autre vérification des mises à jour est en cours."
 
 #. GTask diffère le rappel à l'itération suivante : jamais d'appel pendant cette fonction
-#: src/update_check.c:150
+#: src/update_fetch.c:422
 msgid "No update source URL."
 msgstr "Aucune URL de source de mise à jour."
 
-#~ msgid "Configure Macros"
-#~ msgstr "Configurer les macros"
+#: src/update_fetch.c:428
+#, c-format
+msgid "Invalid update source URL: %s"
+msgstr "URL de source de mise à jour invalide : %s"
+
+#~ msgid "Update now"
+#~ msgstr "Mettre à jour maintenant"
+
+#~ msgid "Later"
+#~ msgstr "Plus tard"
+
+#, c-format
+#~ msgid ""
+#~ "Latest revision: %.12s\n"
+#~ "Installed revision: %.12s"
+#~ msgstr ""
+#~ "Dernière révision : %.12s\n"
+#~ "Révision installée : %.12s"
+
+#~ msgid "A new version of GTKTerm is available."
+#~ msgstr "Une nouvelle version de GTKTerm est disponible."
+
+#, c-format
+#~ msgid "The installed revision is unknown; the latest revision is %.12s."
+#~ msgstr ""
+#~ "La révision installée est inconnue ; la dernière révision est %.12s."
+
+#~ msgid "The remote repository did not report a HEAD revision."
+#~ msgstr "Le dépôt distant n'a indiqué aucune révision HEAD."
+
+#~ msgid "Configuration"
+#~ msgstr "Configuration"
+
+#~ msgid "Main window"
+#~ msgstr "Terminal"
+
+#~ msgid "Load macros file..."
+#~ msgstr "Charger un fichier de macros…"
+
+#~ msgid "Control signals"
+#~ msgstr "Signaux de contrôle"
 
 #, c-format
 #~ msgid "Cannot save file %s: %s"

@@ -20,6 +20,7 @@ GtMacroLists *gt_macro_lists_new           (void);
 void          gt_macro_lists_free          (GtMacroLists *lists);
 GtMacroLists *gt_macro_lists_copy          (const GtMacroLists *lists);
 gint          gt_macro_lists_find          (const GtMacroLists *lists, const gchar *name);
+gint          gt_macro_lists_add_list      (GtMacroLists *lists, const gchar *name);
 void          gt_macro_lists_add           (GtMacroLists *lists, const gchar *name, const gchar *display, const gchar *value);
 gint          gt_macro_lists_count         (const GtMacroLists *lists);
 const gchar  *gt_macro_lists_name          (const GtMacroLists *lists, gint list_idx);

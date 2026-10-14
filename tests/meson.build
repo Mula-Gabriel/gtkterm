@@ -10,6 +10,7 @@ unit_tests = {
 	'test_macros_format' : [],
 	'test_macro_set' : [],
 	'test_macro_file' : [],
+	'test_project_file' : [],
 	'test_macro_poller' : [],
 	'test_macro_view' : [],
 	'test_baudrates' : [util_dep],
@@ -20,7 +21,9 @@ unit_tests = {
 	'test_device_match' : [],
 	'test_view_render' : [],
 	'test_profile' : [],
+	'test_profile_keyfile' : [],
 	'test_config_store' : [],
+	'test_file_stamp' : [],
 	'test_rx_queue' : [],
 	'test_script_port' : [util_dep],
 	'test_term_options' : [gio_dep],
@@ -30,6 +33,8 @@ unit_tests = {
 	'test_file_sender' : [],
 	'test_rx_logger' : [],
 	'test_update_check' : [],
+	'test_update_versions' : [],
+	'test_update_fetch' : [],
 	'test_serial_ports' : [util_dep],
 	'test_port_form' : [],
 	'test_port_activity' : [],
@@ -55,6 +60,13 @@ foreach name, extra_deps : unit_tests
 		dependencies : [gtkterm_core_dep] + extra_deps)
 	test(name, exe, args : ['--tap'], protocol : 'tap', suite : 'unit', env : test_env)
 endforeach
+
+# Script de mise à jour et outil de publication (sh, git, meson, ninja ; aucun réseau ni root) : dépôts et préfixes jetables.
+sh_prog = find_program('sh')
+test('update_script', sh_prog, args : [files('test_update_script.sh'), files('../data/gtkterm-update.sh')], protocol : 'tap', suite : 'unit',
+	env : test_env, timeout : 300)
+test('publier_version', sh_prog, args : [files('test_publier_version.sh'), files('../tools/publier-version.sh')], protocol : 'tap', suite : 'unit',
+	env : test_env, timeout : 60)
 
 # Tests d'intégration : vrais modules de la couche application (src/) compilés avec des bouchons (tests/stubs/) ou leur propre table
 # GtAppUi, sans GTK ni fenêtre.
@@ -98,6 +110,7 @@ endforeach
 # Tests de la couche application complète (gtkterm_app : sessions, configuration, ligne de commande), sans GTK ni fenêtre ; HOME et XDG privés.
 app_tests = {
 	'test_session' : [util_dep],
+	'test_project' : [util_dep],
 	'test_session_manager' : [],
 	'test_app_config' : [],
 	'test_cmdline' : [],

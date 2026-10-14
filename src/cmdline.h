@@ -26,6 +26,8 @@ typedef struct
 	gboolean exit_now;
 	gint exit_code;
 	gchar *send_file;	/* option -f, à libérer (gt_cmdline_clear) */
+	gchar *project;	/* --project, chemin absolu ; NULL : aucun ; à libérer (gt_cmdline_clear) */
+	gboolean profile_given;	/* -c ou une option de profil autre que -L : le dernier projet n'est pas rouvert */
 } GtCmdline;
 
 /* Analyse ; erreur ou aide : exit_now, rien d'autre n'est fait (ni configuration lue ni fichier créé). Sinon charge dans s le profil
@@ -69,6 +71,7 @@ typedef struct
 	gboolean help;	/* --help : les options suivantes ne sont pas lues */
 	gchar *config_name;	/* -c ; NULL : « default » */
 	gchar *send_file;	/* -f */
+	gchar *project;	/* --project tel que donné */
 	guint set;	/* GtCmdlineField des options données */
 	GtProfile values;	/* leurs valeurs (mis à zéro, chaînes possédées) */
 } GtCmdlineOptions;

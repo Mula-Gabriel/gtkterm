@@ -20,6 +20,8 @@ core_sources = [
 	'macro_set.h',
 	'macro_file.c',
 	'macro_file.h',
+	'project_file.c',
+	'project_file.h',
 	'macro_poller.c',
 	'macro_poller.h',
 	'macro_view.c',
@@ -48,6 +50,11 @@ core_sources = [
 	'port_activity.h',
 	'config_store.c',
 	'config_store.h',
+	'profile_keyfile.c',
+	'profile_keyfile.h',
+	'file_stamp.c',
+	'file_stamp.h',
+	'window_state.h',
 	'rx_queue.c',
 	'rx_queue.h',
 	'script_port.c',
@@ -66,6 +73,10 @@ core_sources = [
 	'rx_logger.h',
 	'update_check.c',
 	'update_check.h',
+	'update_fetch.c',
+	'update_fetch.h',
+	'update_versions.c',
+	'update_versions.h',
 	'app_ui.c',
 	'app_ui.h',
 ]
@@ -92,6 +103,16 @@ git_revision_h = vcs_tag(
 	replace_string : '@GIT_REVISION@'
 )
 
+# Version installée (mise à jour par versions taguées) : tag vX.Y.Z exact, ou vX.Y.Z-N-g<hash> après lui. Sans tag joignable (dépôt sans
+# tag, archive sans historique), la fenêtre affiche la version de meson.build plutôt que « unknown ».
+git_describe_h = vcs_tag(
+	command : ['git', '-c', 'safe.directory=*', 'describe', '--tags', '--match', 'v[0-9]*', '--abbrev=7'],
+	fallback : meson.project_version(),
+	input : 'git_describe.h.in',
+	output : 'git_describe.h',
+	replace_string : '@GIT_DESCRIBE@'
+)
+
 # Couche application (GLib, gudev, Lua ; aucun en-tête GTK, vérifié par grep, spec §14-3) : bibliothèque statique liée par l'interface
 # GTK 4 (src/ui/). Compilée sans dépendance GTK : un en-tête GTK inclus par erreur casse la construction. Les tests d'intégration
 # (tests/meson.build) compilent les mêmes fichiers avec leurs bouchons.
@@ -106,6 +127,8 @@ app_layer_sources = [
 	'macros.h',
 	'script_engine.c',
 	'script_engine.h',
+	'project.c',
+	'project.h',
 	'session.c',
 	'session.h',
 	'session_manager.c',

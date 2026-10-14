@@ -5,6 +5,7 @@
 #include <gtk/gtk.h>
 
 #include "cmdline.h"
+#include "project.h"
 #include "session.h"
 #include "session_manager.h"
 
@@ -19,12 +20,14 @@ G_BEGIN_DECLS
 GtkApplication   *gt_app_new(const GtCmdline *cmd, GtSessionManager *sessions);
 GtSessionManager *gt_app_get_sessions(void);	/* NULL avant gt_app_new ou après la finalisation de l'application */
 GtSession        *gt_app_get_active_session(void);	/* NULL avant gt_app_new ; session arrêtée après la fermeture, NULL après la finalisation de l'application */
+GtProject        *gt_app_get_project(void);	/* projet de la fenêtre (6c) ; NULL avant gt_app_new ou après la finalisation de l'application */
 GtkWindow        *gt_app_get_main_window(void);	/* NULL avant « activate » et après la fermeture */
 GtkWidget        *gt_app_get_active_view(void);	/* page de la session active (session_view.h), NULL sans fenêtre ni page */
 void              gt_app_foreach_view(GFunc func, gpointer user_data);	/* chaque page non arrêtée, dans l'ordre des onglets ; func(page, user_data) */
 /* Nouvel onglet (plan, décision 7) : session créée sur une copie de profile (nom de profil profile_name, NULL : « default »), son fichier de
- * macros chargé (non interactif), page et étiquette insérées à droite de l'onglet actif et affichées, profil appliqué, port ouvert (échec :
- * boîte open-failed préfixée du nom de l'onglet). NULL sans fenêtre ou après la fermeture ; sinon la session (empruntée). */
+ * macros chargé (non interactif ; projet ouvert : copie du jeu de l'onglet actif, aucun fichier, onglet de projet au script vide), page et
+ * étiquette insérées à droite de l'onglet actif et affichées, profil appliqué, port ouvert (échec : boîte open-failed préfixée du nom de
+ * l'onglet). NULL sans fenêtre ou après la fermeture ; sinon la session (empruntée). */
 GtSession        *gt_app_add_session(const GtProfile *profile, const gchar *profile_name);
 /* Fermeture d'un onglet : dernier onglet, session absente ou arrêtée : rien. Occupée (script, envoi de fichier) : confirmation d'abord (rien si
  * la session est fermée entre-temps). Puis page arrêtée, session arrêtée (dialogues liés fermés sans rien appliquer), onglet retiré. */

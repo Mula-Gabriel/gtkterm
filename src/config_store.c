@@ -10,7 +10,6 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 #include <config.h>
 #include <glib/gi18n.h>
@@ -18,20 +17,11 @@
 
 #include "config_file.h"
 #include "config_store.h"
+#include "file_stamp.h"
+#include "profile_keyfile.h"
 
 #define PROFILE_PREFIX "profile:"
 #define GENERAL_GROUP "general"
-
-/* Identité du fichier au dernier chargement ou enregistrement : l'écriture atomique (fichier temporaire renommé) change l'inode,
- * une modification sur place change la taille ou la date de modification */
-typedef struct
-{
-	gboolean exists;
-	dev_t dev;
-	ino_t ino;
-	off_t size;
-	struct timespec mtime;
-} FileIdentity;
 
 struct _GtConfigStore
 {
@@ -41,7 +31,9 @@ struct _GtConfigStore
 	gboolean migrated;
 	gboolean backup_done;
 	gchar *original_contents;	/* fichier d'origine d'un magasin migré : copie de sauvegarde */
-	FileIdentity identity;
+	GtFileStamp identity;
+	gchar *saved_text;	/* contenu du magasin tel que lu ou écrit : retour en arrière si un enregistrement échoue */
+	GError *read_error;	/* dernière erreur de lecture (magasin en lecture seule), NULL sinon */
 };
 
 gboolean gt_config_parse_boolean(const gchar *s, gboolean *out)
@@ -115,151 +107,6 @@ static gint compare_names(gconstpointer a, gconstpointer b)
 	return r;
 }
 
-/* ---- Lecture tolérante d'un profil -------------------------------------- */
-
-static void read_string(GKeyFile *kf, const gchar *group, const gchar *key, gchar **field)
-{
-	gchar *v = g_key_file_get_string(kf, group, key, NULL);
-
-	if(v != NULL)
-	{
-		g_free(*field);
-		*field = v;
-	}
-}
-
-static void read_int(GKeyFile *kf, const gchar *group, const gchar *key, gint *field)
-{
-	gchar *v = g_key_file_get_value(kf, group, key, NULL);
-	gchar *end = NULL;
-	gint64 n;
-
-	if(v == NULL)
-		return;
-	n = g_ascii_strtoll(g_strstrip(v), &end, 10);
-	if(end != v && *end == '\0' && n >= G_MININT && n <= G_MAXINT)
-		*field = (gint)n;
-	g_free(v);
-}
-
-static void read_uint(GKeyFile *kf, const gchar *group, const gchar *key, guint *field)
-{
-	gint n = -1;
-
-	read_int(kf, group, key, &n);
-	if(n > 0)
-		*field = (guint)n;
-}
-
-static void read_bool(GKeyFile *kf, const gchar *group, const gchar *key, gboolean *field)
-{
-	gchar *v = g_key_file_get_value(kf, group, key, NULL);
-
-	if(v != NULL)
-		gt_config_parse_boolean(g_strstrip(v), field);
-	g_free(v);
-}
-
-static void read_color(GKeyFile *kf, const gchar *group, const gchar *key, GtColor *c)
-{
-	gsize n = 0;
-	gdouble *v = g_key_file_get_double_list(kf, group, key, &n, NULL);
-
-	if(v != NULL && n == 4)
-		*c = (GtColor){ v[0], v[1], v[2], v[3] };
-	g_free(v);
-}
-
-static void read_profile(GKeyFile *kf, const gchar *g, GtProfile *p)
-{
-	gchar *s = NULL;
-
-	read_string(kf, g, "transport", &s);
-	gt_transport_from_string(s, &p->transport);
-	g_clear_pointer(&s, g_free);
-	read_string(kf, g, "port", &p->port);
-	read_uint(kf, g, "speed", &p->baudrate);
-	read_int(kf, g, "bits", &p->bits);
-	read_int(kf, g, "stopbits", &p->stopbits);
-	read_string(kf, g, "parity", &s);
-	gt_parity_from_string(s, &p->parity);
-	g_clear_pointer(&s, g_free);
-	read_string(kf, g, "flow", &s);
-	gt_flow_from_string(s, &p->flow);
-	g_clear_pointer(&s, g_free);
-	read_int(kf, g, "wait_delay", &p->wait_delay_ms);
-	if(g_key_file_has_key(kf, g, "wait_char", NULL))
-	{
-		gint w = -1;
-
-		read_int(kf, g, "wait_char", &w);
-		p->wait_char = config_wait_char_from_file(w);
-	}
-	read_int(kf, g, "rs485_rts_time_before_tx", &p->rs485_before_ms);
-	read_int(kf, g, "rs485_rts_time_after_tx", &p->rs485_after_ms);
-	read_int(kf, g, "activity_idle_timeout", &p->idle_timeout_s);
-	read_int(kf, g, "activity_no_data_timeout", &p->no_data_timeout_s);
-	read_string(kf, g, "socket_host", &p->host);
-	read_string(kf, g, "socket_port", &p->tcp_port);
-	read_bool(kf, g, "echo", &p->echo);
-	read_bool(kf, g, "crlfauto", &p->crlf_auto);
-	read_bool(kf, g, "autoreconnect_enabled", &p->auto_reconnect);
-	read_bool(kf, g, "esc_clear_screen", &p->esc_clear_screen);
-	read_bool(kf, g, "timestamp", &p->timestamp);
-	read_string(kf, g, "font", &p->font);
-	read_bool(kf, g, "term_block_cursor", &p->block_cursor);
-	read_int(kf, g, "term_columns", &p->columns);
-	read_int(kf, g, "term_rows", &p->rows);
-	read_int(kf, g, "term_scrollback", &p->scrollback);
-	read_bool(kf, g, "term_visual_bell", &p->visual_bell);
-	read_color(kf, g, "term_foreground", &p->foreground);
-	read_color(kf, g, "term_background", &p->background);
-	read_string(kf, g, "macros_file", &p->macros_file);
-}
-
-static void write_color(GKeyFile *kf, const gchar *group, const gchar *key, const GtColor *c)
-{
-	gdouble v[4] = { c->red, c->green, c->blue, c->alpha };
-
-	g_key_file_set_double_list(kf, group, key, v, 4);
-}
-
-static void write_profile(GKeyFile *kf, const gchar *g, const GtProfile *p)
-{
-	g_key_file_set_string(kf, g, "transport", gt_transport_to_string(p->transport));
-	g_key_file_set_string(kf, g, "port", p->port != NULL ? p->port : "");
-	g_key_file_set_integer(kf, g, "speed", (gint)p->baudrate);
-	g_key_file_set_integer(kf, g, "bits", p->bits);
-	g_key_file_set_integer(kf, g, "stopbits", p->stopbits);
-	g_key_file_set_string(kf, g, "parity", gt_parity_to_string(p->parity));
-	g_key_file_set_string(kf, g, "flow", gt_flow_to_string(p->flow));
-	g_key_file_set_integer(kf, g, "wait_delay", p->wait_delay_ms);
-	g_key_file_set_integer(kf, g, "wait_char", p->wait_char);
-	g_key_file_set_integer(kf, g, "rs485_rts_time_before_tx", p->rs485_before_ms);
-	g_key_file_set_integer(kf, g, "rs485_rts_time_after_tx", p->rs485_after_ms);
-	g_key_file_set_integer(kf, g, "activity_idle_timeout", p->idle_timeout_s);
-	g_key_file_set_integer(kf, g, "activity_no_data_timeout", p->no_data_timeout_s);
-	g_key_file_set_string(kf, g, "socket_host", p->host != NULL ? p->host : "");
-	g_key_file_set_string(kf, g, "socket_port", p->tcp_port != NULL ? p->tcp_port : "");
-	g_key_file_set_boolean(kf, g, "echo", p->echo);
-	g_key_file_set_boolean(kf, g, "crlfauto", p->crlf_auto);
-	g_key_file_set_boolean(kf, g, "autoreconnect_enabled", p->auto_reconnect);
-	g_key_file_set_boolean(kf, g, "esc_clear_screen", p->esc_clear_screen);
-	g_key_file_set_boolean(kf, g, "timestamp", p->timestamp);
-	g_key_file_set_string(kf, g, "font", p->font != NULL ? p->font : GT_PROFILE_DEFAULT_FONT);
-	g_key_file_set_boolean(kf, g, "term_block_cursor", p->block_cursor);
-	g_key_file_set_integer(kf, g, "term_columns", p->columns);
-	g_key_file_set_integer(kf, g, "term_rows", p->rows);
-	g_key_file_set_integer(kf, g, "term_scrollback", p->scrollback);
-	g_key_file_set_boolean(kf, g, "term_visual_bell", p->visual_bell);
-	write_color(kf, g, "term_foreground", &p->foreground);
-	write_color(kf, g, "term_background", &p->background);
-	if(p->macros_file != NULL)
-		g_key_file_set_string(kf, g, "macros_file", p->macros_file);
-	else
-		g_key_file_remove_key(kf, g, "macros_file", NULL);
-}
-
 /* ---- Interface publique ------------------------------------------------- */
 
 static const gchar * const reserved_groups[] = { "window", "colors", "layout", "session", NULL };
@@ -267,7 +114,7 @@ static const gchar * const legacy_marker_keys[] = { "port", "speed", "transport_
 static const gchar * const general_marker_keys[] = { "port", "speed", "transport_type", NULL };
 static const gchar * const legacy_bool_keys[] = { "echo", "crlfauto", "autoreconnect_enabled", "esc_clear_screen", "timestamp", "term_block_cursor",
                                                   "term_visual_bell", NULL };
-static const gchar * const update_keys[] = { "update_url", "update_prefix", "update_check_startup", NULL };
+static const gchar * const update_keys[] = { "update_url", "update_prefix", "update_check_startup", "update_skipped_version", NULL };
 
 static gboolean in_list(const gchar * const *list, const gchar *s)
 {
@@ -378,8 +225,9 @@ static void migrate_profile(GtConfigStore *s, const gchar *old, gboolean update_
 		gchar *val = unquote(raw);
 		gboolean b;
 
-		if(g_str_has_prefix(k, "term_foreground_") || g_str_has_prefix(k, "term_background_") || g_strcmp0(k, "show_rxtx") == 0)
-			;	/* couleurs traitées ensemble ci-dessous ; show_rxtx abandonnée */
+		if(g_str_has_prefix(k, "term_foreground_") || g_str_has_prefix(k, "term_background_") || g_strcmp0(k, "show_rxtx") == 0 ||
+		   g_strcmp0(k, "update_skipped_revision") == 0)
+			;	/* couleurs traitées ensemble ci-dessous ; show_rxtx et update_skipped_revision (ancien numéro de révision) abandonnées */
 		else if(in_list(update_keys, k))
 		{
 			if(update_source)
@@ -395,9 +243,11 @@ static void migrate_profile(GtConfigStore *s, const gchar *old, gboolean update_
 		}
 		else if(g_strcmp0(k, "transport_type") == 0)
 		{
-			gint t = atoi(val);
+			gint64 t;
 
-			if(t >= TRANSPORT_SERIAL && t <= TRANSPORT_TCP_SERVER)
+			if(!g_ascii_string_to_signed(val, 10, G_MININT, G_MAXINT, &t, NULL))
+				g_warning("%s: [%s] %s=%s ignored (not a number)", s->path, old, k, val);
+			else if(t >= TRANSPORT_SERIAL && t <= TRANSPORT_TCP_SERVER)
 				g_key_file_set_string(kf, group, "transport", gt_transport_to_string((TransportType)t));
 		}
 		else if(g_strcmp0(k, "term_rows") == 0)
@@ -410,7 +260,14 @@ static void migrate_profile(GtConfigStore *s, const gchar *old, gboolean update_
 				g_key_file_set_boolean(kf, group, k, b);
 		}
 		else if(g_strcmp0(k, "wait_char") == 0)
-			g_key_file_set_integer(kf, group, k, config_wait_char_from_file(atoi(val)));
+		{
+			gint64 w;
+
+			if(!g_ascii_string_to_signed(val, 10, G_MININT, G_MAXINT, &w, NULL))
+				g_warning("%s: [%s] %s=%s ignored (not a number)", s->path, old, k, val);
+			else
+				g_key_file_set_integer(kf, group, k, config_wait_char_from_file((gint)w));
+		}
 		else
 			g_key_file_set_string(kf, group, k, val);
 		g_free(val);
@@ -484,29 +341,6 @@ static gboolean store_migrate(GtConfigStore *s)
 	return migrated;
 }
 
-static void identity_take(const gchar *path, FileIdentity *id)
-{
-	struct stat st;
-
-	*id = (FileIdentity){ 0 };
-	if(stat(path, &st) != 0)
-		return;
-	id->exists = TRUE;
-	id->dev = st.st_dev;
-	id->ino = st.st_ino;
-	id->size = st.st_size;
-	id->mtime = st.st_mtim;
-}
-
-static gboolean identity_equal(const FileIdentity *a, const FileIdentity *b)
-{
-	if(a->exists != b->exists)
-		return FALSE;
-	if(!a->exists)
-		return TRUE;
-	return a->dev == b->dev && a->ino == b->ino && a->size == b->size && a->mtime.tv_sec == b->mtime.tv_sec && a->mtime.tv_nsec == b->mtime.tv_nsec;
-}
-
 /* (Re)lit le fichier et remplace le contenu en mémoire. L'identité est relevée avant la lecture : une écriture concurrente pendant
  * la lecture sera vue à la relecture suivante. FALSE (GError) si le fichier est illisible : magasin vide en lecture seule. */
 static gboolean store_read(GtConfigStore *s, GError **error)
@@ -522,16 +356,21 @@ static gboolean store_read(GtConfigStore *s, GError **error)
 	s->migrated = FALSE;
 	s->backup_done = FALSE;
 	g_clear_pointer(&s->original_contents, g_free);
-	identity_take(s->path, &s->identity);
+	g_clear_pointer(&s->saved_text, g_free);
+	g_clear_error(&s->read_error);
+	gt_file_stamp_take(s->path, &s->identity);
 
 	if(!g_file_get_contents(s->path, &contents, &len, &local))
 	{
 		if(g_error_matches(local, G_FILE_ERROR, G_FILE_ERROR_NOENT))
 		{
 			g_error_free(local);
+			s->saved_text = g_strdup("");
 			return TRUE;
 		}
 		s->read_only = TRUE;
+		s->saved_text = g_strdup("");
+		s->read_error = g_error_copy(local);
 		g_propagate_error(error, local);
 		return FALSE;
 	}
@@ -541,6 +380,9 @@ static gboolean store_read(GtConfigStore *s, GError **error)
 		g_key_file_free(s->kf);
 		s->kf = g_key_file_new();
 		s->read_only = TRUE;
+		s->saved_text = g_strdup("");
+		s->read_error = g_error_copy(local);
+		g_prefix_error(&s->read_error, "%s: ", s->path);
 		g_propagate_prefixed_error(error, local, "%s: ", s->path);
 		g_free(contents);
 		return FALSE;
@@ -553,6 +395,7 @@ static gboolean store_read(GtConfigStore *s, GError **error)
 	}
 	else
 		g_free(contents);
+	s->saved_text = g_key_file_to_data(s->kf, NULL, NULL);
 	return TRUE;
 }
 
@@ -567,10 +410,7 @@ GtConfigStore *gt_config_store_load(const gchar *path, GError **error)
 
 gboolean gt_config_store_reload_if_changed(GtConfigStore *s, GError **error)
 {
-	FileIdentity now;
-
-	identity_take(s->path, &now);
-	if(identity_equal(&now, &s->identity))
+	if(!gt_file_stamp_changed(s->path, &s->identity))
 		return TRUE;
 	return store_read(s, error);
 }
@@ -581,6 +421,8 @@ void gt_config_store_free(GtConfigStore *s)
 		return;
 	g_key_file_free(s->kf);
 	g_free(s->original_contents);
+	g_free(s->saved_text);
+	g_clear_error(&s->read_error);
 	g_free(s->path);
 	g_free(s);
 }
@@ -598,6 +440,11 @@ gboolean gt_config_store_was_migrated(GtConfigStore *s)
 const gchar *gt_config_store_get_path(GtConfigStore *s)
 {
 	return s->path;
+}
+
+const GError *gt_config_store_get_read_error(GtConfigStore *s)
+{
+	return s->read_error;
 }
 
 gchar **gt_config_store_list_profiles(GtConfigStore *s)
@@ -631,7 +478,7 @@ gboolean gt_config_store_get_profile(GtConfigStore *s, const gchar *name, GtProf
 		return FALSE;
 	gt_profile_clear(out);
 	gt_profile_init_defaults(out);
-	read_profile(s->kf, group, out);
+	gt_profile_from_key_file(s->kf, group, out);
 	g_free(group);
 	return TRUE;
 }
@@ -640,7 +487,7 @@ void gt_config_store_put_profile(GtConfigStore *s, const gchar *name, const GtPr
 {
 	gchar *group = profile_group_for_write(s, name);
 
-	write_profile(s->kf, group, p);
+	gt_profile_to_key_file(p, s->kf, group);
 	g_free(group);
 }
 
@@ -677,7 +524,7 @@ gboolean gt_config_store_get_general_boolean(GtConfigStore *s, const gchar *key,
 {
 	gboolean v = fallback;
 
-	read_bool(s->kf, GENERAL_GROUP, key, &v);
+	gt_key_file_read_bool(s->kf, GENERAL_GROUP, key, &v);
 	return v;
 }
 
@@ -710,7 +557,25 @@ static void prefix_path(GError **error, const gchar *path)
 	g_prefix_error(error, "%s: ", path);
 }
 
-gboolean gt_config_store_save(GtConfigStore *s, GError **error)
+/* Un enregistrement a échoué ou a été refusé : le contenu en mémoire revient à celui de la dernière lecture ou écriture réussie (vide si le
+ * fichier était absent ou illisible) */
+static void store_rollback(GtConfigStore *s)
+{
+	GKeyFile *kf;
+
+	if(s->saved_text == NULL)
+		return;
+	kf = g_key_file_new();
+	if(g_key_file_load_from_data(kf, s->saved_text, -1, G_KEY_FILE_KEEP_COMMENTS, NULL))
+	{
+		g_key_file_free(s->kf);
+		s->kf = kf;
+	}
+	else
+		g_key_file_free(kf);
+}
+
+static gboolean store_save(GtConfigStore *s, GError **error)
 {
 	gchar *dir, *data;
 	gsize len;
@@ -753,8 +618,22 @@ gboolean gt_config_store_save(GtConfigStore *s, GError **error)
 	ok = g_file_set_contents_full(s->path, data, (gssize)len, G_FILE_SET_CONTENTS_CONSISTENT, 0600, error);
 	g_free(data);
 	if(ok)
-		identity_take(s->path, &s->identity);	/* son propre enregistrement ne déclenche pas de relecture */
+		gt_file_stamp_take(s->path, &s->identity);	/* son propre enregistrement ne déclenche pas de relecture */
 	else
 		prefix_path(error, s->path);
+	return ok;
+}
+
+gboolean gt_config_store_save(GtConfigStore *s, GError **error)
+{
+	gboolean ok = store_save(s, error);
+
+	if(ok)
+	{
+		g_free(s->saved_text);
+		s->saved_text = g_key_file_to_data(s->kf, NULL, NULL);
+	}
+	else
+		store_rollback(s);
 	return ok;
 }

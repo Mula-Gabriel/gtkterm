@@ -511,6 +511,96 @@ test_activite_delais_profil(void)
 	pty_fermer(&p);
 }
 
+/* ---- Projet (6c) : in-project, script-text, signal edited ---- */
+
+static void
+compter_signal(gpointer data)
+{
+	(*(gint *)data)++;
+}
+
+static void
+compter_notify(GObject *o, GParamSpec *pspec, gpointer data)
+{
+	(*(gint *)data)++;
+}
+
+static void
+test_in_project(void)
+{
+	GtSession *s = gt_session_new(NULL, NULL);
+	gint notifies = 0, edites = 0;
+
+	g_assert_false(gt_session_get_in_project(s));
+	g_assert_false(gt_macros_is_embedded(gt_session_get_macros(s)));
+	g_signal_connect(s, "notify::in-project", G_CALLBACK(compter_notify), &notifies);
+	g_signal_connect_swapped(s, "edited", G_CALLBACK(compter_signal), &edites);
+	gt_session_set_in_project(s, TRUE);
+	g_assert_true(gt_session_get_in_project(s));
+	g_assert_true(gt_macros_is_embedded(gt_session_get_macros(s)));
+	g_assert_cmpint(notifies, ==, 1);
+	g_assert_cmpint(edites, ==, 1);
+	gt_session_set_in_project(s, TRUE);	/* inchangé : rien */
+	g_assert_cmpint(notifies, ==, 1);
+	g_assert_cmpint(edites, ==, 1);
+	g_object_unref(s);
+}
+
+static void
+test_script_text(void)
+{
+	GtSession *s = gt_session_new(NULL, NULL);
+	gint notifies = 0, edites = 0;
+
+	g_assert_cmpstr(gt_session_get_script_text(s), ==, "");
+	g_signal_connect(s, "notify::script-text", G_CALLBACK(compter_notify), &notifies);
+	g_signal_connect_swapped(s, "edited", G_CALLBACK(compter_signal), &edites);
+	gt_session_set_script_text(s, "");
+	gt_session_set_script_text(s, NULL);
+	g_assert_cmpint(notifies, ==, 0);
+	g_assert_cmpint(edites, ==, 0);
+	gt_session_set_script_text(s, "print('a')");
+	g_assert_cmpstr(gt_session_get_script_text(s), ==, "print('a')");
+	g_assert_cmpint(notifies, ==, 1);
+	g_assert_cmpint(edites, ==, 1);
+	gt_session_set_script_text(s, "print('a')");
+	g_assert_cmpint(notifies, ==, 1);
+	g_assert_cmpint(edites, ==, 1);
+	gt_session_set_script_text(s, NULL);
+	g_assert_cmpstr(gt_session_get_script_text(s), ==, "");
+	g_assert_cmpint(edites, ==, 2);
+	g_object_unref(s);
+}
+
+static void
+test_edited(void)
+{
+	GtSession *s = gt_session_new(NULL, NULL);
+	gint n = 0;
+
+	g_signal_connect_swapped(s, "edited", G_CALLBACK(compter_signal), &n);
+	g_object_set(gt_session_get_options(s), "echo", TRUE, NULL);
+	g_assert_cmpint(n, ==, 1);
+	g_object_set(gt_session_get_link(s), "auto-reconnect", TRUE, NULL);
+	g_assert_cmpint(n, ==, 2);
+	/* Profil identique à l'état courant (echo et auto-reconnect déjà réglés ci-dessus) : ni « changed » des options ni notify de la liaison,
+	 * le seul « edited » est celui qui termine gt_session_apply_profile */
+	gt_session_get_profile(s)->echo = TRUE;
+	gt_session_get_profile(s)->auto_reconnect = TRUE;
+	gt_session_apply_profile(s);
+	g_assert_cmpint(n, ==, 3);
+	gt_macros_changed(gt_session_get_macros(s));
+	g_assert_cmpint(n, ==, 4);
+	gt_session_edited(s);
+	g_assert_cmpint(n, ==, 5);
+	gt_session_shutdown(s);
+	gt_session_edited(s);
+	g_object_set(gt_session_get_options(s), "echo", FALSE, NULL);
+	gt_macros_changed(gt_session_get_macros(s));
+	g_assert_cmpint(n, ==, 5);
+	g_object_unref(s);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -527,6 +617,9 @@ main(int argc, char *argv[])
 	g_test_add_func("/session/actions", test_actions);
 	g_test_add_func("/session/activite", test_activite);
 	g_test_add_func("/session/activite-delais-profil", test_activite_delais_profil);
+	g_test_add_func("/session/in-project", test_in_project);
+	g_test_add_func("/session/script-text", test_script_text);
+	g_test_add_func("/session/edited", test_edited);
 	ret = g_test_run();
 	test_rmdir_recursive(racine);
 	g_free(racine);

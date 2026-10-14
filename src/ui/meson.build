@@ -54,8 +54,12 @@ ui_sources = [
 	'macro_accel.h',
 	'macro_editor.c',
 	'macro_editor.h',
+	'macro_arg_widget.c',
+	'macro_arg_widget.h',
 	'macro_row.c',
 	'macro_row.h',
+	'macros_save.c',
+	'macros_save.h',
 	'macro_panel.c',
 	'macro_panel.h',
 	'macro_shortcuts.c',
@@ -67,6 +71,7 @@ ui_sources = [
 	'about.c',
 	'about.h',
 	git_revision_h,
+	git_describe_h,
 	ui_resources,
 ]
 

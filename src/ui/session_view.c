@@ -62,6 +62,41 @@ static void on_h_paned_max_position(GObject *paned, GParamSpec *pspec, gpointer 
 	gtk_paned_set_position(GTK_PANED(paned), MAX(max_pos - (nat_w - min_w), width / 2));
 }
 
+#define SCRIPT_FIT_KEY "gt-script-fit"	/* sur le séparateur vertical : hauteur du panneau de script à vérifier dès la prochaine allocation */
+#define SCRIPT_PANEL_MIN_HEIGHT 150	/* hauteur utile du panneau de script (barre d'outils, éditeur, console) */
+
+/* Panneau de script visible alors que le séparateur vertical ne lui laisse pas une hauteur utile (GtkPaned de GTK 4 : affiché à l'exécution
+ * sans position enregistrée, il n'aurait que sa barre d'outils et l'éditeur, réduit à zéro, ne serait plus dessiné) : position qui lui donne un
+ * tiers de la hauteur, au moins SCRIPT_PANEL_MIN_HEIGHT. Une position posée (enregistrée ou déplacée) qui lui laisse cette hauteur est gardée
+ * telle quelle. Rien tant que le séparateur n'a pas de taille : la vérification attend la prochaine allocation (notify::max-position). */
+static void script_panel_fit(GtkPaned *paned)
+{
+	GtkWidget *end = gtk_paned_get_end_child(paned);
+	gint height = gtk_widget_get_height(GTK_WIDGET(paned));
+	gboolean position_set = FALSE;
+
+	if(g_object_get_data(G_OBJECT(paned), SCRIPT_FIT_KEY) == NULL || end == NULL || !gtk_widget_get_visible(end) || height <= 1)
+		return;
+	g_object_set_data(G_OBJECT(paned), SCRIPT_FIT_KEY, NULL);
+	g_object_get(paned, "position-set", &position_set, NULL);	/* position jamais posée : celle que GTK calculera ne laisse que la barre d'outils */
+	if(!position_set || height - gtk_paned_get_position(paned) < SCRIPT_PANEL_MIN_HEIGHT)
+		gtk_paned_set_position(paned, MAX(0, height - MAX(height / 3, SCRIPT_PANEL_MIN_HEIGHT)));	/* bornée par max-position */
+}
+
+static void on_v_paned_max_position(GObject *paned, GParamSpec *pspec, gpointer data)
+{
+	script_panel_fit(GTK_PANED(paned));
+}
+
+/* notify::visible du panneau de script (user_data : le séparateur vertical, rappel débranché à sa finalisation) */
+static void on_script_panel_visible(GObject *panel, GParamSpec *pspec, gpointer paned)
+{
+	if(!gtk_widget_get_visible(GTK_WIDGET(panel)))
+		return;
+	g_object_set_data(G_OBJECT(paned), SCRIPT_FIT_KEY, GINT_TO_POINTER(1));
+	script_panel_fit(GTK_PANED(paned));
+}
+
 /* Destruction de la page : arrêt s'il n'a pas eu lieu, la session ne la désigne plus. GTK 4 émet « destroy » depuis gtk_widget_dispose, après
  * le dispose de GtkBox : les enfants de la page (emplacements, paneds, terminal) peuvent déjà être libérés ; l'arrêt n'y touche que par
  * pointeurs faibles (barre d'état ici, VTE dans app_actions.c) ou par des objets qui ne sont pas des enfants (session, groupe d'actions,
@@ -132,6 +167,7 @@ GtkWidget *gt_session_view_new(GtkApplication *app, GtSession *s, const GtWindow
 		g_signal_connect(sv->h_paned, "notify::max-position", G_CALLBACK(on_h_paned_max_position), NULL);
 	if(sv->initial.v_paned >= 0)
 		gtk_paned_set_position(GTK_PANED(sv->v_paned), sv->initial.v_paned);
+	g_signal_connect(sv->v_paned, "notify::max-position", G_CALLBACK(on_v_paned_max_position), NULL);
 
 	/* Barres de la page et leurs actions, dans le groupe de la session */
 	status = gt_status_bar_new(link, gt_session_get_activity(s));
@@ -218,7 +254,13 @@ void gt_session_view_set_slot(GtkWidget *view, const char *slot, GtkWidget *chil
 		gtk_paned_set_resize_end_child(GTK_PANED(sv->v_paned), FALSE);
 		gtk_paned_set_shrink_end_child(GTK_PANED(sv->v_paned), TRUE);
 		if(child != NULL)
+		{
 			gtk_widget_set_visible(child, sv->initial.script_panel_visible);
+			/* Visible dès la création sans position enregistrée : hauteur vérifiée à la première allocation ; puis à chaque affichage */
+			if(sv->initial.script_panel_visible && sv->initial.v_paned < 0)
+				g_object_set_data(G_OBJECT(sv->v_paned), SCRIPT_FIT_KEY, GINT_TO_POINTER(1));
+			g_signal_connect_object(child, "notify::visible", G_CALLBACK(on_script_panel_visible), sv->v_paned, 0);
+		}
 	}
 	else if(g_strcmp0(slot, "hex-bar") == 0)
 	{
@@ -276,6 +318,25 @@ void gt_session_view_get_state(GtkWidget *view, GtWindowState *out)
 	}
 	if(hex != NULL)
 		out->hex_bar_visible = gtk_widget_get_visible(hex);
+}
+
+void gt_session_view_fill_project_tab(GtkWidget *view, GtProjectTab *tab)
+{
+	GtkWidget *script;
+
+	g_return_if_fail(tab != NULL);
+	gt_session_view_get_state(view, &tab->page);
+	script = gt_session_view_get_slot(view, "script-panel");
+	g_free(tab->script_layout);
+	tab->script_layout = g_strdup(gt_script_panel_get_layout(script));
+}
+
+void gt_session_view_apply_project_tab(GtkWidget *view, const GtProjectTab *tab)
+{
+	GtkWidget *script = gt_session_view_get_slot(view, "script-panel");
+
+	if(script != NULL && tab != NULL && tab->script_layout != NULL)
+		gt_script_panel_set_layout(script, tab->script_layout);
 }
 
 void gt_session_view_apply_profile(GtkWidget *view)
