@@ -203,6 +203,71 @@ static void test_args_recopies(void)
 	gt_macro_set_free(set);
 }
 
+static void test_limites(void)
+{
+	GtMacroRow *row = gt_macro_row_new(4, "A", "", "A%d %s", "");
+	const gchar *min[] = { "1", "", NULL };
+	const gchar *max[] = { "100", "8", NULL };
+	const gchar *jeu[] = { "", "printable", NULL };
+	const gchar *max_bis[] = { "100", "8", NULL };
+	gchar **lu = NULL;
+
+	g_assert_null(gt_macro_row_get_arg_min(row));
+	g_assert_null(gt_macro_row_get_arg_max(row));
+	g_assert_null(gt_macro_row_get_arg_charset(row));
+	notifications = 0;
+	g_signal_connect(row, "notify::arg-min", G_CALLBACK(compter), NULL);
+	g_signal_connect(row, "notify::arg-max", G_CALLBACK(compter), NULL);
+	g_signal_connect(row, "notify::arg-charset", G_CALLBACK(compter), NULL);
+	gt_macro_row_set_limits(row, NULL, NULL, NULL);
+	g_assert_cmpuint(notifications, ==, 0);
+	gt_macro_row_set_limits(row, min, max, jeu);
+	g_assert_cmpuint(notifications, ==, 3);
+	g_assert_cmpstr(gt_macro_row_get_arg_min(row)[0], ==, "1");
+	g_assert_cmpstr(gt_macro_row_get_arg_max(row)[1], ==, "8");
+	g_assert_cmpstr(gt_macro_row_get_arg_charset(row)[1], ==, "printable");
+	gt_macro_row_set_limits(row, min, max_bis, jeu);	/* mêmes valeurs : pas de notification */
+	g_assert_cmpuint(notifications, ==, 3);
+	gt_macro_row_set_limits(row, min, NULL, jeu);	/* seul arg-max change */
+	g_assert_cmpuint(notifications, ==, 4);
+	g_assert_null(gt_macro_row_get_arg_max(row));
+	g_object_set(row, "arg-max", max, NULL);
+	g_assert_cmpuint(notifications, ==, 5);
+	g_object_get(row, "arg-charset", &lu, NULL);
+	g_assert_cmpstr(lu[1], ==, "printable");
+	g_strfreev(lu);
+	g_object_unref(row);
+}
+
+static void test_limites_recopiees(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint a = gt_macro_set_append(set, "A", "", "A%d %s", "");
+	const gchar *min[] = { "1", "", NULL };
+	const gchar *max[] = { "100", "8", NULL };
+	const gchar *jeu[] = { "", "latin1", NULL };
+	GListStore *store;
+	GtMacroRow *row;
+	GtMacroEdit *edits;
+	guint n = 0;
+
+	g_assert_cmpint(gt_macro_set_set_limits(set, a, min, max, jeu, 2), ==, 0);
+	store = gt_macro_rows_from_set(set);
+	row = g_list_model_get_item(G_LIST_MODEL(store), 0);
+	g_assert_cmpstr(gt_macro_row_get_arg_min(row)[0], ==, "1");
+	g_assert_cmpstr(gt_macro_row_get_arg_max(row)[1], ==, "8");
+	g_assert_cmpstr(gt_macro_row_get_arg_charset(row)[1], ==, "latin1");
+	g_object_unref(row);
+	edits = gt_macro_rows_to_edits(G_LIST_MODEL(store), &n);
+	g_assert_cmpuint(n, ==, 1);
+	g_assert_cmpstr(edits[0].arg_min[0], ==, "1");
+	g_assert_cmpstr(edits[0].arg_max[0], ==, "100");
+	g_assert_cmpstr(edits[0].arg_charset[1], ==, "latin1");
+	g_free(edits);
+	g_object_unref(store);
+	gt_macro_set_free(set);
+}
+
 static void test_listes(void)
 {
 	GtMacroLists *lists = gt_macro_lists_new();
@@ -239,5 +304,7 @@ int main(int argc, char **argv)
 	g_test_add_func("/macro_row/listes", test_listes);
 	g_test_add_func("/macro_row/set-args", test_set_args);
 	g_test_add_func("/macro_row/args-recopies", test_args_recopies);
+	g_test_add_func("/macro_row/limites", test_limites);
+	g_test_add_func("/macro_row/limites-recopiees", test_limites_recopiees);
 	return g_test_run();
 }

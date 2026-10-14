@@ -667,7 +667,7 @@ static void defaults_rebuild(MacroEditor *editor)
 		gchar *name = g_strdup_printf("macro-default-%d", k);
 		GtkWidget *w;
 
-		w = gt_macro_arg_widget_new(lists, &infos[k], initial);
+		w = gt_macro_arg_widget_new(lists, &infos[k], initial, NULL);
 		if(GTK_IS_DROP_DOWN(w))
 			g_signal_connect(w, "notify::selected", G_CALLBACK(on_default_dropdown_selected), NULL);
 		else

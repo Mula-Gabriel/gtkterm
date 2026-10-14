@@ -4,6 +4,7 @@
  * réutilisés. L'état du panneau est attaché à sa boîte (libéré avec elle) ; chaque rappel le reçoit en paramètre. Fil principal seulement. */
 
 #include <config.h>
+#include <string.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
 
@@ -183,22 +184,47 @@ static void activate_macro(MacroPanel *panel, guint id)
 
 /* --- Arguments --- */
 
-/* Valeur du champ écrite parmi les valeurs d'usage (jamais enregistrées) si elle diffère de l'argument courant ; TRUE si elle a changé */
+/* Valeur par défaut de l'argument k de m ("" : aucune) */
+static const gchar *arg_default(const GtMacro *m, gint k)
+{
+	return (m->args != NULL && k < (gint)g_strv_length(m->args)) ? m->args[k] : "";
+}
+
+/* Valeur d'usage brute de l'argument k (NULL : aucune) */
+static const gchar *arg_usage(GtMacros *macros, guint id, gint k)
+{
+	const gchar *const *usage = gt_macros_get_usage(macros, id);
+
+	return (usage != NULL && k < (gint)g_strv_length((gchar **)usage)) ? usage[k] : NULL;
+}
+
+/* Limite k d'un vecteur de limites de la macro (NULL : aucune) */
+static const gchar *arg_limit(gchar **limits, gint k)
+{
+	return (limits != NULL && k < (gint)g_strv_length(limits)) ? limits[k] : NULL;
+}
+
+/* Valeur du champ écrite parmi les valeurs d'usage (jamais enregistrées) si elle diffère de la valeur d'usage brute (champ vide = défaut,
+ * spec arguments §2.7 ; une liste, sans état vide, est comparée à la valeur résolue) ; TRUE si elle a changé */
 static gboolean commit_arg(MacroPanel *panel, GtkWidget *w)
 {
 	gint k = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "arg-index"));
 	GtMacros *macros = panel_macros(panel);
-	const gchar *const *current;
+	const GtMacro *m;
 	const gchar *saved;
 	gchar *value;
 	gboolean changed = FALSE;
 
 	if(panel->shut_down || panel->rebuilding)
 		return FALSE;
-	if(gt_macro_set_find(gt_macros_get_set(macros), widget_id(w)) == NULL)
+	m = gt_macro_set_find(gt_macros_get_set(macros), widget_id(w));
+	if(m == NULL)
 		return FALSE;
-	current = gt_macros_get_args(macros, widget_id(w));
-	saved = (current != NULL && k < (gint)g_strv_length((gchar **)current)) ? current[k] : "";
+	saved = arg_usage(macros, m->id, k);
+	if(GTK_IS_DROP_DOWN(w) && (saved == NULL || saved[0] == '\0'))
+		saved = arg_default(m, k);
+	else if(saved == NULL)
+		saved = "";
 	value = gt_macro_arg_widget_get_value(w);
 	if(g_strcmp0(value, saved) != 0)
 	{
@@ -209,9 +235,14 @@ static gboolean commit_arg(MacroPanel *panel, GtkWidget *w)
 	return changed;
 }
 
+/* Largeur : le plus long du texte et de l'indication (défaut en grisé), de 4 à ARG_WIDTH_MAX caractères ; puis vérification */
 static void on_entry_changed(GtkEditable *editable, gpointer data)
 {
+	const gchar *placeholder = gtk_entry_get_placeholder_text(GTK_ENTRY(editable));
 	gint len = (gint)g_utf8_strlen(gtk_editable_get_text(editable), -1);
+
+	if(placeholder != NULL)
+		len = MAX(len, (gint)g_utf8_strlen(placeholder, -1));
 
 	gtk_editable_set_width_chars(editable, CLAMP(len, 4, ARG_WIDTH_MAX));
 	gt_macro_arg_widget_validate(GTK_WIDGET(editable));
@@ -236,12 +267,21 @@ static void on_dropdown_selected(GObject *dropdown, GParamSpec *pspec, gpointer 
 static GtkWidget *make_arg_widget(MacroPanel *panel, const GtMacroSet *set, const GtMacro *m, const macro_arg_info_t *info, gint k)
 {
 	const GtMacroLists *lists = gt_macro_set_get_lists(set);
-	const gchar *const *cur = gt_macros_get_args(panel_macros(panel), m->id);
-	const gchar *saved = (cur != NULL && k < (gint)g_strv_length((gchar **)cur)) ? cur[k] : NULL;
+	const gchar *def = arg_default(m, k);
+	const gchar *usage = arg_usage(panel_macros(panel), m->id, k);
+	const gchar *initial;
 	gchar *name = g_strdup_printf("macro-%u-arg-%d", m->id, k);
 	GtkWidget *w;
 
-	w = gt_macro_arg_widget_new(lists, info, saved);
+	/* Champ vide = défaut (§2.7) : l'entrée montre la valeur d'usage, vide si elle est absente ou égale au défaut (montré en grisé) ;
+	 * une liste déroulante, sans état vide, montre la valeur résolue */
+	if(g_strcmp0(info->type, "l") == 0)
+		initial = (usage != NULL && usage[0] != '\0') ? usage : def;
+	else
+		initial = (usage != NULL && strcmp(usage, def) != 0) ? usage : "";
+	w = gt_macro_arg_widget_new(lists, info, initial, def[0] != '\0' ? def : NULL);
+	gt_macro_arg_widget_set_empty_is_default(w, TRUE);
+	gt_macro_arg_widget_set_limits(w, arg_limit(m->arg_min, k), arg_limit(m->arg_max, k), arg_limit(m->arg_charset, k), def);
 	if(GTK_IS_DROP_DOWN(w))
 		g_signal_connect(w, "notify::selected", G_CALLBACK(on_dropdown_selected), panel);
 	else

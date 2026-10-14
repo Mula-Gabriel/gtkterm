@@ -14,7 +14,8 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE(GtMacroRow, gt_macro_row, GT, MACRO_ROW, GObject)
 
 /* propriétés : "id" (guint, construction seulement), "label", "shortcut", "action", "tab" (chaînes, NULL → "", notify seulement si changé),
- * "args" (G_TYPE_STRV, valeurs par défaut des arguments ; NULL : aucune ; notify seulement si changé) */
+ * "args" (G_TYPE_STRV, valeurs par défaut des arguments ; NULL : aucune ; notify seulement si changé),
+ * "arg-min", "arg-max", "arg-charset" (G_TYPE_STRV, limites des arguments comme GtMacro.arg_min… ; même contrat que "args") */
 GtMacroRow  *gt_macro_row_new(guint id, const gchar *label, const gchar *shortcut, const gchar *action, const gchar *tab);
 guint        gt_macro_row_get_id(GtMacroRow *row);
 const gchar *gt_macro_row_get_label(GtMacroRow *row);
@@ -24,6 +25,11 @@ const gchar *gt_macro_row_get_tab(GtMacroRow *row);
 const gchar *const *gt_macro_row_get_args(GtMacroRow *row);	/* NULL : aucune ; valide tant que la ligne ne change pas */
 void         gt_macro_row_set_shortcut(GtMacroRow *row, const gchar *shortcut);
 void         gt_macro_row_set_args(GtMacroRow *row, const gchar *const *args);	/* copiés ; notify::args seulement si différents ; NULL permis */
+const gchar *const *gt_macro_row_get_arg_min(GtMacroRow *row);	/* NULL : aucune ; comme gt_macro_row_get_args */
+const gchar *const *gt_macro_row_get_arg_max(GtMacroRow *row);
+const gchar *const *gt_macro_row_get_arg_charset(GtMacroRow *row);
+/* Copiés ; chaque propriété notifiée seulement si elle change (notifications groupées) ; NULL permis */
+void         gt_macro_row_set_limits(GtMacroRow *row, const gchar *const *min, const gchar *const *max, const gchar *const *charset);
 
 #define GT_TYPE_MACRO_LIST_ROW (gt_macro_list_row_get_type())
 G_DECLARE_FINAL_TYPE(GtMacroListRow, gt_macro_list_row, GT, MACRO_LIST_ROW, GObject)

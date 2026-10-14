@@ -1,6 +1,7 @@
 # Arguments du panneau de macros (6c, spec §3.2-6) : liste en GtkDropDown (valeur par défaut présélectionnée), entrée invalide marquée (classe
-# error) dès la frappe ; les valeurs saisies servent à l'envoi mais le fichier n'est jamais touché ; « Reset arguments » (popover) revient aux
-# valeurs par défaut ; l'éditeur (zone « Default values ») les enregistre ; relues après redémarrage ; liste de deux valeurs = deux boutons ;
+# error) dès la frappe, bulle d'aide qui décrit l'argument (et la raison du refus) ; champ vide = valeur par défaut, montrée en texte indicatif
+# (spec arguments §2.7) ; les valeurs saisies servent à l'envoi mais le fichier n'est jamais touché ; « Reset arguments » (popover) vide les
+# champs (retour aux valeurs par défaut) ; l'éditeur (zone « Default values ») les enregistre ; relues après redémarrage ; liste de deux valeurs = deux boutons ;
 # panneau masqué et réaffiché par app.show-macro-panel ; liste sans libellé à côté d'un argument à libellé : la liste prend toute la hauteur de la
 # ligne (deux lignes, comme le bouton), 7 px entre deux lignes (comme l'interface GTK 3) ; séparateur titré : titre en gras, non grisé, une
 # ligne sautée au-dessus.
@@ -68,25 +69,32 @@ time.sleep(0.3)
 envoi('Choix', b'Cg;')
 fichier_inchange('choix Gamma')
 
-# 2. Entrée invalide : classe error dès la frappe ; valeur valide + Entrée : envoi, fichier inchangé
+# 2. Champ vide, défaut 5 en texte indicatif, bulle descriptive ; entrée invalide : classe error dès la frappe, raison dans la bulle ;
+#    valeur valide + Entrée : envoi, fichier inchangé
 champ = 'macro-%d-arg-0' % num
+w = e.find1(name=champ)
+check(w.get('label') == '' and w.get('placeholder') == '5', 'champ Num vide, defaut 5 en texte indicatif', (w.get('label'), w.get('placeholder')))
+check((w.get('tooltip') or '').startswith('integer') and '5' in w.get('tooltip'), 'bulle descriptive du champ Num (%r)' % w.get('tooltip'))
 e.bw.click(e.find1(name=champ))
 e.set_text(champ, 'abc')
 check(wait_until(lambda: 'error' in classes(e.find1(name=champ))), 'entree abc pour un argument entier marquee en erreur')
+check('\n' in (e.find1(name=champ).get('tooltip') or ''), 'raison du refus dans la bulle (%r)' % e.find1(name=champ).get('tooltip'))
 e.set_text(champ, '12')
 check(wait_until(lambda: 'error' not in classes(e.find1(name=champ))), 'entree 12 valide')
+check('\n' not in (e.find1(name=champ).get('tooltip') or ''), 'plus de raison dans la bulle (%r)' % e.find1(name=champ).get('tooltip'))
 e.bw.key('Return')
 envoi('Num', b'N12;')
 fichier_inchange('valeur 12')
 
-# 3. Clic droit sur « Num » : « Reset arguments » rend la valeur par défaut (5)
+# 3. Clic droit sur « Num » : « Reset arguments » vide le champ, la valeur par défaut (5) est envoyée
 e.bw.click(e.find1(name='macro-%d' % num), button=3)
 e.find1(name='polling-popover')
 reset = e.find1(name='macro-reset-args')
 check(reset.get('label') == 'Reset arguments', 'bouton Reset arguments (%r)' % reset.get('label'))
 e.bw.click(reset)
 check(wait_until(lambda: not e.find(name='polling-popover')), 'popover ferme par Reset arguments')
-check(wait_until(lambda: e.find1(name=champ).get('label') == '5'), 'champ revenu a la valeur par defaut 5 (%r)' % e.find1(name=champ).get('label'))
+check(wait_until(lambda: e.find1(name=champ).get('label') == ''), 'champ vide apres Reset arguments (%r)' % e.find1(name=champ).get('label'))
+check(e.find1(name=champ).get('placeholder') == '5', 'defaut 5 en texte indicatif (%r)' % e.find1(name=champ).get('placeholder'))
 envoi('Num', b'N5;')
 fichier_inchange('Reset arguments')
 
@@ -101,7 +109,9 @@ e.set_text('macro-default-0', '7')
 e.activate('macro-ok')
 check(wait_until(lambda: not e.find(name='macro-editor')), 'editeur ferme par OK')
 check(wait_until(lambda: 'args=7;' in open(ma).read()), 'valeur par defaut 7 enregistree dans le .ini')
-check(wait_until(lambda: e.find1(name=champ).get('label') == '7'), 'champ du panneau affiche 7 (%r)' % e.find1(name=champ).get('label'))
+check(wait_until(lambda: e.find1(name=champ).get('placeholder') == '7'), 'champ du panneau : defaut 7 en texte indicatif (%r)'
+      % e.find1(name=champ).get('placeholder'))
+check(e.find1(name=champ).get('label') == '', 'champ du panneau vide apres OK (%r)' % e.find1(name=champ).get('label'))
 envoi('Num', b'N7;')
 
 # 6. Liste de deux valeurs : deux boutons « L Lent » / « L Vif »
@@ -121,7 +131,8 @@ except subprocess.TimeoutExpired:
 check(e.stop() == 0, 'premier lancement : app.quit, code 0')
 e.start()
 num = macro_id(e, 'Num')
-check(e.find1(name='macro-%d-arg-0' % num).get('label') == '7', 'valeur par defaut 7 relue apres redemarrage')
+w = e.find1(name='macro-%d-arg-0' % num)
+check(w.get('label') == '' and w.get('placeholder') == '7', 'valeur par defaut 7 relue apres redemarrage', (w.get('label'), w.get('placeholder')))
 envoi('Num', b'N7;')
 envoi('Choix', b'Cb;')
 envoi('Txt', b'Tx;')
