@@ -7,6 +7,7 @@
 
 #include "link.h"
 #include "macros.h"
+#include "port_activity.h"
 #include "profile.h"
 #include "script_engine.h"
 #include "term_options.h"
@@ -27,6 +28,7 @@ const gchar    *gt_session_get_profile_name(GtSession *s);	/* « default » si a
 void            gt_session_set_profile_name(GtSession *s, const gchar *name);	/* NULL : « default » */
 GtMacros       *gt_session_get_macros(GtSession *s);
 GtScriptEngine *gt_session_get_script_engine(GtSession *s);
+GtPortActivity *gt_session_get_activity(GtSession *s);	/* activité du port de l'onglet (indicateurs) */
 GActionGroup   *gt_session_get_actions(GtSession *s);	/* en fait un GSimpleActionGroup (G_ACTION_MAP) : la page y ajoute les siennes */
 const gchar    *gt_session_get_short_name(GtSession *s);	/* propriété « short-name » ; calculé par gt_session_short_name_for(profil) */
 gchar          *gt_session_short_name_for(const GtProfile *p);	/* série : nom de base du port ; client TCP : « hôte:port » ; serveur : « :port » */
