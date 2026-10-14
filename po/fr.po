@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 1.3.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-10 22:47+0200\n"
+"POT-Creation-Date: 2026-10-14 22:57+0200\n"
 "PO-Revision-Date: 2026-10-10 12:00+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -204,14 +204,14 @@ msgstr "Valeur manquante pour l'option %s"
 msgid "Unknown command line option: %s"
 msgstr "Option de ligne de commande inconnue : %s"
 
-#: src/config_store.c:717
+#: src/config_store.c:721
 #, c-format
 msgid ""
 "The configuration file %s could not be read: nothing has been written to it."
 msgstr ""
 "Le fichier de configuration %s n'a pas pu être lu : rien n'y a été écrit."
 
-#: src/config_store.c:726
+#: src/config_store.c:730
 #, c-format
 msgid "Cannot create directory %s: %s"
 msgstr "Impossible de créer le dossier %s : %s"
@@ -317,43 +317,48 @@ msgstr "Impossible de charger le fichier de macros : %s"
 msgid "Cannot save macros file: %s"
 msgstr "Impossible d'enregistrer le fichier de macros : %s"
 
-#: src/port_form.c:74
+#: src/port_form.c:76
 msgid "Enter the serial port to open (for example /dev/ttyUSB0)."
 msgstr "Saisissez le port série à ouvrir (par exemple /dev/ttyUSB0)."
 
-#: src/port_form.c:79
+#: src/port_form.c:81
 #, c-format
 msgid "The baud rate must be a whole number between 1 and %d."
 msgstr "Le débit doit être un nombre entier compris entre 1 et %d."
 
-#: src/port_form.c:84
+#: src/port_form.c:86
 msgid "Invalid number of data bits or stop bits."
 msgstr "Nombre de bits de données ou de bits de stop non valide."
 
-#: src/port_form.c:89 src/port_form.c:108
+#: src/port_form.c:91 src/port_form.c:110
 #, c-format
 msgid "Delays must be between 0 and %d ms."
 msgstr "Les délais doivent être compris entre 0 et %d ms."
 
-#: src/port_form.c:97
+#: src/port_form.c:99
 msgid "Enter the host to connect to."
 msgstr "Saisissez l'hôte auquel se connecter."
 
-#: src/port_form.c:102
+#: src/port_form.c:104
 msgid "The TCP port must be a number between 1 and 65535."
 msgstr "Le port TCP doit être un nombre compris entre 1 et 65535."
 
-#: src/port_form.c:118
+#: src/port_form.c:120
 msgid "Enter the character to wait for: exactly one ASCII character."
 msgstr ""
 "Saisissez le caractère à attendre : un seul caractère ASCII exactement."
 
-#: src/profile.c:83
+#: src/port_form.c:127
+#, c-format
+msgid "Activity delays must be between 0 and %d s."
+msgstr "Les délais d'activité doivent être compris entre 0 et %d s."
+
+#: src/profile.c:85
 #, c-format
 msgid "Baud rate %u may not be supported by all hardware"
 msgstr "Le débit %u peut ne pas être pris en charge par tous les matériels"
 
-#: src/profile.c:87
+#: src/profile.c:89
 #, c-format
 msgid ""
 "Invalid number of stop-bits: %d\n"
@@ -362,7 +367,7 @@ msgstr ""
 "Nombre de bits de stop impossible: %d\n"
 "Retour au nombre de bits de stop par défaut: %d\n"
 
-#: src/profile.c:94
+#: src/profile.c:96
 #, c-format
 msgid ""
 "Invalid number of bits: %d\n"
@@ -371,7 +376,7 @@ msgstr ""
 "Nombre de bits impossible: %d\n"
 "Retour au nombre de bits par défaut: %d\n"
 
-#: src/profile.c:100
+#: src/profile.c:102
 #, c-format
 msgid ""
 "Invalid delay: %d ms\n"
@@ -380,23 +385,41 @@ msgstr ""
 "Délai impossible: %d ms\n"
 "Retour au délai par défaut: %d ms\n"
 
-#: src/profile.c:141 src/profile.c:165
+#: src/profile.c:108
+#, c-format
+msgid ""
+"Invalid idle delay: %d s\n"
+"Falling back to default idle delay: %d s\n"
+msgstr ""
+"Délai de repos impossible: %d s\n"
+"Retour au délai de repos par défaut: %d s\n"
+
+#: src/profile.c:114
+#, c-format
+msgid ""
+"Invalid no data delay: %d s\n"
+"Falling back to default no data delay: %d s\n"
+msgstr ""
+"Délai sans données impossible: %d s\n"
+"Retour au délai sans données par défaut: %d s\n"
+
+#: src/profile.c:156 src/profile.c:180
 msgid ""
 "The configuration name cannot contain \"[\", \"]\" or control characters."
 msgstr ""
 "Le nom de la configuration ne peut contenir ni « [ », ni « ] », ni caractère "
 "de contrôle."
 
-#: src/profile.c:147
+#: src/profile.c:162
 msgid "The configuration name cannot be empty."
 msgstr "Le nom de la configuration ne peut pas être vide."
 
-#: src/profile.c:153
+#: src/profile.c:168
 #, c-format
 msgid "The configuration name is too long (%d characters at most)."
 msgstr "Le nom de la configuration est trop long (%d caractères au plus)."
 
-#: src/profile.c:173
+#: src/profile.c:188
 #, c-format
 msgid "\"%s\" is a reserved name."
 msgstr "« %s » est un nom réservé."
@@ -441,7 +464,7 @@ msgstr "Erreur Lua : %s"
 msgid "Script already running."
 msgstr "Un script est déjà en cours."
 
-#: src/session.c:113
+#: src/session.c:114
 msgid "Break signal sent!"
 msgstr "Signal break envoyé !"
 
@@ -538,16 +561,52 @@ msgstr ""
 msgid "About GTKTerm"
 msgstr "À propos de GTKTerm"
 
-#: src/ui/app.c:441
+#: src/ui/activity_icon.c:35
+msgid "Connecting"
+msgstr "Connexion"
+
+#: src/ui/activity_icon.c:36
+msgid "Waiting for data"
+msgstr "En attente de données"
+
+#: src/ui/activity_icon.c:37
+msgid "Port open"
+msgstr "Port ouvert"
+
+#: src/ui/activity_icon.c:38
+msgid "Receiving data"
+msgstr "Réception de données"
+
+#: src/ui/activity_icon.c:39
+msgid "Idle"
+msgstr "Au repos"
+
+#: src/ui/activity_icon.c:40
+msgid "Connection lost"
+msgstr "Liaison perdue"
+
+#: src/ui/activity_icon.c:41
+msgid "Reconnecting"
+msgstr "Reconnexion"
+
+#: src/ui/activity_icon.c:42
+msgid "No data received"
+msgstr "Aucune donnée reçue"
+
+#: src/ui/activity_icon.c:43
+msgid "Port closed"
+msgstr "Port fermé"
+
+#: src/ui/app.c:456
 msgid "Close this tab?"
 msgstr "Fermer cet onglet ?"
 
-#: src/ui/app.c:441
+#: src/ui/app.c:456
 msgid "A script is running or a file is being sent in this tab."
 msgstr "Un script tourne ou un fichier est en cours d'envoi dans cet onglet."
 
-#: src/ui/app.c:441 src/ui/menus.ui:14 src/ui/tab_label.c:57
-#: src/ui/tab_label.c:58
+#: src/ui/app.c:456 src/ui/menus.ui:14 src/ui/tab_label.c:74
+#: src/ui/tab_label.c:75
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
@@ -563,11 +622,11 @@ msgstr "Avertissement"
 msgid "Error"
 msgstr "Erreur"
 
-#: src/ui/dialogs.c:165 src/ui/port_dialog.c:543 src/ui/profile_dialogs.c:343
+#: src/ui/dialogs.c:165 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:343
 msgid "_OK"
 msgstr "_OK"
 
-#: src/ui/dialogs.c:252 src/ui/file_send_window.c:47 src/ui/port_dialog.c:540
+#: src/ui/dialogs.c:252 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
 #: src/ui/profile_dialogs.c:340 src/ui/script_panel.c:797
 msgid "_Cancel"
 msgstr "_Annuler"
@@ -854,7 +913,7 @@ msgstr "Interrogation périodique"
 msgid "File"
 msgstr "Fichier"
 
-#: src/ui/menus.ui:10 src/ui/port_dialog.c:499
+#: src/ui/menus.ui:10 src/ui/port_dialog.c:522
 msgid "New tab"
 msgstr "Nouvel onglet"
 
@@ -1070,47 +1129,47 @@ msgstr "Xon/Xoff"
 msgid "RS-485 half-duplex (RTS)"
 msgstr "RS-485 semi-duplex (RTS)"
 
-#: src/ui/port_dialog.c:356
+#: src/ui/port_dialog.c:370
 msgid "_Host:"
 msgstr "_Hôte :"
 
-#: src/ui/port_dialog.c:358 src/ui/port_dialog.c:388
+#: src/ui/port_dialog.c:372 src/ui/port_dialog.c:402
 msgid "_Port:"
 msgstr "_Port :"
 
-#: src/ui/port_dialog.c:360
+#: src/ui/port_dialog.c:374
 msgid "TCP"
 msgstr "TCP"
 
-#: src/ui/port_dialog.c:373
+#: src/ui/port_dialog.c:387
 msgid "Detected serial ports"
 msgstr "Ports série détectés"
 
-#: src/ui/port_dialog.c:378
+#: src/ui/port_dialog.c:392
 msgid "Standard baud rates"
 msgstr "Débits standard"
 
-#: src/ui/port_dialog.c:390
+#: src/ui/port_dialog.c:404
 msgid "_Baud Rate:"
 msgstr "_Débit :"
 
-#: src/ui/port_dialog.c:392
+#: src/ui/port_dialog.c:406
 msgid "P_arity:"
 msgstr "Par_ité :"
 
-#: src/ui/port_dialog.c:394
+#: src/ui/port_dialog.c:408
 msgid "B_its:"
 msgstr "_Bits :"
 
-#: src/ui/port_dialog.c:396
+#: src/ui/port_dialog.c:410
 msgid "_Stopbits:"
 msgstr "Bits de _stop :"
 
-#: src/ui/port_dialog.c:398
+#: src/ui/port_dialog.c:412
 msgid "_Flow control:"
 msgstr "Contrôle de _flux :"
 
-#: src/ui/port_dialog.c:403
+#: src/ui/port_dialog.c:417
 #, c-format
 msgid ""
 "No serial devices found. Searched the following device path patterns:\n"
@@ -1119,47 +1178,59 @@ msgstr ""
 "Aucun périphérique série trouvé. Motifs de chemins recherchés :\n"
 "%sSaisissez un chemin de périphérique dans la zone Port."
 
-#: src/ui/port_dialog.c:415
+#: src/ui/port_dialog.c:429
 msgid "Serial port"
 msgstr "Port série"
 
-#: src/ui/port_dialog.c:420
+#: src/ui/port_dialog.c:434
 msgid "_Advanced Configuration Options"
-msgstr "Options de configuration _avancées"
+msgstr "Options de confi_guration avancées"
 
-#: src/ui/port_dialog.c:427
+#: src/ui/port_dialog.c:441
 msgid "End of line _delay (milliseconds):"
 msgstr "Délai de fin de _ligne (millisecondes) :"
 
-#: src/ui/port_dialog.c:429
+#: src/ui/port_dialog.c:443
 msgid "_Wait for this special character before passing to next line:"
 msgstr "Attendre ce _caractère spécial avant de passer à la ligne suivante :"
 
-#: src/ui/port_dialog.c:436
+#: src/ui/port_dialog.c:450
 msgid "ASCII file transfer"
 msgstr "Transfert de fichier ASCII"
 
-#: src/ui/port_dialog.c:440
+#: src/ui/port_dialog.c:454
+msgid "Id_le after (seconds, 0: never):"
+msgstr "R_epos après (secondes, 0 : jamais) :"
+
+#: src/ui/port_dialog.c:457
+msgid "_No data after (seconds, 0: never):"
+msgstr "Sa_ns données après (secondes, 0 : jamais) :"
+
+#: src/ui/port_dialog.c:459
+msgid "Port activity"
+msgstr "Activité du port"
+
+#: src/ui/port_dialog.c:463
 msgid "Time with RTS 'on' _before transmit (milliseconds):"
 msgstr "Durée avec RTS actif a_vant la transmission (millisecondes) :"
 
-#: src/ui/port_dialog.c:442
+#: src/ui/port_dialog.c:465
 msgid "Time with RTS 'on' a_fter transmit (milliseconds):"
 msgstr "Durée avec RTS actif ap_rès la transmission (millisecondes) :"
 
-#: src/ui/port_dialog.c:444
+#: src/ui/port_dialog.c:467
 msgid "RS-485 half-duplex parameters (RTS signal used to send)"
 msgstr "Paramètres RS-485 semi-duplex (utilisant signal RTS pour envoi)"
 
-#: src/ui/port_dialog.c:499
+#: src/ui/port_dialog.c:522
 msgid "Port configuration"
 msgstr "Configuration du port"
 
-#: src/ui/port_dialog.c:520
+#: src/ui/port_dialog.c:543
 msgid "_Type:"
 msgstr "_Type :"
 
-#: src/ui/port_dialog.c:522
+#: src/ui/port_dialog.c:545
 msgid "Transport"
 msgstr "Transport"
 

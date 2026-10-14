@@ -130,6 +130,16 @@ gtkterm.sleep(500)
 gtkterm.send_macro("Reset")    -- send macro by label
 ```
 
+13. Port Activity Indicators
+- A small indicator left of each tab name (and in the status bar when only one tab is open) shows the state of the tab's port at a glance
+- Hollow dot: port open (waiting for data, or data received recently); green dot: receiving data; red dot: connection lost
+- Spinner: connecting (TCP client, or TCP server waiting for a client), red while reconnecting
+- Zzz: idle — data was received, then nothing for the *idle* delay; skull and greyed name: no data at all for the *no data* delay since the port
+  opened (or since the connection was lost)
+- A tab that receives data while it is not shown has its name in bold until it is shown
+- Both delays are set per profile in Port › Advanced Configuration Options › Port activity (defaults 10 s and 60 s, 0 disables the state) and saved
+  with "Save configuration" (`activity_idle_timeout`, `activity_no_data_timeout` in `.gtktermrc`)
+
 
 <p align="center">
     <img src="docs/images/Capture1.png" width="60%"/>
