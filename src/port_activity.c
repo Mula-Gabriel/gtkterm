@@ -10,7 +10,7 @@ struct _GtPortActivity
 	GtPortActivityState state;
 	gint64 opened_us;	/* entrée en OPEN (ou reset) */
 	gint64 lost_us;	/* entrée dans {LOST, RECONNECTING} depuis un autre état */
-	gint64 last_rx_us;	/* -1 : rien reçu depuis l'entrée en OPEN */
+	gint64 last_rx_us;	/* -1 : rien reçu depuis l'entrée en OPEN (heures monotones, toujours positives) */
 	guint idle_s;
 	guint no_data_s;
 	gboolean viewed;
@@ -120,7 +120,9 @@ static gboolean on_timer(gpointer data)
 	GtPortActivity *a = data;
 
 	a->timer_id = 0;
+	g_object_ref(a);	/* un gestionnaire de notify::state peut rendre la dernière référence avant schedule */
 	update(a, g_get_monotonic_time());
+	g_object_unref(a);
 	return G_SOURCE_REMOVE;
 }
 

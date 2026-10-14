@@ -76,7 +76,7 @@ GObject sans dépendance à la liaison (le cœur n'inclut pas `link.h`) : il re�
 GtPortActivity *gt_port_activity_new(void);
 void  gt_port_activity_set_link_state(GtPortActivity *a, GtPortActivityLink st, gint64 now_us); /* CLOSED, CONNECTING, OPEN, LISTENING, LOST, RECONNECTING */
 void  gt_port_activity_received(GtPortActivity *a, gint64 now_us);
-void  gt_port_activity_set_timeouts(GtPortActivity *a, guint idle_s, guint no_data_s);
+void  gt_port_activity_set_timeouts(GtPortActivity *a, guint idle_s, guint no_data_s, gint64 now_us);
 void  gt_port_activity_set_viewed(GtPortActivity *a, gboolean viewed);   /* vu : efface « non lu » ; non vu : une réception le pose. Défaut : vu */
 void  gt_port_activity_reset(GtPortActivity *a, gint64 now_us);          /* réouverture : « déjà reçu » oublié, compteur sans données repart */
 void  gt_port_activity_tick(GtPortActivity *a, gint64 now_us);           /* réévalue les échéances */
@@ -91,8 +91,8 @@ gboolean gt_port_activity_get_unread(GtPortActivity *a);
   crée aucune source (critère 5) ; à l'expiration, `tick` réévalue et réarme sur l'échéance suivante si elle n'est pas atteinte. Délai arrondi au
   supérieur (µs → ms, au moins 1 ms) : jamais de boucle de réveils à 0 ms. Une propriété `use-timer` (vrai par défaut, construction seulement) permet aux tests de piloter le temps à
   la main par `tick`.
-- Le type du lien est un enum propre au cœur (`GtPortActivityLink`), converti depuis `GtLinkState` par la session. Les deux enums sont
-  enregistrés par `g_enum_register_static` (comme `link.c`). Fichiers : `port_activity.c` dans `core_sources` (`src/meson.build`),
+- Le type du lien est un enum propre au cœur (`GtPortActivityLink`), converti depuis `GtLinkState` par la session. `GtPortActivityState` est
+  enregistré par `g_enum_register_static` (comme `link.c`) ; `GtPortActivityLink` n'est qu'un paramètre, pas une propriété. Fichiers : `port_activity.c` dans `core_sources` (`src/meson.build`),
   `test_port_activity` dans `tests/meson.build`.
 
 ### 3.2 Application : `GtSession`

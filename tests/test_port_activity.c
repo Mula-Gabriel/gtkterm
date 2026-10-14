@@ -288,28 +288,42 @@ test_non_lu(void)
 }
 
 static gboolean
-est_actif(gpointer data)
+sur_garde(gpointer data)
 {
-	return gt_port_activity_get_state(data) == GT_PORT_ACTIVITY_ACTIVE;
+	*(gboolean *)data = TRUE;
+	return G_SOURCE_REMOVE;
+}
+
+/* Itère le contexte par défaut jusqu'à l'état attendu ou ms écoulées (source de garde : jamais bloqué si l'activité n'arme rien) */
+static gboolean
+attendre_etat(GtPortActivity *a, GtPortActivityState attendu, guint ms)
+{
+	gboolean fini = FALSE;
+	guint garde = g_timeout_add(ms, sur_garde, &fini);
+
+	while(gt_port_activity_get_state(a) != attendu && !fini)
+		g_main_context_iteration(NULL, TRUE);
+	if(!fini)
+		g_source_remove(garde);
+	return gt_port_activity_get_state(a) == attendu;
 }
 
 static void
 test_source_reelle(void)
 {
 	GtPortActivity *a = gt_port_activity_new();	/* use-timer vrai */
-	gint64 fin;
+	gboolean fini = FALSE;
 
+	gt_port_activity_set_timeouts(a, 1, 60, g_get_monotonic_time());
 	gt_port_activity_set_link_state(a, GT_PORT_LINK_OPEN, g_get_monotonic_time());
 	gt_port_activity_received(a, g_get_monotonic_time());
 	ETAT(a, "receiving");
-	fin = g_get_monotonic_time() + 2 * S;
-	while(!est_actif(a) && g_get_monotonic_time() < fin)
+	g_assert_true(attendre_etat(a, GT_PORT_ACTIVITY_ACTIVE, 2000));
+	g_assert_true(attendre_etat(a, GT_PORT_ACTIVITY_IDLE, 3000));	/* source réarmée sur l'échéance suivante */
+	g_object_unref(a);	/* source retirée : aucun rappel après libération (ASan) */
+	g_timeout_add(400, sur_garde, &fini);
+	while(!fini)
 		g_main_context_iteration(NULL, TRUE);
-	ETAT(a, "active");
-	g_object_unref(a);	/* source retirée : aucun rappel après libération */
-	fin = g_get_monotonic_time() + 400 * MS;
-	while(g_get_monotonic_time() < fin)
-		g_main_context_iteration(NULL, FALSE);
 }
 
 int
