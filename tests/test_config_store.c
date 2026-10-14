@@ -229,6 +229,42 @@ test_aller_retour(void)
 }
 
 static void
+test_delais_activite(void)
+{
+	gchar *p = ecrire("activite.rc", "[profile:a]\nactivity_idle_timeout=0\nactivity_no_data_timeout=120\n[profile:b]\nport=/dev/ttyX\n");
+	GtConfigStore *s = charger(p);
+	GtProfile lu = { 0 };
+	gchar *contenu;
+
+	g_assert_true(gt_config_store_get_profile(s, "a", &lu));
+	g_assert_cmpint(lu.idle_timeout_s, ==, 0);
+	g_assert_cmpint(lu.no_data_timeout_s, ==, 120);
+	gt_profile_clear(&lu);
+	g_assert_true(gt_config_store_get_profile(s, "b", &lu));
+	g_assert_cmpint(lu.idle_timeout_s, ==, 10);
+	g_assert_cmpint(lu.no_data_timeout_s, ==, 60);
+	gt_profile_clear(&lu);
+
+	/* un 0 enregistré est relu 0 (la clé est écrite) */
+	g_assert_true(gt_config_store_get_profile(s, "a", &lu));
+	gt_config_store_put_profile(s, "c", &lu);
+	enregistrer(s);
+	gt_profile_clear(&lu);
+	gt_config_store_free(s);
+	contenu = lire(p);
+	g_assert_nonnull(strstr(contenu, "activity_idle_timeout=0"));
+	g_assert_nonnull(strstr(contenu, "activity_no_data_timeout=120"));
+	g_free(contenu);
+	s = charger(p);
+	g_assert_true(gt_config_store_get_profile(s, "c", &lu));
+	g_assert_cmpint(lu.idle_timeout_s, ==, 0);
+	g_assert_cmpint(lu.no_data_timeout_s, ==, 120);
+	gt_profile_clear(&lu);
+	gt_config_store_free(s);
+	g_free(p);
+}
+
+static void
 test_cles_absentes_defauts(void)
 {
 	gchar *p = ecrire("partiel.rc", "[profile:x]\nport=/dev/ttyX\necho=True\nspeed=9600\n");
@@ -1030,6 +1066,7 @@ main(int argc, char **argv)
 	g_test_init(&argc, &argv, NULL);
 	dossier = g_dir_make_tmp("gtkterm-store-XXXXXX", NULL);
 	g_assert_nonnull(dossier);
+	g_test_add_func("/config_store/delais-activite", test_delais_activite);
 	g_test_add_func("/config_store/fichier-absent", test_fichier_absent);
 	g_test_add_func("/config_store/fichier-vide", test_fichier_vide);
 	g_test_add_func("/config_store/illisible-lecture-seule", test_illisible_lecture_seule);

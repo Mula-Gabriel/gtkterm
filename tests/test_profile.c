@@ -260,6 +260,29 @@ test_nom_refuse(void)
 	g_free(long65);
 }
 
+static void
+test_delais_activite(void)
+{
+	GtProfile p;
+	GPtrArray *w = g_ptr_array_new_with_free_func(g_free);
+
+	gt_profile_init_defaults(&p);
+	g_assert_cmpint(p.idle_timeout_s, ==, 10);
+	g_assert_cmpint(p.no_data_timeout_s, ==, 60);
+	p.idle_timeout_s = 0;
+	p.no_data_timeout_s = 3600;
+	g_assert_true(gt_profile_validate(&p, w));
+	g_assert_cmpint(p.idle_timeout_s, ==, 0);
+	p.idle_timeout_s = -1;
+	p.no_data_timeout_s = 3601;
+	g_assert_false(gt_profile_validate(&p, w));
+	g_assert_cmpuint(w->len, ==, 2);
+	g_assert_cmpint(p.idle_timeout_s, ==, 10);
+	g_assert_cmpint(p.no_data_timeout_s, ==, 60);
+	gt_profile_clear(&p);
+	g_ptr_array_unref(w);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -271,6 +294,7 @@ main(int argc, char **argv)
 	g_test_add_func("/profile/validation-debit-non-standard", test_validation_debit_non_standard);
 	g_test_add_func("/profile/conversion-transport", test_conversion_transport);
 	g_test_add_func("/profile/noms-des-enums", test_noms_des_enums);
+	g_test_add_func("/profile/delais-activite", test_delais_activite);
 	g_test_add_func("/profile/nom-valide", test_nom_valide);
 	g_test_add_func("/profile/nom-refuse", test_nom_refuse);
 	return g_test_run();
