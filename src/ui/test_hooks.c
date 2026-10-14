@@ -327,7 +327,7 @@ static void on_test_terminal_props(GSimpleAction *action, GVariant *param, gpoin
 
 /* test-sessions (plan, décision 9) : état aa{sv} recalculé à chaque activation (Activate puis Describe, comme test-dump) ; un dict par onglet,
  * dans l'ordre : index (i), id (u), name (s, nom court), state (s, pseudo de GtLinkState), profile (s), macros_file (s, vide si aucun),
- * active (b), busy (b) */
+ * active (b), busy (b), activity (s, pseudo de GtPortActivityState), unread (b) */
 static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
 	GtSessionManager *m = gt_app_get_sessions();
@@ -352,6 +352,9 @@ static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer us
 		g_variant_builder_add(&d, "{sv}", "macros_file", g_variant_new_string(macros != NULL ? macros : ""));
 		g_variant_builder_add(&d, "{sv}", "active", g_variant_new_boolean(s == active));
 		g_variant_builder_add(&d, "{sv}", "busy", g_variant_new_boolean(gt_session_is_busy(s)));
+		g_variant_builder_add(&d, "{sv}", "activity",
+		                      g_variant_new_string(gt_port_activity_state_nick(gt_port_activity_get_state(gt_session_get_activity(s)))));
+		g_variant_builder_add(&d, "{sv}", "unread", g_variant_new_boolean(gt_port_activity_get_unread(gt_session_get_activity(s))));
 		g_variant_builder_add_value(&b, g_variant_builder_end(&d));
 	}
 	g_type_class_unref(states);

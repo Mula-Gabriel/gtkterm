@@ -532,7 +532,8 @@ class Env:
 
     # ---------- onglets ----------
     def sessions(self):
-        """Onglets (crochet test-sessions) : liste de dict index, id, name, state, profile, macros_file, active, busy, dans l'ordre."""
+        """Onglets (crochet test-sessions) : liste de dict index, id, name, state, profile, macros_file, active, busy,
+        activity (pseudo de GtPortActivityState), unread, dans l'ordre."""
         self.action('test-sessions')
         return self.state('test-sessions') or []
 
