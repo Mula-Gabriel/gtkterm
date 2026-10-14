@@ -32,6 +32,7 @@ unit_tests = {
 	'test_update_check' : [],
 	'test_serial_ports' : [util_dep],
 	'test_port_form' : [],
+	'test_port_activity' : [],
 }
 
 test_env = environment()

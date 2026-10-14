@@ -44,6 +44,8 @@ core_sources = [
 	'serial_ports.h',
 	'port_form.c',
 	'port_form.h',
+	'port_activity.c',
+	'port_activity.h',
 	'config_store.c',
 	'config_store.h',
 	'rx_queue.c',
