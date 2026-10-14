@@ -14,6 +14,8 @@ core_sources = [
 	'i18n.h',
 	'macros_format.c',
 	'macros_format.h',
+	'macro_arg.c',
+	'macro_arg.h',
 	'macros_list.c',
 	'macros_list.h',
 	'macro_set.c',
