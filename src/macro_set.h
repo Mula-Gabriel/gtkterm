@@ -69,6 +69,10 @@ gboolean            gt_macro_set_same_structure(const GtMacroSet *a, const GtMac
 /* Copie profonde gardant les identifiants : simulations seulement, jamais installée à côté de l'original. */
 GtMacroSet         *gt_macro_set_clone        (const GtMacroSet *set);
 
+/* Regroupe les macros par onglet (spec 2026-10-15-nom-projet §2.1) : groupes dans l'ordre de première apparition de leur tab ("" compris),
+ * ordre relatif gardé ; identifiants et pointeurs inchangés. TRUE si l'ordre a changé ; NULL : FALSE. */
+gboolean            gt_macro_set_group_by_tab (GtMacroSet *set);
+
 gboolean            gt_macro_action_is_separator(const gchar *action, gchar **label_out);
 gboolean            gt_macro_is_sendable      (const GtMacro *macro);
 GBytes             *gt_macro_expand           (const GtMacroSet *set, const GtMacro *macro, const gchar *const *args, gint n_args);

@@ -558,6 +558,41 @@ gt_macro_set_clone(const GtMacroSet *set)
 }
 
 gboolean
+gt_macro_set_group_by_tab(GtMacroSet *set)
+{
+	GPtrArray *keys, *order;
+	gboolean changed = FALSE;
+
+	if(set == NULL)
+		return FALSE;
+	keys = g_ptr_array_new();	/* tab distincts (empruntés), ordre de première apparition */
+	for(guint i = 0; i < set->macros->len; i++)
+	{
+		const GtMacro *m = g_ptr_array_index(set->macros, i);
+
+		if(!g_ptr_array_find_with_equal_func(keys, m->tab, g_str_equal, NULL))
+			g_ptr_array_add(keys, m->tab);
+	}
+	order = g_ptr_array_sized_new(set->macros->len);	/* mêmes pointeurs, non possédés */
+	for(guint k = 0; k < keys->len; k++)
+		for(guint i = 0; i < set->macros->len; i++)
+		{
+			GtMacro *m = g_ptr_array_index(set->macros, i);
+
+			if(strcmp(m->tab, g_ptr_array_index(keys, k)) == 0)
+				g_ptr_array_add(order, m);
+		}
+	for(guint i = 0; i < order->len; i++)
+	{
+		changed |= set->macros->pdata[i] != order->pdata[i];
+		set->macros->pdata[i] = order->pdata[i];
+	}
+	g_ptr_array_unref(order);
+	g_ptr_array_unref(keys);
+	return changed;
+}
+
+gboolean
 gt_macro_action_is_separator(const gchar *action, gchar **label_out)
 {
 	const gchar *end, *rest;

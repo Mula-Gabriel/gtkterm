@@ -958,6 +958,40 @@ test_clone_garde_ids(void)
 	gt_macro_set_free(clone);
 }
 
+/* Libellés du jeu dans l'ordre, séparés par des virgules (g_free) */
+static gchar *
+ordre_jeu(const GtMacroSet *set)
+{
+	GString *s = g_string_new(NULL);
+
+	for(guint i = 0; i < gt_macro_set_count(set); i++)
+		g_string_append_printf(s, i ? ",%s" : "%s", gt_macro_set_get(set, i)->label);
+	return g_string_free(s, FALSE);
+}
+
+static void
+test_regroupe_onglets(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint a = gt_macro_set_append(set, "a", "", "A", "T1");
+	guint b = gt_macro_set_append(set, "b", "", "B", "");
+	guint c = gt_macro_set_append(set, "c", "", "C", "T1");
+	gt_macro_set_append(set, "d", "", "D", "T2");
+	gt_macro_set_append(set, "e", "", "E", "");
+	gchar *o;
+
+	g_assert_true(gt_macro_set_group_by_tab(set));
+	o = ordre_jeu(set);
+	g_assert_cmpstr(o, ==, "a,c,b,e,d");
+	g_free(o);
+	g_assert_cmpuint(gt_macro_set_get(set, 0)->id, ==, a);	/* identifiants gardés */
+	g_assert_cmpuint(gt_macro_set_get(set, 1)->id, ==, c);
+	g_assert_cmpuint(gt_macro_set_get(set, 2)->id, ==, b);
+	g_assert_false(gt_macro_set_group_by_tab(set));	/* déjà regroupé */
+	g_assert_false(gt_macro_set_group_by_tab(NULL));
+	gt_macro_set_free(set);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -984,5 +1018,6 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/verification", test_verification);
 	g_test_add_func("/macro_set/same_structure", test_meme_structure);
 	g_test_add_func("/macro_set/clone_keeps_ids", test_clone_garde_ids);
+	g_test_add_func("/macro_set/regroupe-onglets", test_regroupe_onglets);
 	return g_test_run();
 }

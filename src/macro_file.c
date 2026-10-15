@@ -190,6 +190,8 @@ gt_macro_set_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar *origi
 		g_free(tab);
 	}
 	g_strfreev(groups);
+	/* Regroupement par onglet à la lecture (spec 2026-10-15-nom-projet §2.2) : .ini, modèle, base en cache, jeu intégré d'un projet */
+	gt_macro_set_group_by_tab(set);
 	return set;
 }
 
@@ -302,6 +304,7 @@ load_legacy(GKeyFile *kf)
 	legacy_read_group(kf, "lists", legacy_add_list_cb, lists);
 	gt_macro_set_take_lists(set, lists);
 	legacy_read_group(kf, "macros", legacy_add_macro_cb, set);
+	gt_macro_set_group_by_tab(set);
 	return set;
 }
 

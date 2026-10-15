@@ -90,6 +90,8 @@ test_aller_retour(void)
 	id3 = gt_macro_set_append(set, "Liste", "", "S %#Vitesses", "Onglet 2");
 	gt_macro_set_set_arg(set, id3, 0, "1");
 	gt_macro_set_append(set, "", "", "%&", "");
+	/* Le jeu lu est regroupé par onglet (§2.2) : le jeu de départ l'est aussi, pour comparer rang par rang */
+	g_assert_true(gt_macro_set_group_by_tab(set));
 
 	g_assert_true(gt_macro_file_save(set, path, &error));
 	g_assert_no_error(error);
@@ -329,16 +331,19 @@ test_ancien_format(void)
 	g_assert_cmpstr(m->args[0], ==, "1");
 	g_assert_false(m->polling);
 	g_assert_cmpuint(m->polling_period_ms, ==, GT_MACRO_PERIOD_DEFAULT_MS);
+	/* Fichier : G, "", "", T, T, "" : regroupé à la lecture, « Faux » (onglet "") passe avant « Args » et « Pol » (T) */
 	m = gt_macro_set_get(set, 3);
+	g_assert_cmpstr(m->label, ==, "Faux");
+	g_assert_cmpstr(m->tab, ==, "");
+	g_assert_null(m->args);			/* 2 arguments enregistrés pour 1 spécificateur */
+	m = gt_macro_set_get(set, 4);
 	g_assert_cmpstr(m->tab, ==, "T");
 	g_assert_cmpstr(m->args[0], ==, "1");
 	g_assert_cmpstr(m->args[1], ==, "2");
-	m = gt_macro_set_get(set, 4);
+	m = gt_macro_set_get(set, 5);
 	g_assert_cmpstr(m->label, ==, "Pol");
 	g_assert_null(m->args);
 	g_assert_true(m->polling);
-	m = gt_macro_set_get(set, 5);
-	g_assert_null(m->args);			/* 2 arguments enregistrés pour 1 spécificateur */
 	g_assert_cmpint(gt_macro_lists_count(l), ==, 2);
 	g_assert_cmpstr(gt_macro_lists_entry_value(l, 0, 1), ==, "1");
 	g_assert_cmpstr(gt_macro_lists_name(l, 1), ==, "Sans");
@@ -755,6 +760,7 @@ test_prefixe(void)
 	GtMacroSet *set = jeu_reference(), *relu, *autre;
 	GKeyFile *kf = g_key_file_new();
 
+	gt_macro_set_group_by_tab(set);	/* jeu lu regroupé par onglet (§2.2) : le jeu de départ l'est aussi, pour comparer rang par rang */
 	gt_macro_set_to_key_file(set, kf, "tab:3:");
 	g_assert_true(g_key_file_has_group(kf, "tab:3:macro:1"));
 	g_assert_true(g_key_file_has_group(kf, "tab:3:macro:4"));
@@ -881,6 +887,61 @@ test_refus_copie_remede(void)
 	g_free(dir);
 }
 
+/* Un fichier aux onglets entrelacés est lu regroupé ; le fichier n'est pas réécrit */
+static void
+test_regroupe_lecture(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-mf-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	const gchar *texte = "[gtkterm-macros]\nversion=2\n\n"
+	                     "[macro:1]\nlabel=a\naction=A\ntab=T1\n\n"
+	                     "[macro:2]\nlabel=b\naction=B\ntab=\n\n"
+	                     "[macro:3]\nlabel=c\naction=C\ntab=T1\n";
+	GtMacroSet *set;
+	gchar *relu;
+
+	g_assert_true(g_file_set_contents(path, texte, -1, NULL));
+	set = charger(path);
+	g_assert_cmpstr(gt_macro_set_get(set, 0)->label, ==, "a");
+	g_assert_cmpstr(gt_macro_set_get(set, 1)->label, ==, "c");
+	g_assert_cmpstr(gt_macro_set_get(set, 2)->label, ==, "b");
+	relu = lire(path);
+	g_assert_cmpstr(relu, ==, texte);	/* jamais réécrit par la lecture */
+	g_free(relu);
+	gt_macro_set_free(set);
+	g_remove(path);
+	g_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+/* Même regroupement pour l'ancien format ([macros]) */
+static void
+test_regroupe_ancien_format(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-mf-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	const gchar *texte = "[macros]\nmacro_0=a::None::A::T1::::0::1000\n"
+	                     "macro_1=b::None::B::::::0::1000\n"
+	                     "macro_2=c::None::C::T1::::0::1000\n";
+	GtMacroSet *set;
+	gchar *relu;
+
+	g_assert_true(g_file_set_contents(path, texte, -1, NULL));
+	set = charger(path);
+	g_assert_cmpstr(gt_macro_set_get(set, 0)->label, ==, "a");
+	g_assert_cmpstr(gt_macro_set_get(set, 1)->label, ==, "c");
+	g_assert_cmpstr(gt_macro_set_get(set, 2)->label, ==, "b");
+	relu = lire(path);
+	g_assert_cmpstr(relu, ==, texte);
+	g_free(relu);
+	gt_macro_set_free(set);
+	g_remove(path);
+	g_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -909,5 +970,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_file/liste-vide-relue", test_liste_vide_relue);
 	g_test_add_func("/macro_file/illisible-cause", test_illisible_cause);
 	g_test_add_func("/macro_file/refus-copie-remede", test_refus_copie_remede);
+	g_test_add_func("/macro_file/regroupe-lecture", test_regroupe_lecture);
+	g_test_add_func("/macro_file/regroupe-ancien-format", test_regroupe_ancien_format);
 	return g_test_run();
 }
