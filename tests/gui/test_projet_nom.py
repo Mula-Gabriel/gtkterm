@@ -1,6 +1,7 @@
 # Nom de projet (spec docs/superpowers/specs/2026-10-15-nom-projet-et-editeur-macros-design.md, §1) : Rename project… sans fichier (nom dans le
 # titre, projet modifié, Save as propose <nom>.gtkterm), avec déplacement du fichier, refus si la cible existe.
 import os
+import sys
 from gtktest import *
 
 e = Env('projet_nom')
@@ -39,4 +40,5 @@ check(wait_until(lambda: 'already exists' in (e.find1(name='rename-error').get('
 check(e.project().get('path') == neuf and e.project().get('stored_name') == 'Banc 2', 'rien ne change : %r' % e.project())
 e.activate('rename-cancel')
 e.action('project-save')
-e.finish(quit=False)
+e.finish()
+sys.exit(conclude())

@@ -1,6 +1,7 @@
 # Arguments facultatifs (spec docs/superpowers/specs/2026-10-15-nom-projet-et-editeur-macros-design.md, §5) : panneau — un %s facultatif vide
 # n'envoie ni préfixe ni valeur ; rempli, il envoie le préfixe puis la valeur ; une liste facultative a « (none) ».
 # (la liste a deux entrées : facultative, elle reste une liste déroulante au lieu de deux boutons.)
+import sys
 from gtktest import *
 
 e = Env('macros_facultatifs')
@@ -30,3 +31,4 @@ e.drain()
 e.activate('macro-%d' % mo)
 check(wait_until(lambda: b'mode -m=slow;' in e.read_pty(0.3), 3), 'liste choisie : prefixe et valeur')
 e.finish()
+sys.exit(conclude())
