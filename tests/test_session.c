@@ -314,7 +314,8 @@ test_arret(void)
 
 static const gchar *const actions_de_session[] = {
 	"local-echo", "crlf-auto", "timestamp", "esc-clear-screen", "hex-index", "view-mode", "hex-bytes", "auto-reconnect",
-	"clear-screen", "open-port", "close-port", "send-break", "toggle-dtr", "toggle-rts", NULL
+	"clear-screen", "open-port", "close-port", "send-break", "toggle-dtr", "toggle-rts",
+	"detach-macros-template", NULL
 };
 
 static gboolean
@@ -358,6 +359,7 @@ test_actions(void)
 	g_assert_true(g_variant_type_equal(g_action_group_get_action_parameter_type(g, "view-mode"), G_VARIANT_TYPE_STRING));
 	g_assert_true(g_variant_type_equal(g_action_group_get_action_state_type(g, "hex-bytes"), G_VARIANT_TYPE_UINT32));
 	g_assert_null(g_action_group_get_action_state_type(g, "send-break"));
+	g_assert_false(g_action_group_get_action_enabled(g, "detach-macros-template"));	/* onglet non lié */
 
 	/* Signaux de contrôle : seulement sur une liaison série ouverte */
 	g_assert_false(g_action_group_get_action_enabled(g, "send-break"));

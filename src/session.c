@@ -132,6 +132,27 @@ static void on_toggle_rts(GSimpleAction *action, GVariant *param, gpointer user_
 		gt_link_toggle_line(s->link, GT_MODEM_RTS);
 }
 
+static void on_detach_macros_template(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+	gt_macros_detach_template(GT_SESSION(user_data)->macros);
+}
+
+/* « Détacher du modèle » activée seulement quand l'onglet est lié ; jamais réactivée après l'arrêt */
+static void update_detach_action(GtSession *s)
+{
+	if(!s->shut_down)
+		set_action_enabled(s, "detach-macros-template", gt_macros_get_template(s->macros) != NULL);
+}
+
+/* Rappel « edited » des macros : l'état lié a pu changer (lier, détacher, ouverture), puis signal edited de la session */
+static void on_macros_edited(gpointer data)
+{
+	GtSession *s = data;
+
+	update_detach_action(s);
+	gt_session_edited(s);
+}
+
 static void add_property_action(GtSession *s, const gchar *name, gpointer object, const gchar *property)
 {
 	GPropertyAction *action = g_property_action_new(name, object, property);
@@ -150,6 +171,7 @@ static void install_actions(GtSession *s)
 		{ .name = "send-break", .activate = on_send_break },
 		{ .name = "toggle-dtr", .activate = on_toggle_dtr },
 		{ .name = "toggle-rts", .activate = on_toggle_rts },
+		{ .name = "detach-macros-template", .activate = on_detach_macros_template },
 	};
 
 	/* Actions à état : GPropertyAction sur les options et la liaison de la session, aucune copie d'état */
@@ -165,6 +187,7 @@ static void install_actions(GtSession *s)
 	g_signal_connect(s->link, "notify::state", G_CALLBACK(on_link_notify_actions), s);
 	g_signal_connect(s->link, "notify::status-text", G_CALLBACK(on_link_notify_actions), s);
 	update_serial_actions(s);
+	update_detach_action(s);
 }
 
 static GtPortActivityLink activity_link_state(GtkTermLink *link)
@@ -227,7 +250,7 @@ GtSession *gt_session_new(const GtProfile *profile, const gchar *profile_name)
 	/* Suivi « modifié » (plan, décision 2) : un seul canal, le signal edited ; déconnecté à l'arrêt */
 	g_signal_connect_swapped(s->options, "changed", G_CALLBACK(gt_session_edited), s);
 	g_signal_connect_swapped(s->link, "notify::auto-reconnect", G_CALLBACK(gt_session_edited), s);
-	gt_macros_set_edited_func(s->macros, (void (*)(gpointer))gt_session_edited, s);
+	gt_macros_set_edited_func(s->macros, on_macros_edited, s);
 	install_actions(s);
 	s->activity = gt_port_activity_new();
 	apply_activity_timeouts(s);
