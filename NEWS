@@ -11,7 +11,8 @@ Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusq
 - Macros : « Configurer les macros » regroupe les macros par onglet du panneau et les entrées par liste, avec des filtres « Onglet » et « Liste » ; les boutons passent sous le tableau.
 - Macros : « Configurer les macros » montre le fichier visé (modèle, fichier .ini ou intégré au projet) et un bouton « Recharger » qui garde l'éditeur ouvert.
 - Macros : un argument peut être facultatif, avec un préfixe : vide, il n'envoie ni sa valeur ni son préfixe (par exemple ` -password=`) ; le panneau propose « (aucun) » pour une liste.
-! Un fichier de macros avec des arguments facultatifs, ouvert par une version plus ancienne, envoie l'action sans les préfixes.
+! Un fichier de macros avec des arguments facultatifs, ouvert par une version plus ancienne, envoie l'action sans les préfixes ;
+  s'il y est réenregistré, les arguments facultatifs et leurs préfixes sont perdus.
 
 ## v2.1.0 — 2026-10-15
 - Ports : un indicateur d'activité dans chaque onglet (pastille, roue, Zzz, tête de mort) et « non lu » en gras ; délais réglables par profil (Port › Options avancées).

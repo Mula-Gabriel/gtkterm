@@ -954,8 +954,8 @@ static void do_reload(MacroEditor *editor, GtMacros *macros)
 
 	stop_capture(editor);
 	set_message(editor, NULL, FALSE);
-	/* Fichier .ini disparu : gt_macros_reload le prendrait pour un jeu vide et jetterait la seule copie restante (spec §4 : rien ne change).
-	 * Un modèle disparu est déjà refusé par gt_macros_reload_template. */
+	/* Fichier .ini disparu (spec §4 : rien ne change) : gt_macros_reload le refuse aussi, mais par une boîte de message ; ici la raison reste
+	 * dans l'éditeur. Un modèle disparu est refusé par gt_macros_reload_template. */
 	if(tpl == NULL && path != NULL && !g_file_test(path, G_FILE_TEST_EXISTS))
 	{
 		gchar *text = g_strdup_printf(_("The macros file %s no longer exists."), path);

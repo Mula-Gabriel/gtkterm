@@ -58,6 +58,7 @@ gui_scenarios = [
 	'test_macros_arguments',
 	'test_macros_limites',
 	'test_macros_facultatifs',
+	'test_macros_facultatifs_defauts',
 	'test_macros_conflit',
 	'test_focus_terminal',
 	'test_raccourci_non_envoyable',

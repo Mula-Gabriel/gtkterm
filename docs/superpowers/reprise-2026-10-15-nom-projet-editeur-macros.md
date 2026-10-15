@@ -59,3 +59,15 @@ plan : `docs/superpowers/plans/2026-10-15-nom-projet-et-editeur-macros.md`. Trav
 - `join_prefix` : un préfixe finissant par `[...]` réinséré devant un spécificateur sans libellé devient un libellé (rare).
 - « (none) » d'une liste facultative envoie le défaut s'il n'est pas vide (accepté par la spec §5.5).
 - `.po` des autres langues mis à jour par msgmerge (non traduits).
+
+## Clôture (2026-10-15, poste gaby)
+
+- Point 6 fait (NEWS). Point 3 décidé : la garde de `do_reload` est **gardée** (la raison reste dans `macro-editor-error`, sans boîte de message ;
+  le cœur refuse aussi pour les autres appelants), commentaire mis à jour.
+- Re-revue du diff depuis d28832b : un seul défaut, le commentaire de `test_defaut_existant_conflit` séparé de sa fonction par le nouveau test, corrigé.
+- Contrôles du point 1 déplacés dans un scénario à part, `test_macros_facultatifs_defauts` (74 scénarios) : sur ce poste (GTK 4.24),
+  `gtk4-broadwayd` plante (`append_node_ops`) dans `test_macros_facultatifs` avant ces contrôles, même avec l'éditeur de d28832b, et dans le nouveau
+  scénario au second basculement d'Optional. Le premier basculement (« décoché : défaut vide en erreur ») passe ; le reste est à vérifier sur un poste
+  GTK 4.14.
+- `meson test -C build` 51/51 ; suite GUI : 68 OK, 5 sautés (plantage de broadwayd : `test_port_dialog`, `test_polling`, `test_macros_arguments`,
+  `test_macros_facultatifs`, `test_macros_facultatifs_defauts`), `test_script_panneau` intermittent, OK relancé seul.
