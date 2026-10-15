@@ -10,6 +10,7 @@ unit_tests = {
 	'test_macros_format' : [],
 	'test_macro_arg' : [],
 	'test_macro_set' : [],
+	'test_macro_override' : [],
 	'test_macro_preview' : [],
 	'test_macro_file' : [],
 	'test_project_file' : [],

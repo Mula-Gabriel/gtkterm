@@ -459,6 +459,89 @@ gt_macro_set_apply_edits(GtMacroSet *set, const GtMacroEdit *rows, guint n_rows,
 		check_args(set, g_ptr_array_index(set->macros, i));
 }
 
+/* Vecteurs de limites égaux : NULL ≡ vecteur entièrement vide */
+static gboolean
+limits_equal(gchar **a, gchar **b)
+{
+	guint na = a != NULL ? g_strv_length(a) : 0, nb = b != NULL ? g_strv_length(b) : 0;
+
+	if(a == NULL || b == NULL)
+		return (a == NULL || vector_all_empty(a)) && (b == NULL || vector_all_empty(b));
+	if(na != nb)
+		return FALSE;
+	for(guint k = 0; k < na; k++)
+		if(strcmp(a[k], b[k]) != 0)
+			return FALSE;
+	return TRUE;
+}
+
+static gboolean
+lists_equal(const GtMacroLists *a, const GtMacroLists *b)
+{
+	gint n = gt_macro_lists_count(a);
+
+	if(n != gt_macro_lists_count(b))
+		return FALSE;
+	for(gint li = 0; li < n; li++)
+	{
+		gint ne = gt_macro_lists_entry_count(a, li);
+
+		if(g_strcmp0(gt_macro_lists_name(a, li), gt_macro_lists_name(b, li)) != 0 || ne != gt_macro_lists_entry_count(b, li))
+			return FALSE;
+		for(gint ei = 0; ei < ne; ei++)
+			if(g_strcmp0(gt_macro_lists_entry_display(a, li, ei), gt_macro_lists_entry_display(b, li, ei)) != 0
+			   || g_strcmp0(gt_macro_lists_entry_value(a, li, ei), gt_macro_lists_entry_value(b, li, ei)) != 0)
+				return FALSE;
+	}
+	return TRUE;
+}
+
+gboolean
+gt_macro_set_same_structure(const GtMacroSet *a, const GtMacroSet *b)
+{
+	if(gt_macro_set_count(a) != gt_macro_set_count(b))
+		return FALSE;
+	for(guint i = 0; i < gt_macro_set_count(a); i++)
+	{
+		const GtMacro *ma = gt_macro_set_get(a, i), *mb = gt_macro_set_get(b, i);
+
+		if(strcmp(ma->label, mb->label) != 0 || strcmp(ma->shortcut, mb->shortcut) != 0 || strcmp(ma->action, mb->action) != 0
+		   || strcmp(ma->tab, mb->tab) != 0 || !limits_equal(ma->arg_min, mb->arg_min) || !limits_equal(ma->arg_max, mb->arg_max)
+		   || !limits_equal(ma->arg_charset, mb->arg_charset))
+			return FALSE;
+	}
+	return lists_equal(gt_macro_set_get_lists(a), gt_macro_set_get_lists(b));
+}
+
+GtMacroSet *
+gt_macro_set_clone(const GtMacroSet *set)
+{
+	GtMacroSet *clone = gt_macro_set_new();
+
+	gt_macro_lists_free(clone->lists);
+	clone->lists = gt_macro_lists_copy(set->lists);
+	for(guint i = 0; i < set->macros->len; i++)
+	{
+		const GtMacro *m = g_ptr_array_index(set->macros, i);
+		GtMacro *c = g_new0(GtMacro, 1);
+
+		/* Champs recopiés tels quels, déjà vérifiés dans l'original : pas de check_args */
+		c->id = m->id;
+		c->label = g_strdup(m->label);
+		c->shortcut = g_strdup(m->shortcut);
+		c->action = g_strdup(m->action);
+		c->tab = g_strdup(m->tab);
+		c->args = g_strdupv(m->args);
+		c->arg_min = g_strdupv(m->arg_min);
+		c->arg_max = g_strdupv(m->arg_max);
+		c->arg_charset = g_strdupv(m->arg_charset);
+		c->polling = m->polling;
+		c->polling_period_ms = m->polling_period_ms;
+		g_ptr_array_add(clone->macros, c);
+	}
+	return clone;
+}
+
 gboolean
 gt_macro_action_is_separator(const gchar *action, gchar **label_out)
 {
