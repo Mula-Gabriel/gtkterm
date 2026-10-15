@@ -344,11 +344,11 @@ gt_macros_set_usage_arg (GtMacros *m, guint id, gint arg_index, const gchar *val
   usage = g_hash_table_lookup (m->usage, GUINT_TO_POINTER (id));
   if (usage == NULL || (gint) g_strv_length (usage) != n)
     {
-      /* Vecteur créé depuis les défauts (ou ""), au bon nombre */
+      /* Vecteur créé vide, au bon nombre : un rang vide prend la valeur par défaut à la résolution (spec arguments §2.7) */
       gchar **fresh = g_new0 (gchar *, n + 1);
 
       for (gint i = 0; i < n; i++)
-        fresh[i] = g_strdup (macro->args != NULL && macro->args[i] != NULL ? macro->args[i] : "");
+        fresh[i] = g_strdup ("");
       g_hash_table_insert (m->usage, GUINT_TO_POINTER (id), fresh);
       usage = fresh;
     }
