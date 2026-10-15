@@ -322,7 +322,8 @@ test_listes_en_parametre(void)
 
 /* ---- Variantes tracées (usage du cœur) -------------------------------- */
 
-/* Plages des arguments dans le texte mis en forme, après le doublement des antislashs ; libellé retiré ; argument manquant non tracé. */
+/* Plages des arguments dans le texte mis en forme, après le doublement des antislashs ; libellé retiré ; argument manquant : plage vide (les
+ * rangs des plages restent ceux des arguments, pour les segments d'un facultatif omis qui le suit). */
 static void
 test_format_trace(void)
 {
@@ -331,7 +332,9 @@ test_format_trace(void)
 	gchar *texte = format_action_traced(listes, "[v] %d:%5s|%d", args, 2, NULL, NULL, NULL, plages);
 
 	g_assert_cmpstr(texte, ==, "5:  a\\\\b|%d");
-	g_assert_cmpuint(plages->len, ==, 2);
+	g_assert_cmpuint(plages->len, ==, 3);
+	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 2).start, ==, 9);
+	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 2).len, ==, 0);
 	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).start, ==, 0);
 	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).len, ==, 1);
 	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 1).start, ==, 2);

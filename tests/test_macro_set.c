@@ -1082,6 +1082,27 @@ static void test_facultatif_expansion(void)
 	b = gt_macro_expand(set, gt_macro_set_find(set, id), court, 1);	/* arguments manquants facultatifs : omis, jamais « %s » littéral */
 	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "connect srv;", 12);
 	g_bytes_unref(b);
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), NULL, 0);	/* aucun argument : l'obligatoire reste littéral, les facultatifs suivants sont omis */
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "connect %s;", 11);
+	g_bytes_unref(b);
+	b = gt_macro_expand_segments(set, gt_macro_set_find(set, id), NULL, 0, &segs);	/* rangs des segments omis : ceux des arguments 2 et 3 */
+	{
+		guint omis = 0;
+
+		for(guint k = 0; k < segs->len; k++)
+		{
+			const GtMacroSegment *s = &g_array_index(segs, GtMacroSegment, k);
+
+			if(s->kind == GT_MACRO_SEG_OMITTED)
+				g_assert_cmpint(s->arg, ==, (gint)++omis);
+			else
+				g_assert_cmpint(s->kind, !=, GT_MACRO_SEG_ARG);	/* « %s » littéral : du texte */
+		}
+		g_assert_cmpuint(omis, ==, 2);
+	}
+	g_array_unref(segs);
+	segs = NULL;
+	g_bytes_unref(b);
 	b = gt_macro_expand_segments(set, gt_macro_set_find(set, id), vide, 3, &segs);
 	{
 		guint omis = 0;

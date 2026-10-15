@@ -712,7 +712,11 @@ format_action_traced (const GtMacroLists *lists, const gchar *action, const gcha
                 note_range (arg_ranges, start, result->len);
               }
             else
-              g_string_append_len (result, &action[i], list_end - i + 1);
+              {
+                /* non fournie : littérale, plage vide notée pour garder les rangs des plages alignés sur ceux des arguments */
+                note_range (arg_ranges, result->len, result->len);
+                g_string_append_len (result, &action[i], list_end - i + 1);
+              }
             arg_idx++;
             i = list_end;
             g_free (list_name);
@@ -764,7 +768,10 @@ format_action_traced (const GtMacroLists *lists, const gchar *action, const gcha
         }
       else
         {
+          /* non fourni : littéral (plage vide notée, rangs des plages alignés) ; le rang avance pour qu'un facultatif suivant soit omis (§7 bis) */
+          note_range (arg_ranges, result->len, result->len);
           g_string_append_len (result, &action[i], spec_end - i + 1);
+          arg_idx++;
         }
       g_free (fmt_type);
       i = spec_end;
