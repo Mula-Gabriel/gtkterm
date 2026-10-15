@@ -650,19 +650,42 @@ clamp_ranges (GArray *arg_ranges, gsize text_len)
 
 /* Argument facultatif (spec 2026-10-15-nom-projet §5.2) : vide ou non fourni, rien n'est rendu (plage vide notée) ; sinon le préfixe, brut,
    précède la valeur (ses échappements seront traités par parse_macro_string). TRUE si l'argument est omis. */
+/* Valeur de arg_optional du rang arg_idx, NULL hors du vecteur (garde-fou : un vecteur plus court que le nombre d'arguments, normalement
+   exact, n'est jamais lu au-delà de sa fin) */
+static const gchar *
+optional_at (const gchar *const *optional, gint arg_idx)
+{
+  if (!optional || arg_idx >= (gint) g_strv_length ((gchar **) optional))
+    return NULL;
+  return optional[arg_idx];
+}
+
+/* Drapeau (spec 2026-10-15-ouverture-silencieuse §3.1) : présent, seul le préfixe est rendu */
+static gboolean
+is_flag (const gchar *const *optional, gint arg_idx)
+{
+  return g_strcmp0 (optional_at (optional, arg_idx), GT_MACRO_ARG_FLAG) == 0;
+}
+
 static gboolean
 optional_omitted (const gchar *const *optional, gint arg_idx, const gchar **args, gint n_args)
 {
-  /* Garde-fou : un vecteur plus court que le nombre d'arguments (normalement exact) n'est jamais lu au-delà de sa fin */
-  if (!optional || arg_idx >= (gint) g_strv_length ((gchar **) optional) || g_strcmp0 (optional[arg_idx], "1") != 0)
+  const gchar *opt = optional_at (optional, arg_idx);
+  const gchar *value = arg_idx < n_args ? args[arg_idx] : NULL;
+
+  if (g_strcmp0 (opt, GT_MACRO_ARG_FLAG) == 0)
+    return !value || !value[0] || strcmp (value, "0") == 0;
+  if (g_strcmp0 (opt, "1") != 0)
     return FALSE;
-  return arg_idx >= n_args || !args[arg_idx] || !args[arg_idx][0];
+  return !value || !value[0];
 }
 
 static void
 append_prefix (GString *result, const gchar *const *optional, const gchar *const *prefixes, gint arg_idx)
 {
-  if (optional && arg_idx < (gint) g_strv_length ((gchar **) optional) && g_strcmp0 (optional[arg_idx], "1") == 0
+  const gchar *opt = optional_at (optional, arg_idx);
+
+  if ((g_strcmp0 (opt, "1") == 0 || g_strcmp0 (opt, GT_MACRO_ARG_FLAG) == 0)
       && prefixes && arg_idx < (gint) g_strv_length ((gchar **) prefixes))
     g_string_append (result, prefixes[arg_idx]);
 }
@@ -704,7 +727,13 @@ format_action_traced (const GtMacroLists *lists, const gchar *action, const gcha
                 g_free (list_name);
                 continue;
               }
-            if (arg_idx < n_args)
+            if (arg_idx < n_args && is_flag (optional, arg_idx))
+              {
+                gsize start = result->len;
+                append_prefix (result, optional, prefixes, arg_idx);
+                note_range (arg_ranges, start, result->len);
+              }
+            else if (arg_idx < n_args)
               {
                 gsize start = result->len;
                 append_prefix (result, optional, prefixes, arg_idx);
@@ -741,7 +770,15 @@ format_action_traced (const GtMacroLists *lists, const gchar *action, const gcha
           continue;
         }
 
-      if (arg_idx < n_args)
+      if (arg_idx < n_args && is_flag (optional, arg_idx))
+        {
+          /* drapeau coché : le préfixe seul, la valeur n'est jamais envoyée */
+          gsize start = result->len;
+          append_prefix (result, optional, prefixes, arg_idx);
+          note_range (arg_ranges, start, result->len);
+          arg_idx++;
+        }
+      else if (arg_idx < n_args)
         {
           gsize start = result->len;
           append_prefix (result, optional, prefixes, arg_idx);

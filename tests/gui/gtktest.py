@@ -651,6 +651,15 @@ def macros_v2_text(*libelles):
     return '\n'.join(out) + '\n'
 
 
+def load_macros_free(env, path):
+    """« Load macros file… » d'un onglet libre : sélecteur, puis réponse « Open directly » à « Open this macros file » (spec
+    2026-10-15-ouverture-silencieuse §4 : l'autre choix crée un projet lié au fichier comme modèle)."""
+    file_dialog(env, 'Load macros file', path)
+    if not wait_until(lambda: any(a.startswith('Open this macros file') for a in env.alerts()), 5):
+        raise AssertionError('question « Open this macros file » absente : %r' % env.alerts())
+    env.close_alert('Open directly')
+
+
 def file_dialog(env, title, path, timeout=8):
     """Choisit path (chemin absolu) dans le sélecteur de fichiers GTK 4 interne intitulé title, au clavier comme un utilisateur.
     Comportement mesuré (GTK 4.14.5, GtkFileDialog sans portail = GtkFileChooserDialog, sous gtk4-broadwayd) :

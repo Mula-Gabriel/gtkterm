@@ -20,6 +20,7 @@ struct _GtSession
 	gchar *short_name;
 	gboolean file_sending;
 	gboolean shut_down;
+	gboolean open_quiet;	/* dernière ouverture automatique (gt_session_open_port_quiet) : open-failed sans boîte */
 	gboolean in_project;
 	gchar *script_text;	/* jamais NULL */
 };
@@ -219,6 +220,14 @@ static void on_link_received(GtkTermLink *link, GBytes *data, gint64 wall_time_u
 	gt_port_activity_received(s->activity, g_get_monotonic_time());
 }
 
+/* open-failed de la liaison (spec 2026-10-15-ouverture-silencieuse §1.2) : tout échec d'ouverture donne la tête de mort */
+static void on_link_open_failed(GtkTermLink *link, const gchar *message, gpointer user_data)
+{
+	GtSession *s = user_data;
+
+	gt_port_activity_open_failed(s->activity, g_get_monotonic_time());
+}
+
 static void apply_activity_timeouts(GtSession *s)
 {
 	gt_port_activity_set_timeouts(s->activity, (guint)MAX(s->profile.idle_timeout_s, 0), (guint)MAX(s->profile.no_data_timeout_s, 0),
@@ -256,6 +265,7 @@ GtSession *gt_session_new(const GtProfile *profile, const gchar *profile_name)
 	apply_activity_timeouts(s);
 	g_signal_connect(s->link, "notify::state", G_CALLBACK(on_link_state_activity), s);
 	g_signal_connect(s->link, "received", G_CALLBACK(on_link_received), s);
+	g_signal_connect(s->link, "open-failed", G_CALLBACK(on_link_open_failed), s);	/* avant le gestionnaire de l'interface (app.c) */
 	return s;
 }
 
@@ -335,12 +345,13 @@ void gt_session_apply_profile(GtSession *s)
 	gt_session_edited(s);
 }
 
-void gt_session_open_port(GtSession *s)
+static void open_port(GtSession *s, gboolean quiet)
 {
 	TransportParams params;
 
 	if(s->shut_down)
 		return;
+	s->open_quiet = quiet;
 	update_short_name(s);
 	apply_activity_timeouts(s);
 	gt_port_activity_reset(s->activity, g_get_monotonic_time());
@@ -348,6 +359,21 @@ void gt_session_open_port(GtSession *s)
 	gt_link_open(s->link, &params, NULL);	/* échec : open-failed de la liaison (l'interface affiche le message) */
 	transport_params_clear(&params);
 	gt_session_edited(s);
+}
+
+void gt_session_open_port(GtSession *s)
+{
+	open_port(s, FALSE);
+}
+
+void gt_session_open_port_quiet(GtSession *s)
+{
+	open_port(s, TRUE);
+}
+
+gboolean gt_session_get_open_quiet(GtSession *s)
+{
+	return s->open_quiet;
 }
 
 gboolean gt_session_get_in_project(GtSession *s)
@@ -392,6 +418,7 @@ void gt_session_edited(GtSession *s)
 void gt_session_close_port(GtSession *s)
 {
 	gt_link_close(s->link);
+	gt_port_activity_reset(s->activity, g_get_monotonic_time());	/* fermé à la main : plus de tête de mort d'un échec */
 }
 
 void gt_session_shutdown(GtSession *s)

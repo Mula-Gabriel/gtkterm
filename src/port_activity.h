@@ -20,7 +20,7 @@ typedef enum
 	GT_PORT_ACTIVITY_IDLE,	/* a reçu, puis plus rien depuis le délai de repos */
 	GT_PORT_ACTIVITY_LOST,
 	GT_PORT_ACTIVITY_RECONNECTING,
-	GT_PORT_ACTIVITY_DEAD	/* ouvert sans un octet, ou perdu, depuis le délai sans données */
+	GT_PORT_ACTIVITY_DEAD	/* ouvert sans un octet, ou perdu, depuis le délai sans données ; ou ouverture échouée */
 } GtPortActivityState;
 
 /* État de la liaison vu par le modèle (converti depuis GtLinkState par la session : le cœur n'inclut pas link.h) */
@@ -46,7 +46,9 @@ G_DECLARE_FINAL_TYPE(GtPortActivity, gt_port_activity, GT, PORT_ACTIVITY, GObjec
 GtPortActivity     *gt_port_activity_new(void);
 void                gt_port_activity_set_link_state(GtPortActivity *a, GtPortActivityLink st, gint64 now_us);
 void                gt_port_activity_received(GtPortActivity *a, gint64 now_us);	/* ignoré hors GT_PORT_LINK_OPEN */
-void                gt_port_activity_reset(GtPortActivity *a, gint64 now_us);	/* réouverture d'un port déjà ouvert : repart de zéro */
+/* Ouverture échouée : dead tout de suite tant que la liaison est fermée ou perdue ; effacé par reset et par l'entrée en OPEN ou LISTENING */
+void                gt_port_activity_open_failed(GtPortActivity *a, gint64 now_us);
+void                gt_port_activity_reset(GtPortActivity *a, gint64 now_us);	/* ouverture ou fermeture demandée : repart de zéro (échec oublié) */
 /* 0 désactive l'état (idle ou dead) ; valeurs bornées à GT_PORT_ACTIVITY_TIMEOUT_MAX ; état réévalué à now_us */
 void                gt_port_activity_set_timeouts(GtPortActivity *a, guint idle_s, guint no_data_s, gint64 now_us);
 void                gt_port_activity_set_viewed(GtPortActivity *a, gboolean viewed);

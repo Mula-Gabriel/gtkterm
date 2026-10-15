@@ -135,6 +135,8 @@ static void dump_widget(GtkWidget *w, GtkNative *nat, gint nat_idx, gint *n_nati
 
 		g_variant_builder_add(&d, "{sv}", "title", g_variant_new_string(title != NULL ? title : ""));
 		add_bool(&d, "modal", gtk_window_get_modal(GTK_WINDOW(w)));
+		add_bool(&d, "transient", gtk_window_get_transient_for(GTK_WINDOW(w)) != NULL);
+		add_bool(&d, "fullscreen", gtk_window_is_fullscreen(GTK_WINDOW(w)));
 	}
 	if(GTK_IS_ENTRY(w))
 	{

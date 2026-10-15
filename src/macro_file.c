@@ -213,7 +213,7 @@ gt_macro_set_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar *origi
 					gboolean bad = v[i] != NULL && g_strv_length(v[i]) != (guint)n;
 
 					for(guint k = 0; i == 0 && v[i] != NULL && v[i][k] != NULL; k++)
-						bad |= v[i][k][0] != '\0' && strcmp(v[i][k], "1") != 0;
+						bad |= v[i][k][0] != '\0' && strcmp(v[i][k], "1") != 0 && strcmp(v[i][k], GT_MACRO_ARG_FLAG) != 0;
 					if(bad)
 					{
 						gchar *msg = g_strdup_printf(_("%s: [%s] %s: invalid value adjusted"), origin, groups[g], keys[i]);

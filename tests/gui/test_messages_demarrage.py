@@ -1,6 +1,7 @@
 # Review Focus 1 : un message émis avant la fenêtre (profil avec bits=9, corrigé par Verify_configuration pendant la lecture de la ligne
 # de commande) s'affiche une fois la fenêtre principale présentée, une seule fois ; jamais perdu. Le port s'ouvre avec la valeur corrigée.
-# Échec d'ouverture du port au démarrage (signal open-failed) : une boîte non bloquante, l'application reste utilisable.
+# Échec d'ouverture du port au démarrage (signal open-failed) : ouverture automatique, aucune boîte (spec 2026-10-15-ouverture-silencieuse §1) ;
+# la raison passe dans la barre d'état, l'onglet en tête de mort, l'application reste utilisable.
 from gtktest import *
 
 e = Env('messages_demarrage')
@@ -28,12 +29,11 @@ e = Env('messages_port_absent')
 absent = os.path.join(e.root, 'absent')
 e.write_config(e.general() + e.profile())
 e.start('--port', absent, port=False, connect_browser=False)
-q = wait_until(lambda: e.alerts(), 5)
-check(bool(q) and ('Cannot open ' + absent) in q[0], 'open-failed : boite « Cannot open <port> »', q)
+check(wait_until(lambda: e.sessions() and e.sessions()[0]['activity'] == 'dead', 5), 'open-failed : tete de mort', e.sessions())
+flash = e.find1(name='status-flash', mapped=None)
+check(('Cannot open ' + absent) in (flash.get('label') or ''), 'open-failed : « Cannot open <port> » dans la barre d etat', flash.get('label'))
 check(e.title() == 'GTKTerm - No open port', 'titre : aucun port ouvert', e.title())
-e.close_alert('OK')
-check(wait_until(lambda: e.alerts() == [], 3), 'boite fermee')
 time.sleep(1.0)
-check(e.alerts() == [], 'open-failed : une seule boite, rien ensuite', e.alerts())
+check(e.alerts() == [], 'open-failed au demarrage : aucune boite', e.alerts())
 e.finish()
 sys.exit(conclude())

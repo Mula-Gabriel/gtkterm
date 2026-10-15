@@ -11,6 +11,10 @@ Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusq
 - Macros : « Configurer les macros » regroupe les macros par onglet du panneau et les entrées par liste, avec des filtres « Onglet » et « Liste » ; les boutons passent sous le tableau.
 - Macros : « Configurer les macros » montre le fichier visé (modèle, fichier .ini ou intégré au projet) et un bouton « Recharger » qui garde l'éditeur ouvert.
 - Macros : un argument peut être facultatif, avec un préfixe : vide, il n'envoie ni sa valeur ni son préfixe (par exemple ` -password=`) ; le panneau propose « (aucun) » pour une liste.
+- Ports : un port qu'on n'arrive pas à ouvrir au démarrage ou à l'ouverture d'un projet passe en tête de mort, sans boîte de message (la raison s'affiche dans la barre d'état).
+- Macros : « Configurer les macros » peut être agrandie ou passée en plein écran (F11).
+- Macros : un argument facultatif peut être un drapeau (colonne « Drapeau ») : une case à cocher dans le panneau, cochée elle n'envoie que le préfixe (par exemple ` -save`).
+- Macros : « Charger un fichier de macros… » hors projet propose de créer un projet qui utilise le fichier comme modèle, ou de l'ouvrir directement.
 ! Un fichier de macros avec des arguments facultatifs, ouvert par une version plus ancienne, envoie l'action sans les préfixes ;
   s'il y est réenregistré, les arguments facultatifs et leurs préfixes sont perdus.
 

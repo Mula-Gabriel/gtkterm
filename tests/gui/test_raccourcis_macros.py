@@ -27,7 +27,7 @@ check(wait_until(lambda: any('Macro "M1" sent!' in (w.get('label') or '') for w 
       'barre d\'etat : Macro "M1" sent!')
 for i in (1, 2):
     e.action('load-macros')
-    file_dialog(e, 'Load macros file', ma)
+    load_macros_free(e, ma)
     check(wait_until(lambda: macro_buttons(e).get('M1') not in (None, ancien)), 'rechargement %d : jeu remplace, panneau reconstruit' % i)
     ancien = macro_buttons(e).get('M1', ancien)
 touches('apres deux rechargements')

@@ -11,6 +11,7 @@ struct _GtPortActivity
 	gint64 opened_us;	/* entrée en OPEN (ou reset) */
 	gint64 lost_us;	/* entrée dans {LOST, RECONNECTING} depuis un autre état */
 	gint64 last_rx_us;	/* -1 : rien reçu depuis l'entrée en OPEN (heures monotones, toujours positives) */
+	gboolean failed;	/* ouverture échouée : dead tant que fermé ou perdu ; effacé par reset, OPEN ou LISTENING */
 	guint idle_s;
 	guint no_data_s;
 	gboolean viewed;
@@ -73,6 +74,8 @@ static GtPortActivityState compute(GtPortActivity *a, gint64 now)
 		return GT_PORT_ACTIVITY_CONNECTING;
 	case GT_PORT_LINK_LOST:
 	case GT_PORT_LINK_RECONNECTING:
+		if(a->failed)
+			return GT_PORT_ACTIVITY_DEAD;
 		if(no_data > 0 && now - a->lost_us >= no_data)
 			return GT_PORT_ACTIVITY_DEAD;
 		return a->link == GT_PORT_LINK_LOST ? GT_PORT_ACTIVITY_LOST : GT_PORT_ACTIVITY_RECONNECTING;
@@ -85,7 +88,7 @@ static GtPortActivityState compute(GtPortActivity *a, gint64 now)
 			return GT_PORT_ACTIVITY_IDLE;
 		return GT_PORT_ACTIVITY_ACTIVE;
 	default:
-		return GT_PORT_ACTIVITY_CLOSED;
+		return a->failed ? GT_PORT_ACTIVITY_DEAD : GT_PORT_ACTIVITY_CLOSED;
 	}
 }
 
@@ -105,7 +108,7 @@ static gint64 next_deadline(GtPortActivity *a, gint64 now)
 		if(idle > 0)
 			c[1] = a->last_rx_us + idle;
 	}
-	else if(is_lost(a->link) && no_data > 0)
+	else if(is_lost(a->link) && no_data > 0 && !a->failed)
 		c[0] = a->lost_us + no_data;
 	for(guint i = 0; i < G_N_ELEMENTS(c); i++)
 		if(c[i] > now && (due < 0 || c[i] < due))
@@ -181,6 +184,8 @@ void gt_port_activity_set_link_state(GtPortActivity *a, GtPortActivityLink st, g
 	}
 	if(is_lost(st) && !is_lost(a->link))
 		a->lost_us = now_us;
+	if(st == GT_PORT_LINK_OPEN || st == GT_PORT_LINK_LISTENING)
+		a->failed = FALSE;	/* (re)connexion réussie */
 	a->link = st;
 	update(a, now_us);
 }
@@ -195,8 +200,15 @@ void gt_port_activity_received(GtPortActivity *a, gint64 now_us)
 	update(a, now_us);
 }
 
+void gt_port_activity_open_failed(GtPortActivity *a, gint64 now_us)
+{
+	a->failed = TRUE;
+	update(a, now_us);
+}
+
 void gt_port_activity_reset(GtPortActivity *a, gint64 now_us)
 {
+	a->failed = FALSE;
 	if(a->link == GT_PORT_LINK_OPEN)
 	{
 		a->opened_us = now_us;

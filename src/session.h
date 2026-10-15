@@ -45,6 +45,10 @@ void            gt_session_edited(GtSession *s);	/* émet « edited » (rien apr
 /* Options ← profil (un seul « changed »), auto-reconnect de la liaison, nom court recalculé ; ne rouvre pas le port, n'appelle aucun crochet */
 void            gt_session_apply_profile(GtSession *s);
 void            gt_session_open_port(GtSession *s);	/* port du profil (nom court recalculé) ; échec : signal open-failed de la liaison */
+/* Ouverture automatique (démarrage, projet, SIGUSR1) : comme gt_session_open_port, mais gt_session_get_open_quiet() rend TRUE jusqu'à la
+ * prochaine ouverture : l'interface signale un échec sans boîte. Tout échec d'ouverture met l'activité du port à dead. */
+void            gt_session_open_port_quiet(GtSession *s);
+gboolean        gt_session_get_open_quiet(GtSession *s);
 void            gt_session_close_port(GtSession *s);
 /* Arrêt ordonné (plan, décision 3, étape b) : moteur Lua, macros, actions désactivées, liaison fermée, puis signal « closed ». Idempotent ; la session
  * reste un objet valide mais inerte (ouvrir un port, envoyer une macro ou lancer un script ne fait plus rien). */

@@ -7,9 +7,12 @@
 
 #include "macro_arg.h"
 #include "macro_arg_widget.h"
+#include "macro_set.h"
 
 /* Données de l'objet : "arg-type", "arg-list" (nom de la liste), "values" (liste), "arg-min", "arg-max", "arg-charset", "arg-default",
  * "arg-described" (set_limits appelé), "empty-is-default", "arg-optional", "arg-prefix" */
+
+static void set_string(GtkWidget *w, const gchar *key, const gchar *value);
 
 GtkWidget *gt_macro_arg_widget_new(const GtMacroLists *lists, const macro_arg_info_t *info, const gchar *initial, const gchar *placeholder)
 {
@@ -71,8 +74,25 @@ GtkWidget *gt_macro_arg_widget_new_full(const GtMacroLists *lists, const macro_a
 	return w;
 }
 
+GtkWidget *gt_macro_arg_widget_new_flag(const gchar *prefix, const gchar *initial)
+{
+	gchar *label = g_strstrip(g_strdup(prefix != NULL ? prefix : ""));
+	GtkWidget *w = gtk_check_button_new_with_label(label[0] != '\0' ? label : _("(flag)"));
+
+	gtk_check_button_set_active(GTK_CHECK_BUTTON(w), gt_macro_flag_value_set(initial));
+	g_object_set_data_full(G_OBJECT(w), "arg-type", g_strdup("s"), g_free);
+	g_object_set_data(G_OBJECT(w), "arg-flag", GINT_TO_POINTER(1));
+	set_string(w, "arg-prefix", prefix);
+	g_free(label);
+	gt_macro_arg_widget_validate(w);
+	return w;
+}
+
 gchar *gt_macro_arg_widget_get_value(GtkWidget *w)
 {
+	if(GTK_IS_CHECK_BUTTON(w))	/* drapeau : "0" décoché en mode « vide = défaut », pour l'emporter sur un défaut coché */
+		return g_strdup(gtk_check_button_get_active(GTK_CHECK_BUTTON(w)) ? "1"
+		                : g_object_get_data(G_OBJECT(w), "empty-is-default") != NULL ? "0" : "");
 	if(GTK_IS_DROP_DOWN(w))
 	{
 		gchar **values = g_object_get_data(G_OBJECT(w), "values");
@@ -144,7 +164,14 @@ void gt_macro_arg_widget_validate(GtkWidget *w)
 		else
 			gtk_widget_add_css_class(w, "error");
 	}
-	if(g_object_get_data(o, "arg-described") != NULL)
+	if(g_object_get_data(o, "arg-flag") != NULL)
+	{
+		gchar *text = g_strdup_printf(_("Checked: sends \"%s\"; unchecked: sends nothing"), (const gchar *)g_object_get_data(o, "arg-prefix"));
+
+		gtk_widget_set_tooltip_text(w, text);
+		g_free(text);
+	}
+	else if(g_object_get_data(o, "arg-described") != NULL)
 	{
 		gchar *text = gt_macro_arg_describe(g_object_get_data(o, "arg-type"), g_object_get_data(o, "arg-list"), g_object_get_data(o, "arg-min"),
 		                                    g_object_get_data(o, "arg-max"), g_object_get_data(o, "arg-charset"),

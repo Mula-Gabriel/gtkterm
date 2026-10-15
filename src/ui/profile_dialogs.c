@@ -426,6 +426,34 @@ static void on_macros_use_answer(gint choice, gpointer user_data)
 	g_free(mu);
 }
 
+/* Onglet libre (spec 2026-10-15-ouverture-silencieuse §4) : créer un projet qui lie le fichier comme modèle, ou l'ouvrir directement */
+enum { MACROS_FREE_PROJECT, MACROS_FREE_OPEN, MACROS_FREE_CANCEL };
+
+static void on_macros_free_answer(gint choice, gpointer user_data)
+{
+	MacrosUse *mu = user_data;
+	GtSession *s = weak_session(&mu->session);
+	GtProject *project = gt_app_get_project();
+
+	/* Rien si la session est fermée, est passée en projet ou si son jeu a changé depuis la question */
+	if(s != NULL && !gt_session_get_in_project(s) && gt_macros_get_generation(gt_session_get_macros(s)) == mu->generation)
+	{
+		if(choice == MACROS_FREE_OPEN && gt_macros_load_file(gt_session_get_macros(s), mu->path, TRUE))
+			config_remember_macros_file(s);
+		else if(choice == MACROS_FREE_PROJECT && project != NULL && !gt_project_is_open(project))
+		{
+			/* Les onglets libres deviennent un projet sans fichier (« Untitled project », comme Save as), puis l'onglet lie le modèle ;
+			 * un modèle illisible ouvre une boîte et l'onglet garde ses macros, désormais intégrées au projet */
+			gt_project_begin(project, NULL, NULL, NULL);
+			gt_macros_link_template(gt_session_get_macros(s), mu->path);
+		}
+	}
+	g_clear_object(&s);
+	g_weak_ref_clear(&mu->session);
+	g_free(mu->path);
+	g_free(mu);
+}
+
 static void on_macros_load_chosen(GFile *file, gpointer user_data)
 {
 	GtSession *s = session_weak_take(user_data);
@@ -449,9 +477,18 @@ static void on_macros_load_chosen(GFile *file, gpointer user_data)
 		gt_ui_choose(gt_app_get_main_window(), _("Use this macros file in the project"), mu->path, labels, MACROS_USE_COPY, -1,
 			     on_macros_use_answer, mu);
 	}
-	/* Onglet libre, interactif : un fichier illisible ouvre une boîte ; le jeu et le chemin restent ceux d'avant */
-	else if(path != NULL && gt_macros_load_file(gt_session_get_macros(s), path, TRUE))
-		config_remember_macros_file(s);
+	else if(path != NULL)
+	{
+		/* Onglet libre : proposer d'en faire un projet lié au fichier comme modèle (choix par défaut), ou de l'ouvrir directement
+		 * (interactif : un fichier illisible ouvre une boîte ; le jeu et le chemin restent ceux d'avant) */
+		const gchar *const labels[] = { _("Create a project with this template"), _("Open directly"), _("Cancel"), NULL };	/* ordre de l'enum */
+		MacrosUse *mu = g_new0(MacrosUse, 1);
+
+		g_weak_ref_init(&mu->session, s);
+		mu->generation = gt_macros_get_generation(gt_session_get_macros(s));
+		mu->path = g_steal_pointer(&path);
+		gt_ui_choose(gt_app_get_main_window(), _("Open this macros file"), mu->path, labels, MACROS_FREE_PROJECT, -1, on_macros_free_answer, mu);
+	}
 	g_free(path);
 	g_object_unref(s);
 }

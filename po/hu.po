@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 0.99.4\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 22:45+0200\n"
+"POT-Creation-Date: 2026-10-15 23:28+0200\n"
 "PO-Revision-Date: 2005-03-09 21:17+0100\n"
 "Last-Translator: Bus Jozsef <busj@mailbox.hu>\n"
 "Language-Team: hu <hu@li.org>\n"
@@ -441,12 +441,12 @@ msgid ""
 "save again."
 msgstr ""
 
-#: src/macro_override.c:361
+#: src/macro_override.c:363
 #, c-format
 msgid "%s: [%s] %s: invalid value ignored"
 msgstr ""
 
-#: src/macro_override.c:498
+#: src/macro_override.c:500
 #, c-format
 msgid "%s: [%s] duplicates [%s]: the earlier group is ignored"
 msgstr ""
@@ -492,7 +492,7 @@ msgstr ""
 msgid "Cannot save macros file: %s"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/macros.c:645 src/ui/macro_editor.c:961
+#: src/macros.c:645 src/ui/macro_editor.c:976
 #, c-format
 msgid "The macros file %s no longer exists."
 msgstr ""
@@ -723,7 +723,7 @@ msgstr ""
 msgid "Script already running."
 msgstr ""
 
-#: src/session.c:116
+#: src/session.c:117
 #, fuzzy
 msgid "Break signal sent!"
 msgstr "Break signál küldve!"
@@ -854,124 +854,125 @@ msgstr ""
 msgid "Port closed"
 msgstr ""
 
-#: src/ui/app.c:545
+#: src/ui/app.c:550
 msgid "Close this tab?"
 msgstr ""
 
-#: src/ui/app.c:545
+#: src/ui/app.c:550
 msgid "A script is running or a file is being sent in this tab."
 msgstr ""
 
-#: src/ui/app.c:545 src/ui/menus.ui:156 src/ui/tab_label.c:74
+#: src/ui/app.c:550 src/ui/menus.ui:156 src/ui/tab_label.c:74
 #: src/ui/tab_label.c:75
 #, fuzzy
 msgid "Close tab"
 msgstr "Nincs nyitott port"
 
-#: src/ui/app.c:581
+#: src/ui/app.c:586
 #, c-format
 msgid ""
 "Cannot read the macros template %s: %s. The copy saved in the project is "
 "used."
 msgstr ""
 
-#: src/ui/app.c:584
+#: src/ui/app.c:589
 #, c-format
 msgid "Macros template %s updated: %u project value no longer applies"
 msgid_plural "Macros template %s updated: %u project values no longer apply"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/app.c:587
+#: src/ui/app.c:592
 #, c-format
 msgid "Macros template %s updated"
 msgstr ""
 
-#: src/ui/app.c:842 src/ui/app.c:1021
+#: src/ui/app.c:847 src/ui/app.c:1026
 #, fuzzy
 msgid "Close all tabs?"
 msgstr "Nincs nyitott port"
 
-#: src/ui/app.c:842 src/ui/app.c:1021
+#: src/ui/app.c:847 src/ui/app.c:1026
 msgid "A script is running or a file is being sent."
 msgstr ""
 
-#: src/ui/app.c:842 src/ui/app.c:1021
+#: src/ui/app.c:847 src/ui/app.c:1026
 #, fuzzy
 msgid "Close tabs"
 msgstr "Nincs nyitott port"
 
-#: src/ui/app.c:902
+#: src/ui/app.c:907
 msgid "A project file with this name already exists. Replace it?"
 msgstr ""
 
-#: src/ui/app.c:902
+#: src/ui/app.c:907
 msgid "Replace"
 msgstr ""
 
-#: src/ui/app.c:937 src/ui/menus.ui:19
+#: src/ui/app.c:942 src/ui/menus.ui:19
 msgid "Save project"
 msgstr ""
 
-#: src/ui/app.c:945 src/ui/macro_editor.c:851 src/ui/macros_save.c:55
+#: src/ui/app.c:950 src/ui/macro_editor.c:863 src/ui/macros_save.c:55
 #: src/ui/profile_dialogs.c:209
 msgid "Overwrite"
 msgstr ""
 
-#: src/ui/app.c:945 src/ui/macro_editor.c:851 src/ui/macro_editor.c:1021
-#: src/ui/macro_editor.c:1168 src/ui/macro_editor.c:1179
+#: src/ui/app.c:950 src/ui/macro_editor.c:863 src/ui/macro_editor.c:1036
+#: src/ui/macro_editor.c:1184 src/ui/macro_editor.c:1195
 #: src/ui/macros_save.c:55
 msgid "Reload"
 msgstr ""
 
-#: src/ui/app.c:945 src/ui/app.c:976 src/ui/macro_editor.c:851
-#: src/ui/macro_editor.c:863 src/ui/macro_editor.c:871
-#: src/ui/macro_editor.c:1021 src/ui/macro_editor.c:2135
-#: src/ui/macros_save.c:55 src/ui/profile_dialogs.c:443
+#: src/ui/app.c:950 src/ui/app.c:981 src/ui/macro_editor.c:863
+#: src/ui/macro_editor.c:875 src/ui/macro_editor.c:883
+#: src/ui/macro_editor.c:1036 src/ui/macro_editor.c:2205
+#: src/ui/macros_save.c:55 src/ui/profile_dialogs.c:471
+#: src/ui/profile_dialogs.c:484
 msgid "Cancel"
 msgstr "Mégsem"
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
-#: src/ui/app.c:948
+#: src/ui/app.c:953
 msgid "The project file changed on disk."
 msgstr ""
 
-#: src/ui/app.c:976 src/ui/script_panel.c:951
+#: src/ui/app.c:981 src/ui/script_panel.c:951
 msgid "Save"
 msgstr ""
 
-#: src/ui/app.c:976
+#: src/ui/app.c:981
 msgid "Don't save"
 msgstr ""
 
-#: src/ui/app.c:979
+#: src/ui/app.c:984
 msgid "Save changes to the project?"
 msgstr ""
 
-#: src/ui/app.c:1199
+#: src/ui/app.c:1204
 #, c-format
 msgid ""
 "Cannot open the project: %s\n"
 "It is no longer reopened at start-up."
 msgstr ""
 
-#: src/ui/app.c:1202
+#: src/ui/app.c:1207
 #, fuzzy, c-format
 msgid "Cannot open the project: %s"
 msgstr "%s fájl megnyitása nem sikerült: %s\n"
 
-#: src/ui/app.c:1309
+#: src/ui/app.c:1314
 #, fuzzy
 msgid "GTKTerm projects"
 msgstr ""
 "\n"
 "GTKTerm verzió %s\n"
 
-#: src/ui/app.c:1314 src/ui/script_panel.c:464
+#: src/ui/app.c:1319 src/ui/script_panel.c:464
 msgid "All files"
 msgstr ""
 
-#: src/ui/app.c:1318
+#: src/ui/app.c:1323
 #, fuzzy
 msgid "Open project"
 msgstr "Nincs nyitott port"
@@ -1052,15 +1053,24 @@ msgstr ""
 msgid "%d byte(s) sent!"
 msgstr "\"%s\": %d bájt(ok) küldve!"
 
-#: src/ui/macro_arg_widget.c:36
+#: src/ui/macro_arg_widget.c:39
 msgid "(none)"
 msgstr ""
 
-#: src/ui/macro_arg_widget.c:62
+#: src/ui/macro_arg_widget.c:65
 msgid "(omitted)"
 msgstr ""
 
-#: src/ui/macro_editor.c:95
+#: src/ui/macro_arg_widget.c:80
+msgid "(flag)"
+msgstr ""
+
+#: src/ui/macro_arg_widget.c:169
+#, c-format
+msgid "Checked: sends \"%s\"; unchecked: sends nothing"
+msgstr ""
+
+#: src/ui/macro_editor.c:96
 msgid ""
 "Action: the data sent on the port. Plain text, plus the escapes \\r "
 "(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
@@ -1094,330 +1104,338 @@ msgid ""
 "same; \"SPEED %d\\r\" asks for a number."
 msgstr ""
 
-#: src/ui/macro_editor.c:277
+#: src/ui/macro_editor.c:278
 msgid "All"
 msgstr ""
 
-#: src/ui/macro_editor.c:289 src/ui/macro_panel.c:81
+#: src/ui/macro_editor.c:290 src/ui/macro_panel.c:81
 msgid "General"
 msgstr ""
 
-#: src/ui/macro_editor.c:445 src/ui/macro_panel.c:310 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:446 src/ui/macro_panel.c:327 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr ""
 
-#: src/ui/macro_editor.c:651
+#: src/ui/macro_editor.c:652
 msgid "Select a macro first."
 msgstr ""
 
-#: src/ui/macro_editor.c:657
+#: src/ui/macro_editor.c:658
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr ""
 
-#: src/ui/macro_editor.c:681
+#: src/ui/macro_editor.c:682
 msgid "(no label)"
 msgstr ""
 
-#: src/ui/macro_editor.c:687
+#: src/ui/macro_editor.c:688
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
 "Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:689
+#: src/ui/macro_editor.c:690
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
 "cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:713
+#: src/ui/macro_editor.c:725
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
 msgstr ""
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail d'un autre
-#: src/ui/macro_editor.c:854
+#: src/ui/macro_editor.c:866
 msgid "The macros template changed on disk."
 msgstr ""
 
-#: src/ui/macro_editor.c:859
+#: src/ui/macro_editor.c:871
 #, c-format
 msgid "These macros come from the template %s"
 msgstr ""
 
-#: src/ui/macro_editor.c:863
+#: src/ui/macro_editor.c:875
 #, fuzzy
 msgid "Keep in this project"
 msgstr "Nincs nyitott port"
 
-#: src/ui/macro_editor.c:863 src/ui/macro_editor.c:871
+#: src/ui/macro_editor.c:875 src/ui/macro_editor.c:883
 msgid "Save to template"
 msgstr ""
 
-#: src/ui/macro_editor.c:866
+#: src/ui/macro_editor.c:878
 msgid ""
 "Keep the new default values in this project only, or save them to the "
 "template, for every project that uses it?"
 msgstr ""
 
-#: src/ui/macro_editor.c:871
+#: src/ui/macro_editor.c:883
 msgid "Detach and keep a copy"
 msgstr ""
 
-#: src/ui/macro_editor.c:874
+#: src/ui/macro_editor.c:886
 msgid ""
 "These changes can only be saved to the template (every project that uses "
 "it), or the tab can be detached from the template and keep its own copy."
 msgstr ""
 
-#: src/ui/macro_editor.c:975
+#: src/ui/macro_editor.c:990
 #, fuzzy, c-format
 msgid "Cannot reload the macros file %s."
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
 #. Cancel par défaut, Reload destructeur : Entrée ne jette jamais les modifications
-#: src/ui/macro_editor.c:1028
+#: src/ui/macro_editor.c:1043
 msgid "Discard your changes and reload the macros file?"
 msgstr ""
 
-#: src/ui/macro_editor.c:1149
+#: src/ui/macro_editor.c:1165
 #, c-format
 msgid "Template: %s"
 msgstr ""
 
-#: src/ui/macro_editor.c:1151
+#: src/ui/macro_editor.c:1167
 #, fuzzy
 msgid "Embedded in the project"
 msgstr "Nincs nyitott port"
 
-#: src/ui/macro_editor.c:1153
+#: src/ui/macro_editor.c:1169
 #, fuzzy, c-format
 msgid "File: %s"
 msgstr "/_Fájl"
 
-#: src/ui/macro_editor.c:1155
+#: src/ui/macro_editor.c:1171
 #, fuzzy
 msgid "No macros file"
 msgstr "/Fájl/Raw fájl _mentése"
 
-#: src/ui/macro_editor.c:1172
+#: src/ui/macro_editor.c:1188
 #, fuzzy
 msgid "Macros file"
 msgstr "/Fájl/Raw fájl _mentése"
 
-#: src/ui/macro_editor.c:1531
+#: src/ui/macro_editor.c:1555
 #, c-format
 msgid "%u byte"
 msgid_plural "%u bytes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/macro_editor.c:1568
+#: src/ui/macro_editor.c:1592
 #, c-format
 msgid "Prefix of argument %d removed"
 msgstr ""
 
-#: src/ui/macro_editor.c:1636
+#: src/ui/macro_editor.c:1660
 msgid "UTF-8"
 msgstr ""
 
-#: src/ui/macro_editor.c:1636
+#: src/ui/macro_editor.c:1660
 msgid "Printable ASCII"
 msgstr ""
 
-#: src/ui/macro_editor.c:1636 src/ui/menus.ui:91
+#: src/ui/macro_editor.c:1660 src/ui/menus.ui:91
 #, fuzzy
 msgid "ASCII"
 msgstr "/Nézet/_ASCII"
 
-#: src/ui/macro_editor.c:1636
+#: src/ui/macro_editor.c:1660
 msgid "8 bits (Latin-1)"
 msgstr ""
 
-#: src/ui/macro_editor.c:1636
+#: src/ui/macro_editor.c:1660
 msgid "Custom class"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1850
+msgid "Flag: a check box that sends only the prefix"
+msgstr ""
+
+#: src/ui/macro_editor.c:1865
 msgid "#"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1865
 msgid "Format"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1865
 msgid "Type"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1865
 msgid "Default"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1865
 msgid "Min"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1865
 msgid "Max"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1865
 msgid "Charset"
 msgstr ""
 
-#: src/ui/macro_editor.c:1806
+#: src/ui/macro_editor.c:1865
 msgid "Optional"
 msgstr ""
 
-#: src/ui/macro_editor.c:1807
+#: src/ui/macro_editor.c:1866
 msgid "Prefix"
 msgstr ""
 
-#: src/ui/macro_editor.c:1859
+#: src/ui/macro_editor.c:1866
+msgid "Flag"
+msgstr ""
+
+#: src/ui/macro_editor.c:1918
 msgid "text (bytes)"
 msgstr ""
 
-#: src/ui/macro_editor.c:1923
+#: src/ui/macro_editor.c:1993
 msgid "Arguments"
 msgstr ""
 
-#: src/ui/macro_editor.c:1943
+#: src/ui/macro_editor.c:2013
 msgid "Line sent (default values):"
 msgstr ""
 
-#: src/ui/macro_editor.c:1977
+#: src/ui/macro_editor.c:2047
 msgid "Tab:"
 msgstr ""
 
-#: src/ui/macro_editor.c:1977
+#: src/ui/macro_editor.c:2047
 msgid "List:"
 msgstr ""
 
-#: src/ui/macro_editor.c:1981
+#: src/ui/macro_editor.c:2051
 msgid "Tab filter"
 msgstr ""
 
-#: src/ui/macro_editor.c:1981
+#: src/ui/macro_editor.c:2051
 msgid "List filter"
 msgstr ""
 
-#: src/ui/macro_editor.c:2010
+#: src/ui/macro_editor.c:2080
 msgid "Label"
 msgstr ""
 
-#: src/ui/macro_editor.c:2011
+#: src/ui/macro_editor.c:2081
 msgid "Shortcut"
 msgstr "Gyorsbillentyű"
 
-#: src/ui/macro_editor.c:2012
+#: src/ui/macro_editor.c:2082
 msgid "Action"
 msgstr ""
 
-#: src/ui/macro_editor.c:2013
+#: src/ui/macro_editor.c:2083
 msgid "Tab"
 msgstr ""
 
-#: src/ui/macro_editor.c:2014
+#: src/ui/macro_editor.c:2084
 msgid "_Add"
 msgstr "_Hozzáadás"
 
-#: src/ui/macro_editor.c:2015 src/ui/profile_dialogs.c:344
+#: src/ui/macro_editor.c:2085 src/ui/profile_dialogs.c:344
 msgid "_Delete"
 msgstr "_Törlés"
 
-#: src/ui/macro_editor.c:2016
+#: src/ui/macro_editor.c:2086
 msgid "_Capture Shortcut"
 msgstr "Billentyűparancsok"
 
-#: src/ui/macro_editor.c:2017
+#: src/ui/macro_editor.c:2087
 #, fuzzy
 msgid "Delete Shortcut"
 msgstr "Gyorsbillentyű"
 
-#: src/ui/macro_editor.c:2018 src/ui/macro_editor.c:2030
+#: src/ui/macro_editor.c:2088 src/ui/macro_editor.c:2100
 msgid "Move _Up"
 msgstr ""
 
-#: src/ui/macro_editor.c:2019 src/ui/macro_editor.c:2031
+#: src/ui/macro_editor.c:2089 src/ui/macro_editor.c:2101
 msgid "Move _Down"
 msgstr ""
 
-#: src/ui/macro_editor.c:2025
+#: src/ui/macro_editor.c:2095
 msgid "List"
 msgstr ""
 
-#: src/ui/macro_editor.c:2026
+#: src/ui/macro_editor.c:2096
 msgid "Display"
 msgstr ""
 
-#: src/ui/macro_editor.c:2027
+#: src/ui/macro_editor.c:2097
 msgid "Value"
 msgstr ""
 
-#: src/ui/macro_editor.c:2028
+#: src/ui/macro_editor.c:2098
 msgid "_Add Entry"
 msgstr ""
 
-#: src/ui/macro_editor.c:2029
+#: src/ui/macro_editor.c:2099
 #, fuzzy
 msgid "_Delete Entry"
 msgstr "_Törlés"
 
 #. Titre au nom court de l'onglet (fixé à l'ouverture)
-#: src/ui/macro_editor.c:2093
+#: src/ui/macro_editor.c:2163
 #, c-format
 msgid "Configure Macros — %s"
 msgstr "A makrók beállítása — %s"
 
-#: src/ui/macro_editor.c:2118 src/ui/menus.ui:233
+#: src/ui/macro_editor.c:2188 src/ui/menus.ui:233
 msgid "Macros"
 msgstr ""
 
-#: src/ui/macro_editor.c:2119
+#: src/ui/macro_editor.c:2189
 msgid "Lists"
 msgstr ""
 
-#: src/ui/macro_editor.c:2134 src/ui/menus.ui:275
+#: src/ui/macro_editor.c:2204 src/ui/menus.ui:275
 #, fuzzy
 msgid "Help"
 msgstr "/_Súgó"
 
-#: src/ui/macro_editor.c:2136
+#: src/ui/macro_editor.c:2206
 msgid "OK"
 msgstr ""
 
-#: src/ui/macro_panel.c:310
+#: src/ui/macro_panel.c:327
 #, c-format
 msgid ""
 "Shortcut: %s\n"
 "Action: %s"
 msgstr ""
 
-#: src/ui/macro_panel.c:552
+#: src/ui/macro_panel.c:569
 msgid ""
 "No macros defined\n"
 "with labels"
 msgstr ""
 
-#: src/ui/macro_panel.c:608
+#: src/ui/macro_panel.c:625
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 
-#: src/ui/macro_panel.c:786
+#: src/ui/macro_panel.c:803
 msgid "Period (ms)"
 msgstr ""
 
-#: src/ui/macro_panel.c:794
+#: src/ui/macro_panel.c:811
 msgid "Polling Mode"
 msgstr ""
 
-#: src/ui/macro_panel.c:813 src/ui/macro_panel.c:815
+#: src/ui/macro_panel.c:830 src/ui/macro_panel.c:832
 msgid "Reset arguments"
 msgstr ""
 
@@ -1880,24 +1898,40 @@ msgid "Configuration _name:"
 msgstr "Konfiguráció név:"
 
 #. Onglet de projet : copier le fichier dans le projet ou le lier comme modèle (question non bloquante, aucun destructeur)
-#: src/ui/profile_dialogs.c:443
+#: src/ui/profile_dialogs.c:471
 #, fuzzy
 msgid "Copy into the project"
 msgstr "%s fájl megnyitása nem sikerült: %s\n"
 
-#: src/ui/profile_dialogs.c:443
+#: src/ui/profile_dialogs.c:471
 msgid "Link as template"
 msgstr ""
 
-#: src/ui/profile_dialogs.c:449
+#: src/ui/profile_dialogs.c:477
 msgid "Use this macros file in the project"
 msgstr ""
 
-#: src/ui/profile_dialogs.c:505
+#. Onglet libre : proposer d'en faire un projet lié au fichier comme modèle (choix par défaut), ou de l'ouvrir directement
+#. * (interactif : un fichier illisible ouvre une boîte ; le jeu et le chemin restent ceux d'avant)
+#: src/ui/profile_dialogs.c:484
+msgid "Create a project with this template"
+msgstr ""
+
+#: src/ui/profile_dialogs.c:484
+#, fuzzy
+msgid "Open directly"
+msgstr "Nincs nyitott port"
+
+#: src/ui/profile_dialogs.c:490
+#, fuzzy
+msgid "Open this macros file"
+msgstr "/Fájl/Raw fájl _mentése"
+
+#: src/ui/profile_dialogs.c:542
 msgid "Load macros file"
 msgstr ""
 
-#: src/ui/profile_dialogs.c:517
+#: src/ui/profile_dialogs.c:554
 #, fuzzy
 msgid "Save macros file"
 msgstr "/Fájl/Raw fájl _mentése"

@@ -483,6 +483,28 @@ test_activite(void)
 	pty_fermer(&p);
 }
 
+/* Ouverture échouée (spec 2026-10-15-ouverture-silencieuse §1.2) : tête de mort tout de suite, mode de la dernière ouverture retenu, fermeture
+ * demandée → closed */
+static void
+test_activite_echec_ouverture(void)
+{
+	GtSession *s = gt_session_new(NULL, NULL);
+
+	gt_profile_set_string(&gt_session_get_profile(s)->port, "/nonexistent/gtkterm-tty");
+	gt_session_get_profile(s)->auto_reconnect = FALSE;
+	gt_session_apply_profile(s);
+	gt_session_open_port_quiet(s);
+	g_assert_true(gt_session_get_open_quiet(s));
+	g_assert_cmpstr(activite_nick(s), ==, "dead");
+	gt_session_open_port(s);
+	g_assert_false(gt_session_get_open_quiet(s));
+	g_assert_cmpstr(activite_nick(s), ==, "dead");
+	gt_session_close_port(s);
+	g_assert_cmpstr(activite_nick(s), ==, "closed");
+	gt_session_shutdown(s);
+	g_object_unref(s);
+}
+
 static gboolean
 une_seconde_ecoulee(gpointer data)
 {
@@ -618,6 +640,7 @@ main(int argc, char *argv[])
 	g_test_add_func("/session/occupee", test_occupee);
 	g_test_add_func("/session/actions", test_actions);
 	g_test_add_func("/session/activite", test_activite);
+	g_test_add_func("/session/activite-echec-ouverture", test_activite_echec_ouverture);
 	g_test_add_func("/session/activite-delais-profil", test_activite_delais_profil);
 	g_test_add_func("/session/in-project", test_in_project);
 	g_test_add_func("/session/script-text", test_script_text);

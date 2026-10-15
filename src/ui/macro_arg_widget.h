@@ -14,6 +14,10 @@ GtkWidget *gt_macro_arg_widget_new(const GtMacroLists *lists, const macro_arg_in
 GtkWidget *gt_macro_arg_widget_new_full(const GtMacroLists *lists, const macro_arg_info_t *info, const gchar *initial, const gchar *placeholder, gboolean optional);
 /* Argument facultatif (et son préfixe) : une entrée vide est valide, la bulle ajoute la description de l'argument facultatif. Revalide le champ. */
 void       gt_macro_arg_widget_set_optional(GtkWidget *w, gboolean optional, const gchar *prefix);
+/* Drapeau (spec 2026-10-15-ouverture-silencieuse §3) : case à cocher libellée par le préfixe sans espaces de tête, cochée si initial est coché
+ * (gt_macro_flag_value_set) ; toujours valide, bulle « Checked: sends … » */
+GtkWidget *gt_macro_arg_widget_new_flag(const gchar *prefix, const gchar *initial);
+/* Drapeau : "1" coché ; décoché "0" en mode « vide = défaut » (panneau, l'emporte sur un défaut coché), "" sinon (défaut de l'éditeur) */
 gchar     *gt_macro_arg_widget_get_value(GtkWidget *w);	/* texte de l'entrée, valeur de l'élément choisi ("" sans choix) ; g_free */
 /* Limites (macro_arg.h, NULL ou "" : aucune) et valeur par défaut de l'argument, copiées. Une fois posées, la validation donne au champ une
  * bulle d'aide décrivant l'argument (gt_macro_arg_describe), complétée par la raison quand la valeur est refusée. Revalide le champ. */

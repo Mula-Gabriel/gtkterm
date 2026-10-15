@@ -33,7 +33,7 @@ check(wait_until(lambda: b'mode -m=slow;' in e.read_pty(0.3), 3), 'liste choisie
 # Éditeur : cocher Optional découpe le préfixe hors de l'action, décocher le remet ; aperçu ∅
 write_macros_v2(ini, [dict(label='Pw', action='login %s -password=%s;')])
 e.action('load-macros')
-file_dialog(e, 'Load macros file', ini)
+load_macros_free(e, ini)
 open_editor(e)
 editor_select(e, 0)
 check(wait_until(lambda: bool(e.find(name='macro-optional-1')), 3), 'colonne Optional')

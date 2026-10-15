@@ -358,21 +358,26 @@ static void remove_relays(void)
 
 /* ---------- Liaison ---------- */
 
+#define OPEN_FAILED_FLASH_MS 8000
+
 /* Émis seulement dans gt_link_open ou depuis une source d'inactivité (link.h) : une boîte non bloquante est permise. user_data : la session
  * (handler retiré à son arrêt). Message préfixé du nom court de l'onglet s'il y en a plusieurs. */
 static void on_open_failed(GtkTermLink *link, const gchar *message, gpointer user_data)
 {
 	GtSession *s = user_data;
+	gchar *text;
 
 	if(gt_app.sessions != NULL && gt_session_manager_get_n(gt_app.sessions) > 1)
-	{
-		gchar *text = g_strdup_printf("%s: %s", gt_session_get_short_name(s), message);
-
-		gt_ui_message(gt_app_get_main_window(), GT_APP_MSG_ERROR, text);
-		g_free(text);
-	}
+		text = g_strdup_printf("%s: %s", gt_session_get_short_name(s), message);
 	else
-		gt_ui_message(gt_app_get_main_window(), GT_APP_MSG_ERROR, message);
+		text = g_strdup(message);
+	/* Ouverture automatique (démarrage, projet, SIGUSR1) : pas de boîte, l'onglet passe en tête de mort (session.c) et la raison passe
+	 * dans sa barre d'état (spec 2026-10-15-ouverture-silencieuse §1.3) */
+	if(gt_session_get_open_quiet(s))
+		gt_app_status_flash(s, OPEN_FAILED_FLASH_MS, "%s", text);
+	else
+		gt_ui_message(gt_app_get_main_window(), GT_APP_MSG_ERROR, text);
+	g_free(text);
 }
 
 static void session_watch(GtSession *s)
@@ -389,7 +394,7 @@ static void session_unwatch(GtSession *s)
 static gboolean on_sigusr1(gpointer user_data)
 {
 	for(guint i = 0; gt_app.sessions != NULL && i < gt_session_manager_get_n(gt_app.sessions); i++)
-		gt_session_open_port(gt_session_manager_get_nth(gt_app.sessions, i));
+		gt_session_open_port_quiet(gt_session_manager_get_nth(gt_app.sessions, i));
 	return G_SOURCE_CONTINUE;
 }
 
@@ -669,7 +674,7 @@ static void replace_all_tabs(GtProjectData *d, const gchar *path, const GtFileSt
 		gt_session_view_apply_project_tab(view, t);
 		gt_session_apply_profile(s);
 		gt_session_view_apply_profile(view);
-		gt_session_open_port(s);	/* échec : open-failed, boîte non bloquante */
+		gt_session_open_port_quiet(s);	/* échec : tête de mort et barre d'état, sans boîte */
 		if(linked)
 			template_status_report(s, t->macros_template, status, dropped, error_text);	/* la page existe : le flash s'y affiche */
 		g_free(error_text);
@@ -1237,7 +1242,7 @@ static void on_activate(GApplication *app, gpointer user_data)
 	gtk_window_present(GTK_WINDOW(gt_app.main_window));
 	gt_ui_main_window_ready(GTK_WINDOW(gt_app.main_window));	/* messages mis en file avant la fenêtre : affichés maintenant, dans l'ordre */
 	if(data == NULL)
-		gt_session_open_port(session);	/* projet : chaque onglet a déjà ouvert le sien */
+		gt_session_open_port_quiet(session);	/* échec sans boîte ; projet : chaque onglet a déjà ouvert le sien */
 	gt_app.sigusr1_id = g_unix_signal_add(SIGUSR1, on_sigusr1, NULL);
 	gt_app.sigusr2_id = g_unix_signal_add(SIGUSR2, on_sigusr2, NULL);
 	gt_update_startup_check(GTK_WINDOW(gt_app.main_window));	/* différée (g_idle_add), dernière étape */
