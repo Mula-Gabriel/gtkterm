@@ -115,7 +115,7 @@ gboolean            gt_macros_refresh_template(GtMacros *m, gboolean interactive
 gboolean            gt_macros_reload_template(GtMacros *m);	/* = refresh interactif */
 ```
 Points : champs `template_path`, `base`, `template_stamp`, `generation` distincts de `path`/`stamp` ; `set_embedded(TRUE)` ne touche pas au lien,
-`set_embedded(FALSE)` détache ; `gt_macros_load_file` en mode intégré détache seulement en cas de succès ; `generation` incrémenté par `replace_set`,
+`set_embedded(FALSE)` détache ; `gt_macros_load_file` détache dès que le jeu est remplacé (réussite ou échec non interactif ; intégré ou non), un échec interactif ne change rien ; `generation` incrémenté par `replace_set`,
 `apply_edits`, `gt_macros_edited`, lier, détacher, rafraîchir ; lier/détacher appellent `gt_macros_edited` ; messages et flashs de la spec (§2.6, §2.8,
 §2.12 ; flash par `gt_app_status_flash(m->owner, …)`). `gt_macros_apply_edits` garde sa signature (consomme `lists`) ; `commit_edits` copie les listes.
 Rafraîchissement en place : recopier `args` (`gt_macro_set_set_args`, ou effacer le vecteur si NULL — ajouter au besoin une petite fonction de

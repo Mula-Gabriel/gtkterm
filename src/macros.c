@@ -409,6 +409,12 @@ gt_macros_replace_set (GtMacros *m, GtMacroSet *set)
   m->set = set;
   gt_macro_set_free (old);
   m->generation++;
+  /* Garde-fou de l'invariant (spec modèles §2.1) : un jeu effectif d'une autre structure que la base ne peut plus suivre le modèle */
+  if (m->base != NULL && !gt_macro_set_same_structure (m->base, m->set))
+    {
+      g_warning ("macros: set of another structure than the template %s: template forgotten", m->template_path);
+      forget_template (m);
+    }
   g_hash_table_remove_all (m->usage);
   forget_derived (m, 0);
   /* Panneau et raccourcis reconstruits par l'interface ; une fenêtre d'édition ouverte sur l'ancien jeu s'y ferme sans enregistrer
@@ -534,10 +540,10 @@ gt_macros_load_file (GtMacros *m, const gchar *path, gboolean interactive)
       g_clear_error (&error);
       set = gt_macro_set_new ();
     }
-  /* Mode intégré : le fichier est importé, son chemin n'est pas retenu. Identité prise avant la lecture (absent : « absent »). Import réussi :
-     la copie remplace tout, l'onglet n'est plus lié à un modèle (oublié avant replace_set, dont le rappel edited voit l'onglet non lié). */
-  if (m->embedded && ok)
-    forget_template (m);
+  /* Le jeu est remplacé (réussite, ou échec non interactif qui installe un jeu vide) : l'onglet n'est plus lié à un modèle, intégré ou non
+     (oublié avant replace_set, dont le rappel edited voit l'onglet non lié). Un échec interactif est déjà sorti sans rien changer. */
+  forget_template (m);
+  /* Mode intégré : le fichier est importé, son chemin n'est pas retenu. Identité prise avant la lecture (absent : « absent »). */
   if (!m->embedded)
     {
       g_free (m->path);
@@ -665,7 +671,12 @@ gt_macros_get_overrides (GtMacros *m)
     return NULL;
   o = gt_macro_overrides_diff (m->base, m->set);
   /* Invariant (même structure) rompu : aucune valeur propre plutôt que NULL, qui voudrait dire « non lié » */
-  return o != NULL ? o : gt_macro_overrides_new ();
+  if (o == NULL)
+    {
+      g_warning ("macros: set and template %s differ in structure: no project value", m->template_path);
+      o = gt_macro_overrides_new ();
+    }
+  return o;
 }
 
 static gchar *
@@ -902,6 +913,8 @@ gt_macros_refresh_template (GtMacros *m, gboolean interactive)
     }
   /* Valeurs propres actuelles (différence avec l'ancienne base) réappliquées au modèle relu */
   overrides = gt_macro_overrides_diff (m->base, m->set);
+  if (overrides == NULL)
+    g_warning ("macros: set and template %s differ in structure: project values lost", m->template_path);
   effective = gt_macro_overrides_apply (overrides, set, NULL);
   gt_macro_overrides_free (overrides);
   gt_macro_set_free (m->base);

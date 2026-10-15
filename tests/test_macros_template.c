@@ -90,6 +90,17 @@ ecrire_modele(const gchar *dir, const gchar *nom, const gchar *defaut_vitesse)
 	return path;
 }
 
+/* Écrit set (pris) dans dir/nom ; renvoie le chemin */
+static gchar *
+ecrire_jeu(const gchar *dir, const gchar *nom, GtMacroSet *set)
+{
+	gchar *path = g_build_filename(dir, nom, NULL);
+
+	g_assert_true(gt_macro_file_save(set, path, NULL));
+	gt_macro_set_free(set);
+	return path;
+}
+
 static gchar *
 lire_texte(const gchar *path)
 {
@@ -522,6 +533,12 @@ test_enregistrer_echec(void)
 	g_assert_cmpstr(defaut(gt_macro_set_find_label(gt_macros_get_template_set(m), "Vitesse"), 0), ==, "10");
 	apres = lire_texte(path);
 	g_assert_cmpstr(apres, ==, avant);
+	/* Droits rendus : l'identité n'a pas bougé, l'enregistrement passe (pas de conflit) */
+	l = lignes_de(m);
+	lignes_defaut(l, "Vitesse", "20");
+	g_assert_cmpint(gt_macros_save_template_edits(m, l->rows, l->n, NULL, FALSE), ==, GT_MACROS_SAVED);
+	lignes_free(l);
+	g_assert_cmpstr(defaut(macro_nommee(m, "Vitesse"), 0), ==, "20");
 	gt_macros_free(m);
 	test_rmdir(dir);
 	g_free(avant);
@@ -739,7 +756,7 @@ test_detacher(void)
 	GtMacroSet *set;
 	Lignes *l;
 	guint64 g0;
-	guint id_m;
+	guint id_m, ping;
 
 	g_assert_true(gt_macros_link_template(m, path));
 	l = lignes_de(m);
@@ -748,12 +765,17 @@ test_detacher(void)
 	lignes_free(l);
 	id_m = macro_nommee(m, "Mode")->id;
 	gt_macros_set_usage_arg(m, id_m, 0, "3");
+	ping = macro_nommee(m, "Ping")->id;
+	g_assert_true(gt_macro_set_set_polling(gt_macros_get_set(m), ping, TRUE, 500));
+	g_assert_true(gt_macro_poller_start(gt_macros_get_poller(m), ping));
 	set = gt_macros_get_set(m);
 	gt_macros_set_edited_func(m, rappel_edited, NULL);
 	compteur_edited = 0;
 	g0 = gt_macros_get_generation(m);
 	stub_reset();
 	gt_macros_detach_template(m);
+	g_assert_true(gt_macro_poller_is_running(gt_macros_get_poller(m), ping));
+	g_assert_cmpint(stub_count("macro_polling_changed"), ==, 0);
 	g_assert_null(gt_macros_get_template(m));
 	g_assert_null(gt_macros_get_template_set(m));
 	g_assert_null(gt_macros_get_overrides(m));
@@ -845,10 +867,20 @@ test_lien_depuis_projet(void)
 
 	gt_macro_overrides_set_arg(o, "Mode", 0, 0, "7");
 	gt_macro_overrides_set_polling(o, "Ping", 0, TRUE, 250);
+	/* Polling en marche et usage posés avant : remis à zéro par l'ouverture */
+	{
+		guint p = gt_macro_set_append(gt_macros_get_set(m), "P", "", "P%d", "");
+
+		g_assert_true(gt_macro_set_set_polling(gt_macros_get_set(m), p, TRUE, 500));
+		g_assert_true(gt_macro_poller_start(gt_macros_get_poller(m), p));
+		gt_macros_set_usage_arg(m, p, 0, "4");
+		g_assert_true(gt_macros_has_usage(m, 0));
+	}
 	/* UNCHANGED, rien d'abandonné */
 	g_assert_cmpint(gt_macros_link_from_project(m, path, copie, o, &dropped, &erreur), ==, GT_MACROS_TEMPLATE_UNCHANGED);
 	g_assert_cmpuint(dropped, ==, 0);
 	g_assert_null(erreur);
+	g_assert_false(gt_macros_has_usage(m, 0));
 	g_assert_cmpstr(gt_macros_get_template(m), ==, path);
 	g_assert_cmpstr(defaut(macro_nommee(m, "Mode"), 0), ==, "7");
 	ping = macro_nommee(m, "Ping")->id;
@@ -983,6 +1015,183 @@ test_mode_integre(void)
 	g_free(dir);
 }
 
+/* Tout chargement qui remplace le jeu oublie le lien : non interactif en échec (jeu vide), fichier absent, onglet lié non intégré ; set_embedded(FALSE)
+ * appelle edited ; save_file n'écrit jamais le modèle */
+static void
+test_chargement_oublie_lien(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-modele-XXXXXX", NULL);
+	gchar *path = ecrire_modele(dir, "modele.ini", "10");
+	gchar *autre = ecrire_modele(dir, "autre.ini", "30");
+	gchar *export = g_build_filename(dir, "export.ini", NULL);
+	gchar *absent = g_build_filename(dir, "absent.ini", NULL);
+	gchar *corrompu = test_write_file(dir, "corrompu.ini", "[[[\n");
+	gchar *avant = lire_texte(path), *apres;
+	GtMacros *m = nouvelles_macros(), *libre;
+	guint64 g;
+
+	/* Intégré, non interactif, fichier corrompu : jeu vide installé, lien oublié */
+	g_assert_true(gt_macros_link_template(m, path));
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*Cannot load macros file*");
+	g_assert_false(gt_macros_load_file(m, corrompu, FALSE));
+	g_test_assert_expected_messages();
+	g_assert_null(gt_macros_get_template(m));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(m)), ==, 0);
+	/* Intégré, fichier absent (NOENT) : jeu vide, lien oublié */
+	g_assert_true(gt_macros_link_template(m, path));
+	g_assert_true(gt_macros_load_file(m, absent, TRUE));
+	g_assert_null(gt_macros_get_template(m));
+	/* save_file (export) n'écrit pas le modèle */
+	g_assert_true(gt_macros_link_template(m, path));
+	g_assert_true(gt_macro_set_set_arg(gt_macros_get_set(m), macro_nommee(m, "Mode")->id, 0, "9"));
+	g_assert_cmpint(gt_macros_save_file(m, export, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	apres = lire_texte(path);
+	g_assert_cmpstr(apres, ==, avant);
+	g_free(apres);
+	/* set_embedded(FALSE) : edited et génération */
+	gt_macros_set_edited_func(m, rappel_edited, NULL);
+	compteur_edited = 0;
+	g = gt_macros_get_generation(m);
+	gt_macros_set_embedded(m, FALSE);
+	g_assert_null(gt_macros_get_template(m));
+	g_assert_cmpint(compteur_edited, ==, 1);
+	g_assert_cmpuint(gt_macros_get_generation(m), >, g);
+	/* Déjà non lié : set_embedded(FALSE) n'appelle rien */
+	gt_macros_set_embedded(m, FALSE);
+	g_assert_cmpint(compteur_edited, ==, 1);
+	gt_macros_free(m);
+	/* GtMacros lié non intégré (avant passage en projet) : un chargement oublie le lien et retient le fichier */
+	libre = gt_macros_new(stub_link_default(), NULL);
+	g_assert_true(gt_macros_link_template(libre, path));
+	g_assert_true(gt_macros_load_file(libre, autre, TRUE));
+	g_assert_null(gt_macros_get_template(libre));
+	g_assert_cmpstr(gt_macros_get_path(libre), ==, autre);
+	gt_macros_free(libre);
+	test_rmdir(dir);
+	g_free(avant);
+	g_free(corrompu);
+	g_free(absent);
+	g_free(export);
+	g_free(autre);
+	g_free(path);
+	g_free(dir);
+}
+
+/* Enregistrer dans le modèle avec des listes : entrée ajoutée (STRUCTURE), écrite ; base et effectif de même structure ; listes de l'appelant intactes */
+static void
+test_enregistrer_listes(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-modele-XXXXXX", NULL);
+	gchar *path = ecrire_modele(dir, "modele.ini", "10");
+	GtMacros *m = nouvelles_macros();
+	GtMacroSet *relu = NULL;
+	GtMacroLists *listes;
+	const GtMacroLists *lr;
+	Lignes *l;
+
+	g_assert_true(gt_macros_link_template(m, path));
+	listes = gt_macro_lists_copy(gt_macro_set_get_lists(gt_macros_get_set(m)));
+	gt_macro_lists_add(listes, "Liste", "c", "3");
+	l = lignes_de(m);
+	g_assert_cmpint(gt_macros_classify_edits(m, l->rows, l->n, listes), ==, GT_MACROS_EDIT_STRUCTURE);
+	g_assert_cmpint(gt_macros_save_template_edits(m, l->rows, l->n, listes, FALSE), ==, GT_MACROS_SAVED);
+	lignes_free(l);
+	g_assert_true(gt_macro_file_load(path, &relu, NULL));
+	lr = gt_macro_set_get_lists(relu);
+	g_assert_cmpint(gt_macro_lists_entry_count(lr, gt_macro_lists_find(lr, "Liste")), ==, 3);
+	g_assert_cmpstr(gt_macro_lists_entry_value(lr, gt_macro_lists_find(lr, "Liste"), 2), ==, "3");
+	gt_macro_set_free(relu);
+	g_assert_true(gt_macro_set_same_structure(gt_macros_get_template_set(m), gt_macros_get_set(m)));
+	g_assert_cmpint(gt_macro_lists_entry_count(gt_macro_set_get_lists(gt_macros_get_set(m)), 0), ==, 3);
+	g_assert_cmpint(gt_macro_lists_entry_count(listes, gt_macro_lists_find(listes, "Liste")), ==, 3);
+	gt_macro_lists_free(listes);
+	gt_macros_free(m);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+/* Garde-fou : un jeu d'une autre structure installé sur un onglet lié oublie le lien (avertissement) ; de même structure, le lien reste */
+static void
+test_remplacement_garde_fou(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-modele-XXXXXX", NULL);
+	gchar *path = ecrire_modele(dir, "modele.ini", "10");
+	GtMacros *m = nouvelles_macros();
+
+	g_assert_true(gt_macros_link_template(m, path));
+	gt_macros_replace_set(m, jeu_modele("42"));
+	g_assert_cmpstr(gt_macros_get_template(m), ==, path);
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*template forgotten*");
+	gt_macros_replace_set(m, gt_macro_set_new());
+	g_test_assert_expected_messages();
+	g_assert_null(gt_macros_get_template(m));
+	g_assert_null(gt_macros_get_template_set(m));
+	gt_macros_free(m);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+/* Rafraîchissement : période changée par le modèle appliquée au polling en marche, polling coupé par le modèle (arrêt signalé) ; valeur propre devenue
+ * invalide (limite durcie, donc changement de structure et remplacement) : valeur du modèle reprise, usage effacé */
+static void
+test_rafraichir_polling_et_invalide(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-modele-XXXXXX", NULL);
+	GtMacroSet *set = jeu_modele("10");
+	gchar *path;
+	GtMacros *m = nouvelles_macros();
+	const gchar *mx[] = { "50", NULL };
+	Lignes *l;
+	guint ping, id_v;
+
+	g_assert_true(gt_macro_set_set_polling(set, gt_macro_set_find_label(set, "Ping")->id, TRUE, 500));
+	path = ecrire_jeu(dir, "modele.ini", set);
+	g_assert_true(gt_macros_link_template(m, path));
+	ping = macro_nommee(m, "Ping")->id;
+	g_assert_true(macro_nommee(m, "Ping")->polling);
+	g_assert_true(gt_macro_poller_start(gt_macros_get_poller(m), ping));
+	/* Période 200 dans le modèle : en place, le polling continue à la nouvelle période */
+	set = jeu_modele("10");
+	g_assert_true(gt_macro_set_set_polling(set, gt_macro_set_find_label(set, "Ping")->id, TRUE, 200));
+	g_free(ecrire_jeu(dir, "modele.ini", set));
+	stub_reset();
+	g_assert_true(gt_macros_refresh_template(m, FALSE));
+	g_assert_cmpuint(macro_nommee(m, "Ping")->id, ==, ping);
+	g_assert_cmpuint(macro_nommee(m, "Ping")->polling_period_ms, ==, 200);
+	g_assert_true(gt_macro_poller_is_running(gt_macros_get_poller(m), ping));
+	g_assert_cmpint(stub_count("macro_polling_changed"), ==, 0);
+	/* Polling coupé dans le modèle : arrêté, crochet d'état */
+	g_free(ecrire_jeu(dir, "modele.ini", jeu_modele("10")));
+	stub_reset();
+	g_assert_true(gt_macros_refresh_template(m, FALSE));
+	g_assert_cmpuint(macro_nommee(m, "Ping")->id, ==, ping);
+	g_assert_false(macro_nommee(m, "Ping")->polling);
+	g_assert_false(gt_macro_poller_is_running(gt_macros_get_poller(m), ping));
+	g_assert_cmpint(stub_count("macro_polling_changed"), ==, 1);
+	g_assert_cmpstr(stub_last("macro_polling_changed"), ==, "0");
+	/* Valeur propre 80, puis maximum 50 dans le modèle : abandonnée, valeur du modèle reprise, usage effacé */
+	l = lignes_de(m);
+	lignes_defaut(l, "Vitesse", "80");
+	gt_macros_commit_edits(m, l->rows, l->n, NULL);
+	lignes_free(l);
+	id_v = macro_nommee(m, "Vitesse")->id;
+	gt_macros_set_usage_arg(m, id_v, 0, "33");
+	set = jeu_modele("10");
+	g_assert_cmpint(gt_macro_set_set_limits(set, gt_macro_set_find_label(set, "Vitesse")->id, NULL, mx, NULL, 1), ==, 0);
+	g_free(ecrire_jeu(dir, "modele.ini", set));
+	g_assert_true(gt_macros_refresh_template(m, FALSE));
+	id_v = macro_nommee(m, "Vitesse")->id;
+	g_assert_cmpstr(defaut(macro_nommee(m, "Vitesse"), 0), ==, "10");
+	g_assert_false(gt_macros_has_usage(m, id_v));
+	g_assert_true(gt_macro_set_same_structure(gt_macros_get_template_set(m), gt_macros_get_set(m)));
+	gt_macros_free(m);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1009,6 +1218,10 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_template/lien-depuis-projet", test_lien_depuis_projet);
 	g_test_add_func("/macros_template/copy-from", test_copy_from);
 	g_test_add_func("/macros_template/mode-integre", test_mode_integre);
+	g_test_add_func("/macros_template/chargement-oublie-lien", test_chargement_oublie_lien);
+	g_test_add_func("/macros_template/enregistrer-listes", test_enregistrer_listes);
+	g_test_add_func("/macros_template/remplacement-garde-fou", test_remplacement_garde_fou);
+	g_test_add_func("/macros_template/rafraichir-polling-et-invalide", test_rafraichir_polling_et_invalide);
 	ret = g_test_run();
 	test_rmdir_recursive(racine);
 	g_free(racine);

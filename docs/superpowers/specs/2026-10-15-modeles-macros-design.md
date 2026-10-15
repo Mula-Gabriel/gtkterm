@@ -104,8 +104,8 @@ diffère, le projet est « modifié » et l'enregistrement retire les valeurs ab
 
 - **Load macros file…** dans un onglet de projet : après le choix du fichier, `gt_ui_choose` « Use this macros file in the project » (texte secondaire : le
   chemin), boutons « Copy into the project » (défaut), « Link as template », « Cancel » ; aucun destructeur.
-  - Copie : `gt_macros_load_file(m, path, TRUE)` comme en 6c ; s'il réussit, un onglet lié devient **non lié** (la copie remplace tout) ; s'il échoue
-    (message, jeu inchangé), le lien reste.
+  - Copie : `gt_macros_load_file(m, path, TRUE)` comme en 6c ; dès que le jeu est remplacé (réussite, ou échec non interactif qui installe un jeu vide),
+    l'onglet devient **non lié** (la copie remplace tout) ; un échec interactif ne change rien (message, jeu inchangé, le lien reste).
   - Lien : `gt_macros_link_template(m, path)` : lecture interactive ; échec, **fichier absent compris** : message « Cannot load macros file: … », rien ne
     change ; succès : base = jeu lu, jeu effectif = copie de la base (aucune valeur propre), modèle = `path` rendu absolu ; usage et polling remis à zéro.
   - La réponse arrive de façon asynchrone : elle n'applique rien si la session est fermée, n'est plus en projet, ou si la génération a changé (§2.1).
@@ -114,7 +114,7 @@ diffère, le projet est « modifié » et l'enregistrement retire les valeurs ab
   file… »), activée seulement quand l'onglet est lié. `gt_macros_detach_template(m)` : oublie modèle, base et identité ; le jeu effectif reste tel quel
   (les valeurs propres deviennent les valeurs de la copie) ; ni polling ni usage touchés ; `edited` (le projet devient modifié). Flash 3 s « Detached
   from macros template %s ».
-- `gt_macros_set_embedded(m, FALSE)` (fermeture du projet, onglet libre) détache aussi. `gt_macros_load_file` en mode intégré détache.
+- `gt_macros_set_embedded(m, FALSE)` (fermeture du projet, onglet libre) détache aussi. `gt_macros_load_file` détache dès que le jeu est remplacé (intégré ou non).
 - **Nouvel onglet** d'un projet : copie du jeu de l'onglet actif **et de son lien** (même modèle, copie de la base, même identité, mêmes valeurs propres) :
   `gt_macros_copy_from(dst, src)`.
 - Le moment où l'état lié change (lier, détacher, ouverture) appelle `gt_macros_edited` : la session met à jour l'activation de

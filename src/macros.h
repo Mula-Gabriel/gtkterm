@@ -55,7 +55,8 @@ void           gt_macros_apply_edits     (GtMacros *m, const GtMacroEdit *rows, 
 gboolean       gt_macros_send            (GtMacros *m, guint id, const gchar *const *args, gint n_args);
 gboolean       gt_macros_send_quiet      (GtMacros *m, guint id, const gchar *const *args, gint n_args);	/* moteur Lua : sans message */
 /* NULL : chemin courant (ou défaut). Fichier absent : jeu vide, TRUE. Fichier illisible : FALSE ; interactif (menu), message, jeu et chemin inchangés ;
- * non interactif (profil), jeu vide, chemin courant = path, avertissement + message différé (g_idle_add). */
+ * non interactif (profil), jeu vide, chemin courant = path, avertissement + message différé (g_idle_add). Dès que le jeu est remplacé (réussite, ou
+ * échec non interactif), un lien à un modèle est oublié, intégré ou non ; un échec interactif ne change rien. */
 gboolean       gt_macros_load_file       (GtMacros *m, const gchar *path, gboolean interactive);
 /* path NULL : chemin courant (ou défaut). CONFLICT (sauf force) : cible = fichier courant changé sur le disque depuis la dernière lecture/écriture,
  * ou, sans fichier courant ni path, fichier par défaut présent et non vide (jamais lu par m) ; rien n'est écrit (non interactif : g_warning).
@@ -93,13 +94,17 @@ void                gt_macros_edited         (GtMacros *m);	/* réglage enregist
 
 /* Onglet lié à un modèle de macros (spec docs/superpowers/specs/2026-10-15-modeles-macros-design.md, §2.1, §2.5 à §2.8). Le lien (chemin absolu du
  * modèle, base = jeu du modèle lu en dernier, identité du fichier) est distinct du fichier courant (gt_macros_get_path) ; set_embedded(TRUE) n'y touche
- * pas, set_embedded(FALSE) et un gt_macros_load_file réussi en mode intégré détachent ; gt_macros_reload et gt_macros_save_file l'ignorent. Le jeu
- * courant est le jeu effectif : base + valeurs propres, toujours de même structure que la base. */
+ * pas, set_embedded(FALSE) et un gt_macros_load_file qui remplace le jeu détachent ; gt_macros_reload et gt_macros_save_file l'ignorent. Le jeu
+ * courant est le jeu effectif : base + valeurs propres, toujours de même structure que la base (garde-fou : gt_macros_replace_set d'un jeu d'une
+ * autre structure oublie le lien, avec un g_warning). */
 /* Relevée par chaque changement du jeu effectif ou du lien (replace_set, apply_edits, gt_macros_edited, lier, détacher, rafraîchir) : une réponse
  * asynchrone la compare à celle relevée en posant sa question et n'applique rien si elle a changé. */
 guint64             gt_macros_get_generation (GtMacros *m);
 const gchar        *gt_macros_get_template   (GtMacros *m);	/* chemin absolu ; NULL : non lié */
-const GtMacroSet   *gt_macros_get_template_set(GtMacros *m);	/* base ; NULL : non lié */
+/* Base ; NULL : non lié. Empruntée : invalide après gt_macros_link_template, gt_macros_link_from_project, un gt_macros_save_template_edits
+ * réussi, gt_macros_refresh_template / gt_macros_reload_template réussis, gt_macros_detach_template, gt_macros_copy_from (destination), et tout ce qui
+ * oublie le lien (set_embedded(FALSE), gt_macros_load_file, gt_macros_free). */
+const GtMacroSet   *gt_macros_get_template_set(GtMacros *m);
 GtMacroOverrides   *gt_macros_get_overrides  (GtMacros *m);	/* diff(base, effectif), nouvelle (gt_macro_overrides_free) ; NULL : non lié */
 /* Lie m au fichier path (rendu absolu) : base = jeu lu, jeu effectif = copie de la base (usage et polling remis à zéro). Échec de lecture, fichier
  * absent compris : message « Cannot load macros file: … », rien ne change, FALSE. */
@@ -124,7 +129,8 @@ GtMacrosSaveResult  gt_macros_save_template_edits(GtMacros *m, const GtMacroEdit
                                                   gboolean force);
 /* Relit le modèle et y réapplique les valeurs propres actuelles ; même structure que le jeu effectif : mise à jour en place (le polling en marche
  * continue, usage effacé pour les macros dont la valeur par défaut change), sinon gt_macros_replace_set. FALSE : non lié ou lecture impossible
- * (interactif : message ; sinon g_warning), rien ne change. */
+ * (interactif : message ; sinon g_warning), rien ne change. Réussi : la génération change toujours, mais en mise à jour en place le pointeur
+ * du jeu (gt_macros_get_set) reste le même : une fenêtre d'édition qui doit se fermer après un rechargement compare la génération, pas le pointeur. */
 gboolean            gt_macros_refresh_template(GtMacros *m, gboolean interactive);
 gboolean            gt_macros_reload_template(GtMacros *m);	/* = gt_macros_refresh_template (m, TRUE) */
 
