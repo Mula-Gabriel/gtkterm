@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 1.3.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 02:19+0200\n"
+"POT-Creation-Date: 2026-10-15 08:38+0200\n"
 "PO-Revision-Date: 2026-10-10 12:00+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -306,8 +306,8 @@ msgstr "entier"
 msgid "unsigned"
 msgstr "non signé"
 
-#: src/macro_arg.c:260
 #
+#: src/macro_arg.c:260
 msgid "hexadecimal"
 msgstr "hexadécimal"
 
@@ -315,8 +315,8 @@ msgstr "hexadécimal"
 msgid "octal"
 msgstr "octal"
 
-#: src/macro_arg.c:264
 #
+#: src/macro_arg.c:264
 msgid "decimal"
 msgstr "décimal"
 
@@ -383,8 +383,8 @@ msgstr " octets"
 msgid ", printable ASCII"
 msgstr ", ASCII imprimable"
 
-#: src/macro_arg.c:527
 #
+#: src/macro_arg.c:527
 msgid ", ASCII"
 msgstr ", ASCII"
 
@@ -438,12 +438,22 @@ msgstr ""
 "%s existe déjà avec un contenu différent. Renommez ou supprimez %s, puis "
 "enregistrez de nouveau."
 
-#: src/macros.c:171
+#: src/macro_override.c:359
+#, c-format
+msgid "%s: [%s] %s: invalid value ignored"
+msgstr "%s : [%s] %s : valeur invalide ignorée"
+
+#: src/macro_override.c:496
+#, c-format
+msgid "%s: [%s] duplicates [%s]: the earlier group is ignored"
+msgstr "%s : [%s] reprend [%s] : le groupe précédent est ignoré"
+
+#: src/macros.c:178
 #, c-format
 msgid "Macro \"%s\" not sent: argument %d: %s"
 msgstr "Macro « %s » non envoyée : argument %d : %s"
 
-#: src/macros.c:185
+#: src/macros.c:192
 #, c-format
 msgid "Macro \"%s\" sent!"
 msgstr "Macro « %s » envoyée !"
@@ -452,31 +462,47 @@ msgstr "Macro « %s » envoyée !"
 #. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
 #. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
 #. et l'utilisateur sait que ses macros n'ont pas été lues.
-#: src/macros.c:487 src/macros.c:502
+#: src/macros.c:518 src/macros.c:533 src/macros.c:721 src/macros.c:907
 #, c-format
 msgid "Cannot load macros file: %s"
 msgstr "Impossible de charger le fichier de macros : %s"
 
-#: src/macros.c:539
+#: src/macros.c:573
 msgid "This tab has no macros file: its macros are saved with the project."
 msgstr ""
 "Cet onglet n'a pas de fichier de macros : ses macros sont enregistrées avec "
 "le projet."
 
-#: src/macros.c:547
+#: src/macros.c:581
 #, c-format
 msgid "%s changed on disk: not overwritten"
 msgstr "%s a changé sur le disque : non écrasé"
 
-#: src/macros.c:561
+#: src/macros.c:595
 #, c-format
 msgid "%s already exists: not overwritten"
 msgstr "%s existe déjà : non écrasé"
 
-#: src/macros.c:574
+#: src/macros.c:608
 #, c-format
 msgid "Cannot save macros file: %s"
 msgstr "Impossible d'enregistrer le fichier de macros : %s"
+
+#. Le jeu effectif reste : les valeurs propres deviennent les valeurs de la copie
+#: src/macros.c:794
+#, c-format
+msgid "Detached from macros template %s"
+msgstr "Détaché du modèle de macros %s"
+
+#: src/macros.c:861
+#, c-format
+msgid "Cannot save macros template: %s"
+msgstr "Impossible d'enregistrer le modèle de macros : %s"
+
+#: src/macros.c:872
+#, c-format
+msgid "Macros template %s saved"
+msgstr "Modèle de macros %s enregistré"
 
 #: src/port_form.c:76
 msgid "Enter the serial port to open (for example /dev/ttyUSB0)."
@@ -589,37 +615,42 @@ msgstr "« %s » est un nom réservé."
 msgid "Untitled project"
 msgstr "Projet sans titre"
 
-#: src/project.c:308
+#: src/project.c:318
 msgid "No project is open"
 msgstr "Aucun projet n'est ouvert"
 
-#: src/project.c:313
+#: src/project.c:323
 msgid "The project has no file"
 msgstr "Le projet n'a pas de fichier"
 
-#: src/project_file.c:149
+#: src/project_file.c:163
 #, c-format
 msgid "%s: [%s] %s is not valid UTF-8: invalid bytes replaced"
 msgstr "%s : [%s] %s n'est pas en UTF-8 valide : octets invalides remplacés"
 
-#: src/project_file.c:170
+#: src/project_file.c:184
 #, c-format
 msgid "%s: tab %u has no valid port settings"
 msgstr "%s : l'onglet %u n'a pas de réglages de port valides"
 
-#: src/project_file.c:229
+#: src/project_file.c:227
+#, c-format
+msgid "%s: [%s] macros_template must be an absolute path: ignored"
+msgstr "%s : [%s] macros_template doit être un chemin absolu : ignoré"
+
+#: src/project_file.c:257
 #, c-format
 msgid "%s is not a GTKTerm project"
 msgstr "%s n'est pas un projet GTKTerm"
 
-#: src/project_file.c:238
+#: src/project_file.c:266
 #, c-format
 msgid "%s: unsupported project version (written by a newer GTKTerm?)"
 msgstr ""
 "%s : version de projet non prise en charge (écrit par une version plus "
 "récente de GTKTerm ?)"
 
-#: src/project_file.c:262
+#: src/project_file.c:290
 #, c-format
 msgid "%s: the project has no tab"
 msgstr "%s : le projet n'a aucun onglet"
@@ -797,74 +828,100 @@ msgstr "Aucune donnée reçue"
 msgid "Port closed"
 msgstr "Port fermé"
 
-#: src/ui/app.c:524
+#: src/ui/app.c:543
 msgid "Close this tab?"
 msgstr "Fermer cet onglet ?"
 
-#: src/ui/app.c:524
+#: src/ui/app.c:543
 msgid "A script is running or a file is being sent in this tab."
 msgstr "Un script tourne ou un fichier est en cours d'envoi dans cet onglet."
 
-#: src/ui/app.c:524 src/ui/menus.ui:152 src/ui/tab_label.c:74
+#: src/ui/app.c:543 src/ui/menus.ui:152 src/ui/tab_label.c:74
 #: src/ui/tab_label.c:75
 msgid "Close tab"
 msgstr "Fermer l'onglet"
 
-#: src/ui/app.c:776 src/ui/app.c:953
+#: src/ui/app.c:579
+#, c-format
+msgid ""
+"Cannot read the macros template %s: %s. The copy saved in the project is "
+"used."
+msgstr ""
+"Impossible de lire le modèle de macros %s : %s. La copie enregistrée dans le "
+"projet est utilisée."
+
+#: src/ui/app.c:582
+#, c-format
+msgid "Macros template %s updated: %u project value no longer applies"
+msgid_plural "Macros template %s updated: %u project values no longer apply"
+msgstr[0] ""
+"Modèle de macros %s mis à jour : %u valeur du projet ne s'applique plus"
+msgstr[1] ""
+"Modèle de macros %s mis à jour : %u valeurs du projet ne s'appliquent plus"
+
+#: src/ui/app.c:585
+#, c-format
+msgid "Macros template %s updated"
+msgstr "Modèle de macros %s mis à jour"
+
+#: src/ui/app.c:840 src/ui/app.c:1017
 msgid "Close all tabs?"
 msgstr "Fermer tous les onglets ?"
 
-#: src/ui/app.c:776 src/ui/app.c:953
+#: src/ui/app.c:840 src/ui/app.c:1017
 msgid "A script is running or a file is being sent."
 msgstr "Un script tourne ou un fichier est en cours d'envoi."
 
-#: src/ui/app.c:776 src/ui/app.c:953
+#: src/ui/app.c:840 src/ui/app.c:1017
 msgid "Close tabs"
 msgstr "Fermer les onglets"
 
-#: src/ui/app.c:836
+#: src/ui/app.c:900
 msgid "A project file with this name already exists. Replace it?"
 msgstr "Un fichier projet de ce nom existe déjà. Le remplacer ?"
 
-#: src/ui/app.c:836
+#: src/ui/app.c:900
 msgid "Replace"
 msgstr "Remplacer"
 
-#: src/ui/app.c:869 src/ui/menus.ui:19
+#: src/ui/app.c:933 src/ui/menus.ui:19
 msgid "Save project"
 msgstr "Enregistrer le projet"
 
-#: src/ui/app.c:877 src/ui/macros_save.c:55 src/ui/profile_dialogs.c:209
+#: src/ui/app.c:941 src/ui/macro_editor.c:575 src/ui/macros_save.c:55
+#: src/ui/profile_dialogs.c:209
 msgid "Overwrite"
 msgstr "Écraser"
 
-#: src/ui/app.c:877 src/ui/macros_save.c:55
+#: src/ui/app.c:941 src/ui/macro_editor.c:575 src/ui/macros_save.c:55
 msgid "Reload"
 msgstr "Recharger"
 
-#: src/ui/app.c:877 src/ui/app.c:908 src/ui/macro_editor.c:1229
-#: src/ui/macros_save.c:55
+#: src/ui/app.c:941 src/ui/app.c:972 src/ui/macro_editor.c:575
+#: src/ui/macro_editor.c:587 src/ui/macro_editor.c:595
+#: src/ui/macro_editor.c:1434 src/ui/macros_save.c:55
+#: src/ui/profile_dialogs.c:443
 msgid "Cancel"
 msgstr "Annuler"
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
-#: src/ui/app.c:880
+#: src/ui/app.c:944
 msgid "The project file changed on disk."
 msgstr "Le fichier du projet a changé sur le disque."
 
-#: src/ui/app.c:908 src/ui/script_panel.c:951
+#: src/ui/app.c:972 src/ui/script_panel.c:951
 msgid "Save"
 msgstr "Enregistrer"
 
-#: src/ui/app.c:908
+#: src/ui/app.c:972
 msgid "Don't save"
 msgstr "Ne pas enregistrer"
 
-#: src/ui/app.c:911
+#: src/ui/app.c:975
 msgid "Save changes to the project?"
 msgstr "Enregistrer les modifications du projet ?"
 
-#: src/ui/app.c:1129
+#: src/ui/app.c:1193
 #, c-format
 msgid ""
 "Cannot open the project: %s\n"
@@ -873,20 +930,20 @@ msgstr ""
 "Impossible d'ouvrir le projet : %s\n"
 "Il ne sera plus rouvert au démarrage."
 
-#: src/ui/app.c:1132
+#: src/ui/app.c:1196
 #, c-format
 msgid "Cannot open the project: %s"
 msgstr "Impossible d'ouvrir le projet : %s"
 
-#: src/ui/app.c:1239
+#: src/ui/app.c:1303
 msgid "GTKTerm projects"
 msgstr "Projets GTKTerm"
 
-#: src/ui/app.c:1244 src/ui/script_panel.c:464
+#: src/ui/app.c:1308 src/ui/script_panel.c:464
 msgid "All files"
 msgstr "Tous les fichiers"
 
-#: src/ui/app.c:1248
+#: src/ui/app.c:1312
 msgid "Open project"
 msgstr "Ouvrir un projet"
 
@@ -959,7 +1016,7 @@ msgstr "Octet hexadécimal « %s » non valide, rien n'a été envoyé"
 msgid "%d byte(s) sent!"
 msgstr "%d octet(s) envoyé(s) !"
 
-#: src/ui/macro_editor.c:60
+#: src/ui/macro_editor.c:71
 msgid ""
 "Action: the data sent on the port. Plain text, plus the escapes \\r "
 "(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
@@ -1000,12 +1057,12 @@ msgstr ""
 "Arguments : chaque spécificateur obtient un champ dans le panneau des "
 "macros ; la valeur saisie sert à l'envoi mais n'est jamais enregistrée ; les "
 "valeurs par défaut, les limites et les jeux de caractères se règlent dans la "
-"table des arguments, sous la liste. %d %i (entier), %u %o %x %X "
-"(non signé), %f %e %g %a (nombre décimal), %c (caractère), %s (texte), avec "
-"des options facultatives de drapeaux, largeur, précision et longueur (par "
-"ex. %02X, %.3f, %ld) ; %% envoie un signe pourcent. %#Nom prend une valeur "
-"dans la liste « Nom » de la page Listes ; une macro dont le seul argument "
-"est une liste de deux valeurs exactement affiche deux boutons.\n"
+"table des arguments, sous la liste. %d %i (entier), %u %o %x %X (non signé), "
+"%f %e %g %a (nombre décimal), %c (caractère), %s (texte), avec des options "
+"facultatives de drapeaux, largeur, précision et longueur (par ex. %02X, "
+"%.3f, %ld) ; %% envoie un signe pourcent. %#Nom prend une valeur dans la "
+"liste « Nom » de la page Listes ; une macro dont le seul argument est une "
+"liste de deux valeurs exactement affiche deux boutons.\n"
 "\n"
 "Séparateurs : l'action %& trace une ligne dans le panneau, [Titre] %& une "
 "ligne avec un titre.\n"
@@ -1028,25 +1085,25 @@ msgstr ""
 "Exemples : « Hello\\n » envoie Hello et un saut de ligne ; « Hello\\x0A » "
 "fait de même ; « SPEED %d\\r » demande un nombre."
 
-#: src/ui/macro_editor.c:195 src/ui/macro_panel.c:308 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:207 src/ui/macro_panel.c:308 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr "Aucun"
 
-#: src/ui/macro_editor.c:364
+#: src/ui/macro_editor.c:376
 msgid "Select a macro first."
 msgstr "Sélectionnez d'abord une macro."
 
-#: src/ui/macro_editor.c:370
+#: src/ui/macro_editor.c:382
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr "Appuyez sur le nouveau raccourci de « %s » (Échap annule)."
 
-#: src/ui/macro_editor.c:394
+#: src/ui/macro_editor.c:406
 msgid "(no label)"
 msgstr "(sans libellé)"
 
-#: src/ui/macro_editor.c:400
+#: src/ui/macro_editor.c:412
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
@@ -1055,7 +1112,7 @@ msgstr ""
 "%s est déjà utilisé par la commande d'application « %s ». Appuyez sur "
 "d'autres touches, ou sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:402
+#: src/ui/macro_editor.c:414
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
@@ -1064,7 +1121,7 @@ msgstr ""
 "%s est déjà utilisé par la macro « %s ». Appuyez sur d'autres touches, ou "
 "sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:426
+#: src/ui/macro_editor.c:438
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
@@ -1072,156 +1129,204 @@ msgstr ""
 "Un raccourci exige Ctrl, Alt ou Super, sauf s'il s'agit d'une touche de "
 "fonction (F1 à F35). Appuyez sur d'autres touches, ou sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:844
+#. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail d'un autre
+#: src/ui/macro_editor.c:578
+msgid "The macros template changed on disk."
+msgstr "Le modèle de macros a changé sur le disque."
+
+#: src/ui/macro_editor.c:583
+#, c-format
+msgid "These macros come from the template %s"
+msgstr "Ces macros viennent du modèle %s"
+
+#: src/ui/macro_editor.c:587
+msgid "Keep in this project"
+msgstr "Garder dans ce projet"
+
+#: src/ui/macro_editor.c:587 src/ui/macro_editor.c:595
+msgid "Save to template"
+msgstr "Enregistrer dans le modèle"
+
+#: src/ui/macro_editor.c:590
+msgid ""
+"Keep the new default values in this project only, or save them to the "
+"template, for every project that uses it?"
+msgstr ""
+"Garder les nouvelles valeurs par défaut dans ce projet seulement, ou les "
+"enregistrer dans le modèle, pour tous les projets qui l'utilisent ?"
+
+#: src/ui/macro_editor.c:595
+msgid "Detach and keep a copy"
+msgstr "Détacher et garder une copie"
+
+#: src/ui/macro_editor.c:598
+msgid ""
+"These changes can only be saved to the template (every project that uses "
+"it), or the tab can be detached from the template and keep its own copy."
+msgstr ""
+"Ces modifications ne peuvent être enregistrées que dans le modèle (tous les "
+"projets qui l'utilisent), ou l'onglet peut être détaché du modèle et garder "
+"sa propre copie."
+
+#: src/ui/macro_editor.c:732
+#, c-format
+msgid "Template: %s"
+msgstr "Modèle : %s"
+
+#: src/ui/macro_editor.c:1039
 #, c-format
 msgid "%u byte"
 msgid_plural "%u bytes"
 msgstr[0] "%u octet"
 msgstr[1] "%u octets"
 
-#: src/ui/macro_editor.c:922
+#: src/ui/macro_editor.c:1117
 msgid "UTF-8"
 msgstr "UTF-8"
 
-#: src/ui/macro_editor.c:922
+#: src/ui/macro_editor.c:1117
 msgid "Printable ASCII"
 msgstr "ASCII imprimable"
 
-#: src/ui/macro_editor.c:922 src/ui/menus.ui:87
+#: src/ui/macro_editor.c:1117 src/ui/menus.ui:87
 msgid "ASCII"
 msgstr "ASCII"
 
-#: src/ui/macro_editor.c:922
+#: src/ui/macro_editor.c:1117
 msgid "8 bits (Latin-1)"
 msgstr "8 bits (Latin-1)"
 
-#: src/ui/macro_editor.c:922
+#: src/ui/macro_editor.c:1117
 msgid "Custom class"
 msgstr "Classe personnalisée"
 
-#: src/ui/macro_editor.c:959
+#: src/ui/macro_editor.c:1154
 msgid "#"
 msgstr "#"
 
-#: src/ui/macro_editor.c:959
+#: src/ui/macro_editor.c:1154
 msgid "Format"
 msgstr "Format"
 
-#: src/ui/macro_editor.c:959
 #
+#: src/ui/macro_editor.c:1154
 msgid "Type"
 msgstr "Type"
 
-#: src/ui/macro_editor.c:959
 #
+#: src/ui/macro_editor.c:1154
 msgid "Default"
 msgstr "Défaut"
 
-#: src/ui/macro_editor.c:959
+#: src/ui/macro_editor.c:1154
 msgid "Min"
 msgstr "Min"
 
-#: src/ui/macro_editor.c:959
+#: src/ui/macro_editor.c:1154
 msgid "Max"
 msgstr "Max"
 
-#: src/ui/macro_editor.c:959
+#: src/ui/macro_editor.c:1154
 msgid "Charset"
 msgstr "Jeu de caractères"
 
-#: src/ui/macro_editor.c:1004
+#: src/ui/macro_editor.c:1199
 msgid "text (bytes)"
 msgstr "texte (octets)"
 
-#: src/ui/macro_editor.c:1062
 #
+#: src/ui/macro_editor.c:1257
 msgid "Arguments"
 msgstr "Arguments"
 
-#: src/ui/macro_editor.c:1082
 #
+#: src/ui/macro_editor.c:1277
 msgid "Line sent (default values):"
 msgstr "Ligne envoyée (valeurs par défaut) :"
 
-#: src/ui/macro_editor.c:1126
+#: src/ui/macro_editor.c:1321
 msgid "Label"
 msgstr "Libellé"
 
-#: src/ui/macro_editor.c:1127
+#: src/ui/macro_editor.c:1322
 msgid "Shortcut"
 msgstr "Raccourci"
 
-#: src/ui/macro_editor.c:1128
+#: src/ui/macro_editor.c:1323
 msgid "Action"
 msgstr "Action"
 
-#: src/ui/macro_editor.c:1129
+#: src/ui/macro_editor.c:1324
 msgid "Tab"
 msgstr "Onglet"
 
-#: src/ui/macro_editor.c:1130
+#: src/ui/macro_editor.c:1325
 msgid "_Add"
 msgstr "_Ajouter"
 
-#: src/ui/macro_editor.c:1131 src/ui/profile_dialogs.c:344
+#: src/ui/macro_editor.c:1326 src/ui/profile_dialogs.c:344
 msgid "_Delete"
 msgstr "_Supprimer"
 
-#: src/ui/macro_editor.c:1132
+#: src/ui/macro_editor.c:1327
 msgid "_Capture Shortcut"
 msgstr "_Capturer le raccourci"
 
-#: src/ui/macro_editor.c:1133
+#: src/ui/macro_editor.c:1328
 msgid "Delete Shortcut"
 msgstr "Supprimer le raccourci"
 
-#: src/ui/macro_editor.c:1134 src/ui/macro_editor.c:1146
+#: src/ui/macro_editor.c:1329 src/ui/macro_editor.c:1341
 msgid "Move _Up"
 msgstr "_Monter"
 
-#: src/ui/macro_editor.c:1135 src/ui/macro_editor.c:1147
+#: src/ui/macro_editor.c:1330 src/ui/macro_editor.c:1342
 msgid "Move _Down"
 msgstr "_Descendre"
 
-#: src/ui/macro_editor.c:1141
+#: src/ui/macro_editor.c:1336
 msgid "List"
 msgstr "Liste"
 
-#: src/ui/macro_editor.c:1142
+#: src/ui/macro_editor.c:1337
 msgid "Display"
 msgstr "Affichage"
 
-#: src/ui/macro_editor.c:1143
+#: src/ui/macro_editor.c:1338
 msgid "Value"
 msgstr "Valeur"
 
-#: src/ui/macro_editor.c:1144
+#: src/ui/macro_editor.c:1339
 msgid "_Add Entry"
 msgstr "_Ajouter une entrée"
 
-#: src/ui/macro_editor.c:1145
+#: src/ui/macro_editor.c:1340
 msgid "_Delete Entry"
 msgstr "_Supprimer l'entrée"
 
 #. Titre au nom court de l'onglet (fixé à l'ouverture)
-#: src/ui/macro_editor.c:1192
+#: src/ui/macro_editor.c:1387
 #, c-format
 msgid "Configure Macros — %s"
 msgstr "Configurer les macros — %s"
 
-#: src/ui/macro_editor.c:1216 src/ui/menus.ui:229
+#: src/ui/macro_editor.c:1412 src/ui/menus.ui:229
 msgid "Macros"
 msgstr "Macros"
 
-#: src/ui/macro_editor.c:1217
+#: src/ui/macro_editor.c:1413
 msgid "Lists"
 msgstr "Listes"
 
-#: src/ui/macro_editor.c:1228 src/ui/menus.ui:267
+#: src/ui/macro_editor.c:1426
+msgid "Macros template"
+msgstr "Modèle de macros"
+
+#: src/ui/macro_editor.c:1433 src/ui/menus.ui:271
 msgid "Help"
 msgstr "Aide"
 
-#: src/ui/macro_editor.c:1230
+#: src/ui/macro_editor.c:1435
 msgid "OK"
 msgstr "OK"
 
@@ -1312,19 +1417,19 @@ msgstr "Quitter"
 msgid "Edit"
 msgstr "Édition"
 
-#: src/ui/menus.ui:56 src/ui/menus.ui:283
+#: src/ui/menus.ui:56 src/ui/menus.ui:287
 msgid "Copy"
 msgstr "Copier"
 
-#: src/ui/menus.ui:60 src/ui/menus.ui:287
+#: src/ui/menus.ui:60 src/ui/menus.ui:291
 msgid "Paste"
 msgstr "Coller"
 
-#: src/ui/menus.ui:64 src/ui/menus.ui:297
+#: src/ui/menus.ui:64 src/ui/menus.ui:301
 msgid "Select All"
 msgstr "Tout sélectionner"
 
-#: src/ui/menus.ui:68 src/ui/menus.ui:291
+#: src/ui/menus.ui:68 src/ui/menus.ui:295
 msgid "Find"
 msgstr "Rechercher"
 
@@ -1444,31 +1549,35 @@ msgstr "Charger un fichier de macros…"
 msgid "Save macros file…"
 msgstr "Enregistrer le fichier de macros…"
 
-#: src/ui/menus.ui:246
+#: src/ui/menus.ui:244
+msgid "Detach from template"
+msgstr "Détacher du modèle"
+
+#: src/ui/menus.ui:250
 msgid "Log"
 msgstr "Journal"
 
-#: src/ui/menus.ui:249
+#: src/ui/menus.ui:253
 msgid "To file..."
 msgstr "Dans un fichier…"
 
-#: src/ui/menus.ui:253
+#: src/ui/menus.ui:257
 msgid "Pause"
 msgstr "Pause"
 
-#: src/ui/menus.ui:257 src/ui/script_panel.c:954
+#: src/ui/menus.ui:261 src/ui/script_panel.c:954
 msgid "Stop"
 msgstr "Arrêter"
 
-#: src/ui/menus.ui:261
+#: src/ui/menus.ui:265
 msgid "Clear"
 msgstr "Vider"
 
-#: src/ui/menus.ui:270
+#: src/ui/menus.ui:274
 msgid "Check for updates…"
 msgstr "Rechercher des mises à jour…"
 
-#: src/ui/menus.ui:274
+#: src/ui/menus.ui:278
 msgid "About"
 msgstr "À propos"
 
@@ -1667,11 +1776,24 @@ msgstr "Supprimer une configuration"
 msgid "Configuration _name:"
 msgstr "_Nom de la configuration :"
 
-#: src/ui/profile_dialogs.c:462
+#. Onglet de projet : copier le fichier dans le projet ou le lier comme modèle (question non bloquante, aucun destructeur)
+#: src/ui/profile_dialogs.c:443
+msgid "Copy into the project"
+msgstr "Copier dans le projet"
+
+#: src/ui/profile_dialogs.c:443
+msgid "Link as template"
+msgstr "Lier comme modèle"
+
+#: src/ui/profile_dialogs.c:449
+msgid "Use this macros file in the project"
+msgstr "Utiliser ce fichier de macros dans le projet"
+
+#: src/ui/profile_dialogs.c:505
 msgid "Load macros file"
 msgstr "Charger un fichier de macros"
 
-#: src/ui/profile_dialogs.c:474
+#: src/ui/profile_dialogs.c:517
 msgid "Save macros file"
 msgstr "Enregistrer le fichier de macros"
 
