@@ -120,6 +120,24 @@ GtkWidget *gt_app_get_active_view(void)
 	return gt_app.main_window != NULL ? gt_main_window_get_active_view(gt_app.main_window) : NULL;
 }
 
+/* Après un « Save to template » réussi (spec modèles §2.8) : chaque autre session de la fenêtre liée au même modèle le relit (échec : avertissement) */
+void gt_app_refresh_template_siblings(GtSession *s)
+{
+	GtMacros *m = s != NULL ? gt_session_get_macros(s) : NULL;
+	const gchar *path = m != NULL ? gt_macros_get_template(m) : NULL;
+
+	if(path == NULL || gt_app.sessions == NULL)
+		return;
+	for(guint i = 0; i < gt_session_manager_get_n(gt_app.sessions); i++)
+	{
+		GtSession *other = gt_session_manager_get_nth(gt_app.sessions, i);
+		GtMacros *om = other != s && !gt_session_is_shut_down(other) ? gt_session_get_macros(other) : NULL;
+
+		if(om != NULL && g_strcmp0(gt_macros_get_template(om), path) == 0)
+			gt_macros_refresh_template(om, FALSE);
+	}
+}
+
 void gt_app_foreach_view(GFunc func, gpointer user_data)
 {
 	GtkNotebook *nb;
