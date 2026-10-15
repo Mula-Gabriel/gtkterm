@@ -722,15 +722,17 @@ def _gk_list(items):
 
 
 def write_macros_v2(path, macros, lists=None):
-    """Fichier de macros v2 (macro_file.c). macros : dicts (label, shortcut, action, tab, args [liste], polling, period) ;
+    """Fichier de macros v2 (macro_file.c). macros : dicts (label, shortcut, action, tab, args, arg_min, arg_max, arg_charset [listes],
+    polling, period) ;
     lists : [(nom, [(affichage, valeur), ...])]."""
     out = ['[gtkterm-macros]', 'version=2', '']
     for i, m in enumerate(macros):
         out.append('[macro:%d]' % (i + 1))
         for k in ('label', 'shortcut', 'action', 'tab'):
             out.append('%s=%s' % (k, _gk(m.get(k, ''))))
-        if m.get('args') is not None:
-            out.append('args=%s' % _gk_list(m['args']))
+        for k in ('args', 'arg_min', 'arg_max', 'arg_charset'):
+            if m.get(k) is not None:
+                out.append('%s=%s' % (k, _gk_list(m[k])))
         out.append('polling=%s' % ('true' if m.get('polling') else 'false'))
         out.append('polling_period_ms=%d' % m.get('period', 1000))
         out.append('')
