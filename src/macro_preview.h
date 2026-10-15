@@ -12,7 +12,8 @@ typedef enum
 {
 	GT_PREVIEW_TEXT,
 	GT_PREVIEW_ARG,
-	GT_PREVIEW_SPECIAL
+	GT_PREVIEW_SPECIAL,
+	GT_PREVIEW_OMITTED	/* argument facultatif omis : texte « ∅ », arg = rang */
 } GtPreviewKind;
 
 typedef struct
@@ -25,7 +26,7 @@ typedef struct
 /* Runs (GtPreviewRun *, libérés avec le tableau) des octets data[0..len[ découpés par segments (GtMacroSegment, nullable : tout est
  * texte). Octets 0x20–0x7E et séquences UTF-8 valides tels quels ; contrôles nommés NUL BEL BS TAB LF VT FF CR ESC DEL, autres octets
  * \xHH. Segment ESCAPE : runs SPECIAL ; dans TEXT, un nom ou \xHH est SPECIAL ; dans ARG, tout reste ARG. Dans un run, un nom ou un \xHH
- * est séparé de ses voisins par une espace (« CR LF »). Runs voisins de même sorte et même argument fusionnés. */
+ * est séparé de ses voisins par une espace (« CR LF »). Segment OMITTED : un run OMITTED « ∅ » (jamais fusionné). Runs voisins de même sorte et même argument fusionnés. */
 GPtrArray *gt_macro_preview_runs(const guint8 *data, gsize len, const GArray *segments);
 /* « 50 57 4D » (hexa majuscule) ; au-delà de max octets, les max premiers puis « … ». À libérer avec g_free. */
 gchar     *gt_macro_preview_hex(const guint8 *data, gsize len, gsize max);

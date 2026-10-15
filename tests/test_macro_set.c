@@ -1058,6 +1058,52 @@ static void test_facultatif_verification(void)
 	gt_macro_set_free(set);
 }
 
+static void test_facultatif_expansion(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	GtMacroLists *lists = gt_macro_lists_new();
+	guint id;
+	const gchar *opt[] = { "", "1", "1", NULL }, *pre[] = { "", " -p=\\r", " -m=", NULL };
+	const gchar *vide[] = { "srv", "", "", NULL }, *plein[] = { "srv", "x%y", "fast", NULL }, *court[] = { "srv", NULL };
+	GBytes *b;
+	GArray *segs = NULL;
+
+	gt_macro_lists_add(lists, "Mode", "Fast", "fast");
+	gt_macro_lists_add(lists, "Mode", "(none)", "");
+	gt_macro_set_take_lists(set, lists);
+	id = gt_macro_set_append(set, "c", "", "connect %s%s%#Mode;", "");
+	g_assert_true(gt_macro_set_set_optional(set, id, opt, pre, 3));
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), vide, 3);
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "connect srv;", 12);
+	g_bytes_unref(b);
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), plein, 3);	/* préfixe : échappement traité ; valeur : % littéral */
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "connect srv -p=\rx%y -m=fast;", 28);
+	g_bytes_unref(b);
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), court, 1);	/* arguments manquants facultatifs : omis, jamais « %s » littéral */
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "connect srv;", 12);
+	g_bytes_unref(b);
+	b = gt_macro_expand_segments(set, gt_macro_set_find(set, id), vide, 3, &segs);
+	{
+		guint omis = 0;
+
+		for(guint k = 0; k < segs->len; k++)
+		{
+			const GtMacroSegment *s = &g_array_index(segs, GtMacroSegment, k);
+
+			if(s->kind == GT_MACRO_SEG_OMITTED)
+			{
+				g_assert_cmpuint(s->len, ==, 0);
+				g_assert_cmpuint(s->start, ==, 11);	/* avant « ; » */
+				omis++;
+			}
+		}
+		g_assert_cmpuint(omis, ==, 2);
+	}
+	g_array_unref(segs);
+	g_bytes_unref(b);
+	gt_macro_set_free(set);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1087,5 +1133,6 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/regroupe-onglets", test_regroupe_onglets);
 	g_test_add_func("/macro_set/facultatif-modele", test_facultatif_modele);
 	g_test_add_func("/macro_set/facultatif-verification", test_facultatif_verification);
+	g_test_add_func("/macro_set/facultatif-expansion", test_facultatif_expansion);
 	return g_test_run();
 }

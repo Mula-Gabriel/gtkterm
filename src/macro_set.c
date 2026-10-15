@@ -733,18 +733,41 @@ segment_kind(const GtMacroRange *origin, const GArray *arg_ranges, gint *arg_out
 	return origin->len > 1 ? GT_MACRO_SEG_ESCAPE : GT_MACRO_SEG_TEXT;
 }
 
+/* Ajoute les segments OMITTED des arguments facultatifs de plage vide (un argument obligatoire vide n'est pas « omis ») commençant au plus tard au caractère upto_char, pas encore émis. */
+static void
+emit_omitted(GArray *segs, const GArray *arg_ranges, gchar **optional, gboolean *done, guint upto_char, guint byte_pos)
+{
+	for(guint k = 0; k < arg_ranges->len; k++)
+	{
+		const GtMacroRange *r = &g_array_index(arg_ranges, GtMacroRange, k);
+
+		if(!done[k] && r->len == 0 && optional != NULL && g_strcmp0(optional[k], "1") == 0 && r->start <= upto_char)
+		{
+			GtMacroSegment seg = { GT_MACRO_SEG_OMITTED, (gint)k, byte_pos, 0 };
+
+			g_array_append_val(segs, seg);
+			done[k] = TRUE;
+		}
+	}
+}
+
 static GArray *
-build_segments(const GArray *origins, const GArray *arg_ranges)
+build_segments(const GArray *origins, const GArray *arg_ranges, gchar **optional)
 {
 	GArray *segs = g_array_new(FALSE, FALSE, sizeof(GtMacroSegment));
+	gboolean *done = g_new0(gboolean, arg_ranges->len + 1);
 
 	for(guint b = 0; b < origins->len; b++)
 	{
 		gint arg;
-		GtMacroSegKind kind = segment_kind(&g_array_index(origins, GtMacroRange, b), arg_ranges, &arg);
-		GtMacroSegment *last = segs->len > 0 ? &g_array_index(segs, GtMacroSegment, segs->len - 1) : NULL;
+		GtMacroSegKind kind;
+		GtMacroSegment *last;
 
-		if(last != NULL && last->kind == kind && last->arg == arg)
+		emit_omitted(segs, arg_ranges, optional, done, g_array_index(origins, GtMacroRange, b).start, b);
+		kind = segment_kind(&g_array_index(origins, GtMacroRange, b), arg_ranges, &arg);
+		last = segs->len > 0 ? &g_array_index(segs, GtMacroSegment, segs->len - 1) : NULL;
+
+		if(last != NULL && last->kind != GT_MACRO_SEG_OMITTED && last->kind == kind && last->arg == arg)
 			last->len++;
 		else
 		{
@@ -753,6 +776,8 @@ build_segments(const GArray *origins, const GArray *arg_ranges)
 			g_array_append_val(segs, seg);
 		}
 	}
+	emit_omitted(segs, arg_ranges, optional, done, G_MAXUINT, origins->len);
+	g_free(done);
 	return segs;
 }
 
@@ -785,11 +810,12 @@ gt_macro_expand_segments(const GtMacroSet *set, const GtMacro *macro, const gcha
 		arg_ranges = g_array_new(FALSE, FALSE, sizeof(GtMacroRange));
 		origins = g_array_new(FALSE, FALSE, sizeof(GtMacroRange));
 	}
-	formatted = format_action_traced(gt_macro_set_get_lists(set), macro->action, (const gchar **)use, n, charsets, arg_ranges);
+	formatted = format_action_traced(gt_macro_set_get_lists(set), macro->action, (const gchar **)use, n, charsets,
+	                              (const gchar *const *)macro->arg_optional, (const gchar *const *)macro->arg_prefix, arg_ranges);
 	bytes = parse_macro_string_traced(formatted, origins);
 	if(segments_out != NULL)
 	{
-		*segments_out = build_segments(origins, arg_ranges);
+		*segments_out = build_segments(origins, arg_ranges, macro->arg_optional);
 		g_array_unref(origins);
 		g_array_unref(arg_ranges);
 	}

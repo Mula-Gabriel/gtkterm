@@ -328,7 +328,7 @@ test_format_trace(void)
 {
 	GArray *plages = g_array_new(FALSE, FALSE, sizeof(GtMacroRange));
 	const gchar *args[] = { "5", "a\\b" };
-	gchar *texte = format_action_traced(listes, "[v] %d:%5s|%d", args, 2, NULL, plages);
+	gchar *texte = format_action_traced(listes, "[v] %d:%5s|%d", args, 2, NULL, NULL, NULL, plages);
 
 	g_assert_cmpstr(texte, ==, "5:  a\\\\b|%d");
 	g_assert_cmpuint(plages->len, ==, 2);
@@ -343,7 +343,7 @@ test_format_trace(void)
 	{
 		const gchar *a2[] = { "S" };
 
-		texte = format_action_traced(listes, "%%%#Mode", a2, 1, NULL, plages);
+		texte = format_action_traced(listes, "%%%#Mode", a2, 1, NULL, NULL, NULL, plages);
 		g_assert_cmpstr(texte, ==, "%S");
 		g_assert_cmpuint(plages->len, ==, 1);
 		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).start, ==, 1);
@@ -357,7 +357,7 @@ test_format_trace(void)
 		const gchar *a3[] = { "\xc3\xa9\\", "\xc3\xa9" };
 		const gchar *jeux[] = { "latin1", "latin1" };
 
-		texte = format_action_traced(listes, "%s%d", a3, 2, jeux, plages);
+		texte = format_action_traced(listes, "%s%d", a3, 2, jeux, NULL, NULL, plages);
 		g_assert_cmpstr(texte, ==, "\xe9\\\\0");
 		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).len, ==, 3);
 		g_free(texte);
@@ -367,8 +367,27 @@ test_format_trace(void)
 		const gchar *a4[] = { "\xe2\x82\xac" };
 		const gchar *jeux[] = { "latin1" };
 
-		texte = format_action_traced(listes, "%s", a4, 1, jeux, NULL);
+		texte = format_action_traced(listes, "%s", a4, 1, jeux, NULL, NULL, NULL);
 		g_assert_cmpstr(texte, ==, "\xe2\x82\xac");
+		g_free(texte);
+	}
+	/* Argument facultatif : vide → omis (plage vide au rang 1) ; sinon préfixe brut puis valeur */
+	g_array_set_size(plages, 0);
+	{
+		const gchar *vide[] = { "" }, *plein[] = { "v" };
+		const gchar *const opt[] = { "1", NULL }, *const pre[] = { "100%%", NULL };
+
+		texte = format_action_traced(NULL, "a%sb", vide, 1, NULL, opt, pre, plages);
+		g_assert_cmpstr(texte, ==, "ab");
+		g_assert_cmpuint(plages->len, ==, 1);
+		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).start, ==, 1);
+		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).len, ==, 0);
+		g_free(texte);
+		g_array_set_size(plages, 0);
+		texte = format_action_traced(NULL, "a%sb", plein, 1, NULL, opt, pre, plages);
+		g_assert_cmpstr(texte, ==, "a100%%vb");
+		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).start, ==, 1);
+		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).len, ==, 6);
 		g_free(texte);
 	}
 	g_array_unref(plages);

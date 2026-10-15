@@ -26,8 +26,8 @@ runs_texte(const gchar *data, gsize len, const GtMacroSegment *segs, guint n_seg
 
 		if(i > 0)
 			g_string_append_c(s, '|');
-		g_string_append_c(s, "TAS"[r->kind]);
-		if(r->kind == GT_PREVIEW_ARG)
+		g_string_append_c(s, "TASO"[r->kind]);
+		if(r->kind == GT_PREVIEW_ARG || r->kind == GT_PREVIEW_OMITTED)
 			g_string_append_printf(s, "%d", r->arg);
 		else
 			g_assert_cmpint(r->arg, ==, -1);
@@ -126,11 +126,23 @@ test_hexa(void)
 	g_free(t);
 }
 
+/* Segment omis : run OMITTED « ∅ » (rang de l'argument) entre deux runs de texte */
+static void
+test_omis(void)
+{
+	const GtMacroSegment segs[] = { { GT_MACRO_SEG_TEXT, -1, 0, 2 }, { GT_MACRO_SEG_OMITTED, 1, 2, 0 }, { GT_MACRO_SEG_TEXT, -1, 2, 1 } };
+	gchar *t = runs_texte("ab;", 3, segs, 3);
+
+	g_assert_cmpstr(t, ==, "T=ab|O1=\xe2\x88\x85|T=;");
+	g_free(t);
+}
+
 int
 main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
 	g_test_add_func("/macro_preview/runs", test_runs);
 	g_test_add_func("/macro_preview/hexa", test_hexa);
+	g_test_add_func("/macro_preview/omis", test_omis);
 	return g_test_run();
 }

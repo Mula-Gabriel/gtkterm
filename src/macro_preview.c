@@ -130,6 +130,19 @@ gt_macro_preview_runs(const guint8 *data, gsize len, const GArray *segments)
 	{
 		const GtMacroSegment *seg = &g_array_index(segments, GtMacroSegment, k);
 		gsize start = MIN((gsize)seg->start, len);
+
+		if(seg->kind == GT_MACRO_SEG_OMITTED)
+		{
+			GtPreviewRun *run = g_new0(GtPreviewRun, 1);
+
+			run->kind = GT_PREVIEW_OMITTED;
+			run->arg = seg->arg;
+			run->text = g_strdup("\xe2\x88\x85");
+			g_ptr_array_add(runs, run);
+			last_named = FALSE;
+			continue;
+		}
+
 		gsize end = MIN((gsize)seg->start + seg->len, len);
 
 		add_segment(runs, &last_named, data, start, end, seg->kind, seg->kind == GT_MACRO_SEG_ARG ? seg->arg : -1);

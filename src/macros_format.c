@@ -596,9 +596,27 @@ clamp_ranges (GArray *arg_ranges, gsize text_len)
     }
 }
 
+/* Argument facultatif (spec 2026-10-15-nom-projet §5.2) : vide ou non fourni, rien n'est rendu (plage vide notée) ; sinon le préfixe, brut,
+   précède la valeur (ses échappements seront traités par parse_macro_string). TRUE si l'argument est omis. */
+static gboolean
+optional_omitted (const gchar *const *optional, gint arg_idx, const gchar **args, gint n_args)
+{
+  if (!optional || g_strcmp0 (optional[arg_idx], "1") != 0)
+    return FALSE;
+  return arg_idx >= n_args || !args[arg_idx] || !args[arg_idx][0];
+}
+
+static void
+append_prefix (GString *result, const gchar *const *optional, const gchar *const *prefixes, gint arg_idx)
+{
+  if (optional && g_strcmp0 (optional[arg_idx], "1") == 0 && prefixes && prefixes[arg_idx])
+    g_string_append (result, prefixes[arg_idx]);
+}
+
 gchar *
 format_action_traced (const GtMacroLists *lists, const gchar *action, const gchar **args,
-                      gint n_args, const gchar *const *charsets, GArray *arg_ranges)
+                      gint n_args, const gchar *const *charsets, const gchar *const *optional,
+                      const gchar *const *prefixes, GArray *arg_ranges)
 {
   GString *result = g_string_new ("");
   gint arg_idx = 0;
@@ -624,9 +642,18 @@ format_action_traced (const GtMacroLists *lists, const gchar *action, const gcha
         gint list_end;
         if (try_parse_list_spec (lists, action, i, &list_name, &list_end))
           {
+            if (optional_omitted (optional, arg_idx, args, n_args))
+              {
+                note_range (arg_ranges, result->len, result->len);
+                arg_idx++;
+                i = list_end;
+                g_free (list_name);
+                continue;
+              }
             if (arg_idx < n_args)
               {
                 gsize start = result->len;
+                append_prefix (result, optional, prefixes, arg_idx);
                 gchar *escaped = escape_arg_backslashes (args[arg_idx]);
                 g_string_append (result, escaped);
                 g_free (escaped);
@@ -647,9 +674,19 @@ format_action_traced (const GtMacroLists *lists, const gchar *action, const gcha
       if (fmt_type == NULL)
         { g_string_append_c (result, action[i]); continue; }
 
+      if (optional_omitted (optional, arg_idx, args, n_args))
+        {
+          note_range (arg_ranges, result->len, result->len);
+          arg_idx++;
+          g_free (fmt_type);
+          i = spec_end;
+          continue;
+        }
+
       if (arg_idx < n_args)
         {
           gsize start = result->len;
+          append_prefix (result, optional, prefixes, arg_idx);
           gchar *spec = g_strndup (&action[i], spec_end - i + 1);
           const gchar *value = args[arg_idx];
           gchar *encoded = NULL;
@@ -687,5 +724,5 @@ gchar *
 format_action_with_args (const GtMacroLists *lists, const gchar *action, const gchar **args,
                          gint n_args)
 {
-  return format_action_traced (lists, action, args, n_args, NULL, NULL);
+  return format_action_traced (lists, action, args, n_args, NULL, NULL, NULL, NULL);
 }

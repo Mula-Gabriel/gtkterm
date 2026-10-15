@@ -91,7 +91,8 @@ typedef enum
 {
 	GT_MACRO_SEG_TEXT,
 	GT_MACRO_SEG_ESCAPE,
-	GT_MACRO_SEG_ARG
+	GT_MACRO_SEG_ARG,
+	GT_MACRO_SEG_OMITTED	/* longueur 0 : argument facultatif omis, placé avant l'octet qui le suit ; arg = rang */
 } GtMacroSegKind;
 
 typedef struct
