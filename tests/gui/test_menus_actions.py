@@ -134,6 +134,7 @@ ATTENDU = {
     'clear-screen': ('', None), 'open-port': ('', None), 'close-port': ('', None), 'send-break': ('', None), 'toggle-dtr': ('', None),
     'toggle-rts': ('', None), 'clear-scrollback': ('', None), 'copy': ('', None), 'paste': ('', None), 'select-all': ('', None), 'find': ('', None),
     'send-file': ('', None), 'save-raw': ('', None), 'save-ascii': ('', None), 'log-start': ('', None), 'log-stop': ('', None), 'log-clear': ('', None),
+    'detach-macros-template': ('', None),
 }
 for nom, (ptype, stype) in ATTENDU.items():
     en, pt, st = e.describe(nom)

@@ -4,6 +4,7 @@
 #include <glib/gstdio.h>
 #include <string.h>
 
+#include "macro_override.h"
 #include "project_file.h"
 #include "test_util.h"
 
@@ -312,6 +313,161 @@ test_instantane(void)
 	gt_project_data_free(d);
 }
 
+/* Onglet lié à un modèle : base avec une macro « Ping » (PING%d, défaut 5), valeurs propres arg 1 = 7 et polling 500 ms */
+static GtProjectData *
+un_onglet_lie(const gchar *defaut_base)
+{
+	GtProjectData *d = gt_project_data_new();
+	GtProjectTab *t = gt_project_tab_new();
+	const gchar *args[] = { defaut_base, NULL };
+	guint id;
+
+	g_assert_nonnull(t->overrides);
+	g_assert_null(t->macros_template);
+	t->profile.transport = TRANSPORT_SERIAL;
+	gt_profile_set_string(&t->profile.port, "/dev/pts/9");
+	id = gt_macro_set_append(t->macros, "Ping", "", "PING%d\\r", "");
+	gt_macro_set_set_args(t->macros, id, args, 1);
+	gt_macro_set_append(t->macros, "Ping", "", "PONG\\r", "");
+	gt_profile_set_string(&t->macros_template, "/srv/modeles/banc.ini");
+	gt_macro_overrides_set_arg(t->overrides, "Ping", 0, 0, "7");
+	gt_macro_overrides_set_polling(t->overrides, "Ping", 1, TRUE, 500);
+	g_ptr_array_add(d->tabs, t);
+	return d;
+}
+
+static void
+test_lie_aller_retour(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-project-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "p.gtkterm", NULL);
+	GtProjectData *d = un_onglet_lie("5"), *r = NULL;
+	const GtProjectTab *a, *b;
+	const GtMacroOverride *e;
+	gchar *texte = gt_project_data_to_text(d);
+	GError *error = NULL;
+
+	g_assert_nonnull(strstr(texte, "macros_template=/srv/modeles/banc.ini\n"));
+	g_assert_nonnull(strstr(texte, "[tab:0:override:1]\n"));
+	g_assert_nonnull(strstr(texte, "[tab:0:override:2]\n"));
+	/* La base est écrite, pas le jeu effectif */
+	g_assert_nonnull(strstr(texte, "[tab:0:macro:1]\n"));
+	g_free(texte);
+	g_assert_true(gt_project_data_save(d, path, NULL, &error));
+	g_assert_no_error(error);
+	g_assert_true(gt_project_data_load(path, &r, NULL, &error));
+	g_assert_no_error(error);
+	a = g_ptr_array_index(d->tabs, 0);
+	b = g_ptr_array_index(r->tabs, 0);
+	g_assert_cmpstr(b->macros_template, ==, "/srv/modeles/banc.ini");
+	g_assert_cmpuint(gt_macro_set_count(b->macros), ==, 2);
+	for(guint k = 0; k < 2; k++)
+		comparer_macro(gt_macro_set_get(a->macros, k), gt_macro_set_get(b->macros, k));
+	g_assert_cmpuint(gt_macro_overrides_count(b->overrides), ==, 2);
+	e = gt_macro_overrides_get(b->overrides, 0);
+	g_assert_cmpstr(e->label, ==, "Ping");
+	g_assert_cmpuint(e->occurrence, ==, 0);
+	g_assert_cmpuint(e->args->len, ==, 1);
+	g_assert_cmpstr(g_ptr_array_index(e->args, 0), ==, "7");
+	g_assert_false(e->has_polling);
+	e = gt_macro_overrides_get(b->overrides, 1);
+	g_assert_cmpuint(e->occurrence, ==, 1);
+	g_assert_true(e->has_polling);
+	g_assert_true(e->polling);
+	g_assert_cmpuint(e->polling_period_ms, ==, 500);
+	gt_project_data_free(r);
+	gt_project_data_free(d);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+/* Onglet non lié : ni macros_template ni override, écrits ou lus (groupes override d'un onglet non lié ignorés) */
+static void
+test_non_lie_inchange(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-project-XXXXXX", NULL);
+	GtProjectData *d = deux_onglets(), *r = NULL;
+	gchar *texte = gt_project_data_to_text(d), *path;
+	const GtProjectTab *t;
+
+	g_assert_null(strstr(texte, "macros_template"));
+	g_assert_null(strstr(texte, "override"));
+	g_free(texte);
+	texte = gt_project_data_snapshot(d);
+	g_assert_null(strstr(texte, "macros_template"));
+	g_assert_null(strstr(texte, "override"));
+	g_free(texte);
+	path = ecrire_fichier(dir, "[gtkterm-project]\nversion=1\nactive=0\n[tab:0]\ntransport=serial\n[tab:0:override:1]\nlabel=Ping\narg_1=7\n");
+	g_assert_true(gt_project_data_load(path, &r, NULL, NULL));
+	t = g_ptr_array_index(r->tabs, 0);
+	g_assert_null(t->macros_template);
+	g_assert_nonnull(t->overrides);
+	g_assert_cmpuint(gt_macro_overrides_count(t->overrides), ==, 0);
+	gt_project_data_free(r);
+	gt_project_data_free(d);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+/* Instantané d'un onglet lié : chemin et valeurs propres, pas la base */
+static void
+test_lie_instantane(void)
+{
+	GtProjectData *d = un_onglet_lie("5"), *e = un_onglet_lie("9");
+	GtProjectTab *t = g_ptr_array_index(d->tabs, 0);
+	gchar *s1 = gt_project_data_snapshot(d), *s2 = gt_project_data_snapshot(e);
+
+	g_assert_null(strstr(s1, "[tab:0:macro:"));
+	g_assert_null(strstr(s1, "[tab:0:list:"));
+	g_assert_nonnull(strstr(s1, "[tab:0:override:1]\n"));
+	g_assert_nonnull(strstr(s1, "macros_template=/srv/modeles/banc.ini\n"));
+	g_assert_cmpstr(s1, ==, s2);
+	g_free(s2);
+	gt_macro_overrides_set_arg(t->overrides, "Ping", 0, 0, "8");
+	s2 = gt_project_data_snapshot(d);
+	g_assert_cmpstr(s1, !=, s2);
+	g_free(s2);
+	gt_macro_overrides_set_arg(t->overrides, "Ping", 0, 0, "7");
+	gt_profile_set_string(&t->macros_template, "/srv/modeles/autre.ini");
+	s2 = gt_project_data_snapshot(d);
+	g_assert_cmpstr(s1, !=, s2);
+	g_free(s2);
+	g_free(s1);
+	gt_project_data_free(e);
+	gt_project_data_free(d);
+}
+
+/* macros_template vide ou relatif : onglet non lié avec un avertissement, valeurs propres ignorées */
+static void
+test_modele_relatif(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-project-XXXXXX", NULL);
+	const gchar *valeurs[] = { "modeles/banc.ini", "", NULL };
+
+	for(guint i = 0; valeurs[i] != NULL; i++)
+	{
+		gchar *contenu = g_strdup_printf("[gtkterm-project]\nversion=1\nactive=0\n[tab:0]\ntransport=serial\nmacros_template=%s\n"
+			"[tab:0:override:1]\nlabel=Ping\narg_1=7\n", valeurs[i]);
+		gchar *path = ecrire_fichier(dir, contenu);
+		GtProjectData *r = NULL;
+		const GtProjectTab *t;
+
+		g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*macros_template must be an absolute path*");
+		g_assert_true(gt_project_data_load(path, &r, NULL, NULL));
+		g_test_assert_expected_messages();
+		t = g_ptr_array_index(r->tabs, 0);
+		g_assert_null(t->macros_template);
+		g_assert_cmpuint(gt_macro_overrides_count(t->overrides), ==, 0);
+		gt_project_data_free(r);
+		g_free(path);
+		g_free(contenu);
+	}
+	test_rmdir(dir);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -323,5 +479,9 @@ main(int argc, char **argv)
 	g_test_add_func("/project_file/active-hors-bornes", test_active_hors_bornes);
 	g_test_add_func("/project_file/script-non-utf8", test_script_non_utf8);
 	g_test_add_func("/project_file/instantane", test_instantane);
+	g_test_add_func("/project_file/lie-aller-retour", test_lie_aller_retour);
+	g_test_add_func("/project_file/non-lie-inchange", test_non_lie_inchange);
+	g_test_add_func("/project_file/lie-instantane", test_lie_instantane);
+	g_test_add_func("/project_file/modele-relatif", test_modele_relatif);
 	return g_test_run();
 }

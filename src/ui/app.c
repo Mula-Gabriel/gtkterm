@@ -87,7 +87,7 @@ static const gchar *const tab_action_names[] =
 {
 	/* session */
 	"local-echo", "crlf-auto", "timestamp", "esc-clear-screen", "hex-index", "view-mode", "hex-bytes", "auto-reconnect",
-	"clear-screen", "open-port", "close-port", "send-break", "toggle-dtr", "toggle-rts",
+	"clear-screen", "open-port", "close-port", "send-break", "toggle-dtr", "toggle-rts", "detach-macros-template",
 	/* page */
 	"clear-scrollback", "copy", "paste", "select-all", "find", "show-hex-bar", "show-macro-panel", "show-script-panel", "script-layout",
 	"send-file", "save-raw", "save-ascii", "log-start", "log-paused", "log-stop", "log-clear",
@@ -118,6 +118,25 @@ GtkWindow *gt_app_get_main_window(void)
 GtkWidget *gt_app_get_active_view(void)
 {
 	return gt_app.main_window != NULL ? gt_main_window_get_active_view(gt_app.main_window) : NULL;
+}
+
+/* Après un « Save to template » réussi (spec modèles §2.8) : chaque autre session de la fenêtre liée au même modèle le relit (échec : avertissement) */
+void gt_app_refresh_template_siblings(GtSession *s)
+{
+	GtMacros *m = s != NULL ? gt_session_get_macros(s) : NULL;
+	const gchar *path = m != NULL ? gt_macros_get_template(m) : NULL;
+
+	if(path == NULL || gt_app.sessions == NULL)
+		return;
+	for(guint i = 0; i < gt_session_manager_get_n(gt_app.sessions); i++)
+	{
+		GtSession *other = gt_session_manager_get_nth(gt_app.sessions, i);
+		GtMacros *om = other != s && !gt_session_is_shut_down(other) ? gt_session_get_macros(other) : NULL;
+
+		/* Rafraîchi : les lignes de son éditeur ouvert réappliqueraient les anciennes valeurs, il se ferme sans rien appliquer */
+		if(om != NULL && g_strcmp0(gt_macros_get_template(om), path) == 0 && gt_macros_refresh_template(om, FALSE))
+			gt_macro_editor_close(other);
+	}
 }
 
 void gt_app_foreach_view(GFunc func, gpointer user_data)
@@ -444,7 +463,7 @@ GtSession *gt_app_add_session(const GtProfile *profile, const gchar *profile_nam
 		/* Onglet d'un projet (spec §3.2-4, 3.2-5) : copie du jeu de l'onglet actif, aucun fichier ; le gestionnaire la passe en in-project à
 		 * l'ajout, avant la page : le panneau de script démarre vide */
 		if(from != NULL)
-			gt_macros_replace_set(gt_session_get_macros(s), gt_macro_set_copy(gt_macros_get_set(gt_session_get_macros(from))));
+			gt_macros_copy_from(gt_session_get_macros(s), gt_session_get_macros(from));	/* jeu et lien au modèle (spec modèles §2.6) */
 	}
 	else
 	{
@@ -550,12 +569,31 @@ static void pending_clear(void)
 	memset(&gt_app.pending_stamp, 0, sizeof gt_app.pending_stamp);
 }
 
+/* Résultat de la relecture du modèle d'un onglet lié à l'ouverture du projet (spec modèles de macros §2.5) : flash de 5 s sur la page de s
+ * (modèle mis à jour, ou valeurs propres abandonnées), message d'avertissement non bloquant si le modèle est illisible */
+static void template_status_report(GtSession *s, const gchar *template_path, GtMacrosTemplateStatus status, guint dropped, const gchar *error_text)
+{
+	gchar *base = g_path_get_basename(template_path);
+
+	if(status == GT_MACROS_TEMPLATE_MISSING)
+		gt_app_message(GT_APP_MSG_WARNING, _("Cannot read the macros template %s: %s. The copy saved in the project is used."), base,
+			       error_text != NULL ? error_text : "");
+	else if(dropped > 0)
+		gt_app_status_flash(s, 5000, ngettext("Macros template %s updated: %u project value no longer applies",
+						      "Macros template %s updated: %u project values no longer apply", dropped), base, dropped);
+	else if(status == GT_MACROS_TEMPLATE_UPDATED)
+		gt_app_status_flash(s, 5000, _("Macros template %s updated"), base);
+	g_free(base);
+}
+
 /* Remplace tous les onglets par ceux de d (plan, décision 9) : pages arrêtées, moteurs Lua prévenus, puis chaque session arrêtée et retirée (ordre 6b) ;
  * puis, dans l'ordre, une session par onglet (profil validé et averti comme un profil chargé), sa page (séparateurs et visibilités de l'onglet,
  * [layout] pour les positions du panneau de script, disposition de l'onglet), profil appliqué, port ouvert ; enfin l'onglet d->active affiché.
- * in_project : onglets de projet (in-project et texte du script posés avant la page, macros copiées de l'onglet), projet commencé sur path, stamp,
- * d, et last_project écrit si path ; sinon onglets libres (projet fermé d'abord, macros chargées comme au démarrage : app_config_load_profile_macros). */
-static void replace_all_tabs(const GtProjectData *d, const gchar *path, const GtFileStamp *stamp, gboolean in_project)
+ * in_project : onglets de projet (in-project et texte du script posés avant la page, macros copiées de l'onglet, ou onglet lié à un modèle relu :
+ * gt_macros_link_from_project, flash ou message une fois la page créée), projet commencé sur path, stamp, d, et last_project écrit si path ; sinon
+ * onglets libres (projet fermé d'abord, macros chargées comme au démarrage : app_config_load_profile_macros). d est modifié : les valeurs propres d'un
+ * onglet lié sans abandon y sont remplacées par celles du jeu vivant (spec modèles de macros §2.5 « Modifié »). */
+static void replace_all_tabs(GtProjectData *d, const gchar *path, const GtFileStamp *stamp, gboolean in_project)
 {
 	GtkNotebook *nb = GTK_NOTEBOOK(gt_app.notebook);
 	GtSession *active = gt_app_get_active_session();
@@ -590,12 +628,35 @@ static void replace_all_tabs(const GtProjectData *d, const gchar *path, const Gt
 	{
 		GtProjectTab *t = g_ptr_array_index(d->tabs, i);
 		GtSession *s = gt_session_new(&t->profile, t->profile_name);
+		GtMacrosTemplateStatus status = GT_MACROS_TEMPLATE_UNCHANGED;
+		gboolean linked = in_project && t->macros_template != NULL;
+		gchar *error_text = NULL;
+		guint dropped = 0;
 
 		gt_session_get_profile(s)->lock_port = lock_port;
 		if(in_project)
 		{
+			GtMacros *m = gt_session_get_macros(s);
+
 			gt_session_set_in_project(s, TRUE);	/* avant la page : le panneau de script prend le texte de la session, jamais [session] */
-			gt_macros_replace_set(gt_session_get_macros(s), gt_macro_set_copy(t->macros));
+			if(linked)
+			{
+				/* Onglet lié (spec modèles de macros §2.5) : modèle relu, valeurs propres réappliquées ; sans abandon, les valeurs propres
+				 * de référence deviennent celles du jeu vivant (fichier écrit à la main : ordre, doublons, valeur égale au modèle) */
+				status = gt_macros_link_from_project(m, t->macros_template, t->macros, t->overrides, &dropped, &error_text);
+				if(dropped == 0)
+				{
+					GtMacroOverrides *live = gt_macros_get_overrides(m);
+
+					if(live != NULL)
+					{
+						gt_macro_overrides_free(t->overrides);
+						t->overrides = live;
+					}
+				}
+			}
+			else
+				gt_macros_replace_set(m, gt_macro_set_copy(t->macros));
 			gt_session_set_script_text(s, t->script);
 		}
 		else
@@ -607,6 +668,9 @@ static void replace_all_tabs(const GtProjectData *d, const gchar *path, const Gt
 		gt_session_apply_profile(s);
 		gt_session_view_apply_profile(view);
 		gt_session_open_port(s);	/* échec : open-failed, boîte non bloquante */
+		if(linked)
+			template_status_report(s, t->macros_template, status, dropped, error_text);	/* la page existe : le flash s'y affiche */
+		g_free(error_text);
 		if(i == d->active)
 			show = s;
 		g_object_unref(s);	/* tenue par le gestionnaire et par la page */

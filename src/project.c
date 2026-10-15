@@ -200,6 +200,7 @@ gt_project_capture(GtProject *p)
 	for(guint i = 0; i < n; i++)
 	{
 		GtSession *s = gt_session_manager_get_nth(p->sessions, i);
+		GtMacros *m = gt_session_get_macros(s);
 		GtProjectTab *t;
 		gboolean reconnect = FALSE;
 
@@ -216,7 +217,16 @@ gt_project_capture(GtProject *p)
 		g_free(t->profile_name);
 		t->profile_name = g_strdup(gt_session_get_profile_name(s));
 		gt_macro_set_free(t->macros);
-		t->macros = gt_macro_set_copy(gt_macros_get_set(gt_session_get_macros(s)));
+		if(gt_macros_get_template(m) != NULL)
+		{
+			/* Onglet lié (§2.4) : la base, le chemin du modèle et les valeurs propres (diff base → jeu effectif) */
+			t->macros = gt_macro_set_copy(gt_macros_get_template_set(m));
+			t->macros_template = g_strdup(gt_macros_get_template(m));
+			gt_macro_overrides_free(t->overrides);
+			t->overrides = gt_macros_get_overrides(m);
+		}
+		else
+			t->macros = gt_macro_set_copy(gt_macros_get_set(m));
 		g_free(t->script);
 		t->script = g_strdup(gt_session_get_script_text(s));
 		if(p->page_func != NULL)

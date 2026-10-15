@@ -96,6 +96,9 @@ test_arguments(void)
 	g_assert_true(gt_macro_set_set_args(set, sans, NULL, 0));
 	g_assert_null(gt_macro_set_find(set, sans)->args);
 	g_assert_false(gt_macro_set_set_args(set, 9999999, NULL, 0));
+	g_assert_true(gt_macro_set_clear_args(set, id));
+	g_assert_null(gt_macro_set_find(set, id)->args);
+	g_assert_false(gt_macro_set_clear_args(set, 9999999));
 	gt_macro_set_free(set);
 }
 
@@ -800,6 +803,161 @@ test_verification(void)
 	gt_macro_set_free(set);
 }
 
+/* §2.2 de la spec des modèles : même structure (identifiants et valeurs par défaut ignorés) */
+static void
+test_meme_structure(void)
+{
+	GtMacroSet *a = gt_macro_set_new(), *b;
+	guint ida = gt_macro_set_append(a, "V", "Ctrl+1", "V%d\\r", "T");
+	const gchar *def[] = { "5", NULL };
+	const gchar *mn[] = { "0", NULL }, *vide[] = { "", NULL };
+	GtMacroLists *l;
+	guint idb;
+
+	gt_macro_set_append(a, "W", "", "W", "");
+	b = gt_macro_set_copy(a);
+	g_assert_true(gt_macro_set_same_structure(a, b));
+	g_assert_true(gt_macro_set_same_structure(a, a));
+	/* Valeurs par défaut et polling : pas la structure */
+	idb = gt_macro_set_get(b, 0)->id;
+	g_assert_true(gt_macro_set_set_args(b, idb, def, 1));
+	g_assert_true(gt_macro_set_set_polling(b, idb, TRUE, 50));
+	g_assert_true(gt_macro_set_same_structure(a, b));
+	/* Limites : NULL et vecteur entièrement vide sont égaux (set_limits rend NULL un vecteur vide) */
+	g_assert_cmpint(gt_macro_set_set_limits(b, idb, vide, NULL, NULL, 1), ==, 0);
+	g_assert_true(gt_macro_set_same_structure(a, b));
+	g_assert_cmpint(gt_macro_set_set_limits(b, idb, mn, NULL, NULL, 1), ==, 0);
+	g_assert_false(gt_macro_set_same_structure(a, b));
+	g_assert_cmpint(gt_macro_set_set_limits(a, ida, mn, NULL, NULL, 1), ==, 0);
+	g_assert_true(gt_macro_set_same_structure(a, b));
+	/* Deux vecteurs entièrement vides sont égaux quelle que soit leur longueur (champ modifié directement : set_limits les rend NULL) */
+	{
+		GtMacroSet *c = gt_macro_set_clone(a), *d = gt_macro_set_clone(a);
+		GtMacro *mc = (GtMacro *)gt_macro_set_get(c, 1), *md = (GtMacro *)gt_macro_set_get(d, 1);
+
+		mc->arg_max = g_strsplit("", ",", -1);
+		md->arg_max = g_strsplit(",", ",", -1);
+		g_assert_cmpuint(g_strv_length(md->arg_max), ==, 2);
+		g_assert_true(gt_macro_set_same_structure(c, d));
+		g_assert_true(gt_macro_set_same_structure(a, d));
+		gt_macro_set_free(c);
+		gt_macro_set_free(d);
+	}
+	gt_macro_set_free(b);
+	/* Libellé, raccourci, action, onglet, nombre, ordre */
+	{
+		const gchar *champs[][4] = {
+			{ "X", "Ctrl+1", "V%d\\r", "T" },
+			{ "V", "Ctrl+2", "V%d\\r", "T" },
+			{ "V", "Ctrl+1", "V%u\\r", "T" },
+			{ "V", "Ctrl+1", "V%d\\r", "U" },
+		};
+
+		for(guint c = 0; c < G_N_ELEMENTS(champs); c++)
+		{
+			GtMacroEdit rows[2] = {
+				{ 0, champs[c][0], champs[c][1], champs[c][2], champs[c][3], NULL, (const gchar *const *)mn, NULL, NULL },
+				{ 0, "W", "", "W", "", NULL, NULL, NULL, NULL },
+			};
+
+			b = gt_macro_set_new();
+			gt_macro_set_apply_edits(b, rows, 2, NULL);
+			g_assert_false(gt_macro_set_same_structure(a, b));
+			gt_macro_set_free(b);
+		}
+	}
+	{
+		GtMacroEdit rows[2] = {
+			{ 0, "W", "", "W", "", NULL, NULL, NULL, NULL },
+			{ 0, "V", "Ctrl+1", "V%d\\r", "T", NULL, (const gchar *const *)mn, NULL, NULL },
+		};
+
+		b = gt_macro_set_new();
+		gt_macro_set_apply_edits(b, rows, 2, NULL);
+		g_assert_false(gt_macro_set_same_structure(a, b));
+		gt_macro_set_apply_edits(b, rows, 1, NULL);
+		g_assert_false(gt_macro_set_same_structure(a, b));
+		gt_macro_set_free(b);
+	}
+	/* Listes : noms, entrées, ordre */
+	l = gt_macro_lists_new();
+	gt_macro_lists_add(l, "Mode", "Auto", "A");
+	gt_macro_lists_add(l, "Mode", "Manuel", "M");
+	gt_macro_set_take_lists(a, l);
+	b = gt_macro_set_copy(a);
+	g_assert_true(gt_macro_set_same_structure(a, b));
+	l = gt_macro_lists_new();
+	gt_macro_lists_add(l, "Mode", "Manuel", "M");
+	gt_macro_lists_add(l, "Mode", "Auto", "A");
+	gt_macro_set_take_lists(b, l);
+	g_assert_false(gt_macro_set_same_structure(a, b));
+	l = gt_macro_lists_new();
+	gt_macro_lists_add(l, "Mode", "Auto", "A");
+	gt_macro_lists_add(l, "Mode", "Manuel", "X");
+	gt_macro_set_take_lists(b, l);
+	g_assert_false(gt_macro_set_same_structure(a, b));
+	l = gt_macro_lists_new();
+	gt_macro_lists_add(l, "Mode", "Auto", "A");
+	gt_macro_lists_add(l, "Mode", "Manuel", "M");
+	gt_macro_lists_add_list(l, "Vide");
+	gt_macro_set_take_lists(b, l);
+	g_assert_false(gt_macro_set_same_structure(a, b));
+	l = gt_macro_lists_new();
+	gt_macro_lists_add(l, "Mode", "Auto", "A");
+	gt_macro_lists_add(l, "Mode", "Manuel", "M");
+	gt_macro_set_take_lists(b, l);
+	g_assert_true(gt_macro_set_same_structure(a, b));
+	gt_macro_set_free(b);
+	/* Jeux vides */
+	b = gt_macro_set_new();
+	g_assert_false(gt_macro_set_same_structure(a, b));
+	gt_macro_set_free(a);
+	a = gt_macro_set_new();
+	g_assert_true(gt_macro_set_same_structure(a, b));
+	gt_macro_set_free(a);
+	gt_macro_set_free(b);
+}
+
+/* Clone : copie profonde qui garde les identifiants (simulations) */
+static void
+test_clone_garde_ids(void)
+{
+	GtMacroSet *set = gt_macro_set_new(), *clone;
+	GtMacroLists *l = gt_macro_lists_new();
+	guint id1, id2;
+	const gchar *def[] = { "5", "A", NULL };
+	const gchar *mn[] = { "1", "", NULL }, *mx[] = { "9", "", NULL };
+
+	gt_macro_lists_add(l, "Mode", "Auto", "A");
+	gt_macro_set_take_lists(set, l);
+	id1 = gt_macro_set_append(set, "V", "Ctrl+1", "V%d %#Mode", "T");
+	id2 = gt_macro_set_append(set, "W", "", "W", "");
+	g_assert_true(gt_macro_set_set_args(set, id1, def, 2));
+	g_assert_cmpint(gt_macro_set_set_limits(set, id1, mn, mx, NULL, 2), ==, 0);
+	g_assert_true(gt_macro_set_set_polling(set, id2, TRUE, 250));
+	clone = gt_macro_set_clone(set);
+	g_assert_cmpuint(gt_macro_set_count(clone), ==, 2);
+	g_assert_cmpuint(gt_macro_set_get(clone, 0)->id, ==, id1);
+	g_assert_cmpuint(gt_macro_set_get(clone, 1)->id, ==, id2);
+	g_assert_true(gt_macro_set_same_structure(set, clone));
+	g_assert_true(gt_macro_set_get(clone, 0) != gt_macro_set_get(set, 0));
+	g_assert_true(gt_macro_set_get_lists(clone) != gt_macro_set_get_lists(set));
+	g_assert_cmpstr(gt_macro_set_get(clone, 0)->args[0], ==, "5");
+	g_assert_cmpstr(gt_macro_set_get(clone, 0)->args[1], ==, "A");
+	g_assert_cmpstr(gt_macro_set_get(clone, 0)->arg_max[0], ==, "9");
+	g_assert_null(gt_macro_set_get(clone, 0)->arg_charset);
+	g_assert_true(gt_macro_set_get(clone, 1)->polling);
+	g_assert_cmpuint(gt_macro_set_get(clone, 1)->polling_period_ms, ==, 250);
+	/* Indépendant de l'original */
+	g_assert_true(gt_macro_set_set_arg(clone, id1, 0, "7"));
+	g_assert_cmpstr(gt_macro_set_get(set, 0)->args[0], ==, "5");
+	gt_macro_set_free(set);
+	g_assert_cmpstr(gt_macro_set_get(clone, 0)->args[0], ==, "7");
+	/* Une macro ajoutée au clone reçoit un identifiant neuf */
+	g_assert_cmpuint(gt_macro_set_append(clone, "X", "", "x", ""), >, id2);
+	gt_macro_set_free(clone);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -824,5 +982,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/segments-sortes", test_segments_sortes);
 	g_test_add_func("/macro_set/segments-latin1", test_segments_latin1);
 	g_test_add_func("/macro_set/verification", test_verification);
+	g_test_add_func("/macro_set/same_structure", test_meme_structure);
+	g_test_add_func("/macro_set/clone_keeps_ids", test_clone_garde_ids);
 	return g_test_run();
 }

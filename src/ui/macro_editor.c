@@ -45,7 +45,18 @@ typedef struct
 	GtkWidget         *preview_box;	/* « macro-preview-box » (pointeurs faibles) : aperçu de la ligne envoyée */
 	GtkWidget         *preview;	/* « macro-preview » */
 	GtkWidget         *preview_bytes;	/* « macro-preview-bytes » */
+	GtkWidget         *template_info;	/* « macro-template-info » : modèle lié, caché si l'onglet n'est pas lié */
+	gboolean           asking;	/* question du modèle en cours (spec modèles §2.7) : OK sans effet, fermeture refusée */
 } MacroEditor;
+
+/* Question posée sur un onglet lié : la réponse retrouve l'éditeur par sa fenêtre (jamais le MacroEditor, libéré avec elle) et n'applique rien
+ * si la génération des macros a changé entre-temps */
+typedef struct
+{
+	GWeakRef         window;
+	guint64          generation;
+	GtMacrosEditKind kind;	/* DEFAULTS, STRUCTURE ; NONE : question de conflit du modèle */
+} TemplateQuestion;
 
 /* Cellule d'une colonne : propriété de la ligne, nom du widget, sélection de la vue */
 typedef struct
@@ -74,6 +85,7 @@ static const gchar *help_text = N_(
 static void on_defaults_items_changed(GListModel *model, guint position, guint removed, guint added, gpointer data);
 static void on_defaults_selection_changed(GtkSelectionModel *model, guint position, guint n_items, gpointer data);
 static void defaults_unwatch(MacroEditor *editor);
+static void template_info_update(MacroEditor *editor, GtMacros *macros);
 
 /* État de l'éditeur dont w fait partie (fenêtre racine) ; NULL si la fenêtre est en destruction */
 static MacroEditor *editor_of(GtkWidget *w)
@@ -447,35 +459,191 @@ static void on_help(GtkButton *button, gpointer data)
 	gt_ui_message(GTK_WINDOW(editor->window), GT_APP_MSG_INFO, _(help_text));
 }
 
-/* OK : les lignes, dans l'ordre affiché, avec leur identifiant (arguments et polling suivent l'identifiant, M16) */
-static void apply_edits(MacroEditor *editor)
+/* Ferme la fenêtre si elle n'est pas déjà en destruction (on_destroy retire l'état) */
+static void close_editor_window(GtkWidget *window)
+{
+	if(g_object_get_data(G_OBJECT(window), EDITOR_KEY) != NULL)
+		gtk_window_destroy(GTK_WINDOW(window));	/* sans close-request */
+}
+
+/* Lignes de l'éditeur, dans l'ordre affiché, avec leur identifiant (arguments et polling suivent l'identifiant, M16) ; listes à libérer */
+static GtMacroEdit *editor_edits(MacroEditor *editor, guint *n, GtMacroLists **lists)
+{
+	*lists = gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows));
+	return gt_macro_rows_to_edits(G_LIST_MODEL(editor->rows), n);
+}
+
+/* Chemin unique d'application (lignes relues maintenant) ; le jeu reste le même pointeur : ce module ne se ferme pas par le crochet */
+static void commit_rows(MacroEditor *editor, GtMacros *macros)
+{
+	GtMacroLists *lists;
+	guint n = 0;
+	GtMacroEdit *edits = editor_edits(editor, &n, &lists);
+
+	gt_macros_commit_edits(macros, edits, n, lists);
+	g_free(edits);
+	gt_macro_lists_free(lists);
+}
+
+static void ask_template(MacroEditor *editor, GtMacros *macros, GtMacrosEditKind kind);
+
+/* « Save to template » (§2.8), l'éditeur restant ouvert jusqu'à SAVED ; TRUE si la fenêtre doit se fermer */
+static gboolean save_to_template(MacroEditor *editor, GtMacros *macros, gboolean force)
+{
+	GtMacroLists *lists;
+	guint n = 0;
+	GtMacroEdit *edits = editor_edits(editor, &n, &lists);
+	GtMacrosSaveResult r = gt_macros_save_template_edits(macros, edits, n, lists, force);
+
+	g_free(edits);
+	gt_macro_lists_free(lists);
+	if(r == GT_MACROS_SAVED)
+	{
+		GtSession *s = g_weak_ref_get(&editor->session);
+
+		gt_app_refresh_template_siblings(s);
+		g_clear_object(&s);
+		return TRUE;
+	}
+	if(r == GT_MACROS_CONFLICT)
+		ask_template(editor, macros, GT_MACROS_EDIT_NONE);
+	return FALSE;	/* FAILED : message déjà affiché, rien n'est perdu */
+}
+
+/* Réponse à une question du modèle */
+static void on_template_choice(gint choice, gpointer data)
+{
+	TemplateQuestion *q = data;
+	GtkWidget *window = g_weak_ref_get(&q->window);
+	MacroEditor *editor = window != NULL ? g_object_get_data(G_OBJECT(window), EDITOR_KEY) : NULL;
+	GtMacros *macros = editor != NULL ? editor_macros(editor) : NULL;
+	gboolean close = FALSE;
+
+	if(editor != NULL)
+		editor->asking = FALSE;
+	/* Fenêtre détruite, session fermée, jeu remplacé ou changé entre-temps : rien n'est appliqué, la fenêtre (si elle vit) reste ouverte */
+	if(macros != NULL && gt_macros_get_set(macros) == editor->set && gt_macros_get_generation(macros) == q->generation && choice >= 0)
+	{
+		if(q->kind == GT_MACROS_EDIT_NONE)	/* conflit : Overwrite, Reload, Cancel */
+		{
+			if(choice == 0)
+				close = save_to_template(editor, macros, TRUE);
+			else if(choice == 1)
+				close = gt_macros_reload_template(macros);	/* les modifications sont abandonnées ; échec : message, l'éditeur reste */
+		}
+		else if(q->kind == GT_MACROS_EDIT_DEFAULTS)	/* Keep in this project, Save to template, Cancel */
+		{
+			if(choice == 0)
+			{
+				commit_rows(editor, macros);
+				close = TRUE;
+			}
+			else if(choice == 1)
+				close = save_to_template(editor, macros, FALSE);
+		}
+		else	/* STRUCTURE : Save to template, Detach and keep a copy, Cancel */
+		{
+			if(choice == 0)
+				close = save_to_template(editor, macros, FALSE);
+			else if(choice == 1)
+			{
+				gt_macros_detach_template(macros);
+				commit_rows(editor, macros);
+				close = TRUE;
+			}
+		}
+	}
+	if(close)
+		close_editor_window(window);
+	g_clear_object(&window);
+	g_weak_ref_clear(&q->window);
+	g_free(q);
+}
+
+/* Pose la question du modèle (kind DEFAULTS, STRUCTURE) ou celle du conflit (NONE) ; indicateur « question en cours » levé */
+static void ask_template(MacroEditor *editor, GtMacros *macros, GtMacrosEditKind kind)
+{
+	TemplateQuestion *q = g_new0(TemplateQuestion, 1);
+	const gchar *path = gt_macros_get_template(macros);
+
+	g_weak_ref_init(&q->window, editor->window);
+	q->generation = gt_macros_get_generation(macros);
+	q->kind = kind;
+	editor->asking = TRUE;
+	if(kind == GT_MACROS_EDIT_NONE)
+	{
+		const gchar *const labels[] = { _("Overwrite"), _("Reload"), _("Cancel"), NULL };
+
+		/* Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail d'un autre */
+		gt_ui_choose(GTK_WINDOW(editor->window), _("The macros template changed on disk."), path, labels, 2, 0, on_template_choice, q);
+	}
+	else
+	{
+		gchar *base = g_path_get_basename(path);
+		gchar *text = g_strdup_printf(_("These macros come from the template %s"), base);
+
+		if(kind == GT_MACROS_EDIT_DEFAULTS)
+		{
+			const gchar *const labels[] = { _("Keep in this project"), _("Save to template"), _("Cancel"), NULL };
+
+			gt_ui_choose(GTK_WINDOW(editor->window), text,
+			             _("Keep the new default values in this project only, or save them to the template, for every project that uses it?"),
+			             labels, 0, -1, on_template_choice, q);
+		}
+		else
+		{
+			const gchar *const labels[] = { _("Save to template"), _("Detach and keep a copy"), _("Cancel"), NULL };
+
+			gt_ui_choose(GTK_WINDOW(editor->window), text,
+			             _("These changes can only be saved to the template (every project that uses it), or the tab can be detached from the "
+			               "template and keep its own copy."),
+			             labels, 2, -1, on_template_choice, q);
+		}
+		g_free(text);
+		g_free(base);
+	}
+}
+
+/* OK (ou fermeture par la barre de titre) ; TRUE : la fenêtre peut se fermer maintenant ; FALSE : une question est posée, sa réponse fermera */
+static gboolean apply_edits(MacroEditor *editor)
 {
 	GtMacros *macros = editor_macros(editor);
 	GtSession *s;
 	GtMacroEdit *edits;
+	GtMacroLists *lists;
+	GtMacrosEditKind kind;
 	guint n = 0;
 
 	/* Session fermée, ou jeu remplacé : ces lignes ne s'appliquent jamais (au nouveau jeu ni à une session arrêtée) */
 	if(macros == NULL || gt_macros_get_set(macros) != editor->set)
-		return;
-	edits = gt_macro_rows_to_edits(G_LIST_MODEL(editor->rows), &n);
-	gt_macros_apply_edits(macros, edits, n, gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows)));	/* editor->set est le jeu courant */
+		return TRUE;
+	if(gt_macros_get_template(macros) == NULL)
+	{
+		commit_rows(editor, macros);	/* editor->set est le jeu courant */
+		s = g_weak_ref_get(&editor->session);
+		gt_ui_macros_save(gtk_window_get_transient_for(GTK_WINDOW(editor->window)), s, NULL);	/* non NULL : editor_macros l'a vue vivante */
+		g_object_unref(s);
+		return TRUE;
+	}
+	/* Onglet lié (spec modèles §2.7) : rien n'est appliqué avant la réponse */
+	edits = editor_edits(editor, &n, &lists);
+	kind = gt_macros_classify_edits(macros, edits, n, lists);
 	g_free(edits);
-	gt_macro_poller_sync(gt_macros_get_poller(macros));
-	gt_macros_changed(macros);	/* raccourcis et panneau ; ce module voit le même jeu et ne ferme rien */
-	s = g_weak_ref_get(&editor->session);
-	gt_ui_macros_save(gtk_window_get_transient_for(GTK_WINDOW(editor->window)), s, NULL);	/* non NULL : editor_macros l'a vue vivante */
-	g_object_unref(s);
+	gt_macro_lists_free(lists);
+	if(kind == GT_MACROS_EDIT_NONE)
+		return TRUE;
+	ask_template(editor, macros, kind);
+	return FALSE;
 }
 
 static void on_ok(GtkButton *button, gpointer data)
 {
 	MacroEditor *editor = editor_of(GTK_WIDGET(button));
 
-	if(editor == NULL)
+	if(editor == NULL || editor->asking)
 		return;
-	apply_edits(editor);
-	gtk_window_destroy(GTK_WINDOW(editor->window));	/* sans close-request */
+	if(apply_edits(editor))
+		gtk_window_destroy(GTK_WINDOW(editor->window));	/* sans close-request */
 }
 
 static void on_cancel(GtkButton *button, gpointer data)
@@ -487,15 +655,16 @@ static void on_cancel(GtkButton *button, gpointer data)
 	gtk_window_destroy(GTK_WINDOW(editor->window));
 }
 
-/* Fermer par la barre de titre vaut OK (comportement conservé) */
+/* Fermer par la barre de titre vaut OK (comportement conservé), question comprise */
 static gboolean on_close_request(GtkWindow *window, gpointer data)
 {
 	MacroEditor *editor = g_object_get_data(G_OBJECT(window), EDITOR_KEY);
 
 	if(editor == NULL)
 		return FALSE;
-	apply_edits(editor);
-	return FALSE;
+	if(editor->asking)
+		return TRUE;
+	return !apply_edits(editor);	/* question posée : fermeture refusée, la réponse fermera */
 }
 
 /* Destruction : la session ne désigne plus cette fenêtre ; l'état est retiré de la fenêtre (les rappels encore branchés le trouvent NULL) */
@@ -524,7 +693,7 @@ static void editor_free(gpointer data)
 	g_clear_object(&editor->capture_row);
 	defaults_unwatch(editor);
 	for(GtkWidget **const *w = (GtkWidget **const[]){ &editor->defaults, &editor->defaults_scroll, &editor->preview_box, &editor->preview,
-	                                                  &editor->preview_bytes, NULL }; *w != NULL; w++)
+	                                                  &editor->preview_bytes, &editor->template_info, NULL }; *w != NULL; w++)
 		if(**w != NULL)
 			g_object_remove_weak_pointer(G_OBJECT(**w), (gpointer *)*w);
 	g_clear_object(&editor->selection);
@@ -534,6 +703,15 @@ static void editor_free(gpointer data)
 	g_free(editor);
 }
 
+/* Réglage enregistrable changé (signal « edited » : détachement par le menu…) : libellé du modèle à jour */
+static void on_session_edited(GtSession *s, gpointer window)
+{
+	MacroEditor *editor = g_object_get_data(G_OBJECT(window), EDITOR_KEY);
+
+	if(editor != NULL && !gt_session_is_shut_down(s))
+		template_info_update(editor, gt_session_get_macros(s));
+}
+
 /* Session fermée pendant l'édition (signal « closed ») : fenêtre fermée sans rien appliquer (spec §3.2-12) */
 static void on_session_closed(GtSession *s, gpointer window)
 {
@@ -541,6 +719,23 @@ static void on_session_closed(GtSession *s, gpointer window)
 }
 
 /* --- Construction --- */
+
+/* Libellé « Template: … » (spec modèles §2.10) : chemin complet du modèle lié, caché si l'onglet n'est pas lié */
+static void template_info_update(MacroEditor *editor, GtMacros *macros)
+{
+	const gchar *path = macros != NULL ? gt_macros_get_template(macros) : NULL;
+
+	if(editor->template_info == NULL)
+		return;
+	if(path != NULL)
+	{
+		gchar *text = g_strdup_printf(_("Template: %s"), path);
+
+		gtk_label_set_text(GTK_LABEL(editor->template_info), text);
+		g_free(text);
+	}
+	gtk_widget_set_visible(editor->template_info, path != NULL);
+}
 
 static GtkWidget *add_button(GtkWidget *box, const gchar *mnemonic, const gchar *name, GCallback callback, gint page)
 {
@@ -1201,6 +1396,7 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	g_signal_connect(editor->window, "close-request", G_CALLBACK(on_close_request), NULL);
 	g_signal_connect(editor->window, "destroy", G_CALLBACK(on_destroy), NULL);
 	g_signal_connect_object(s, "closed", G_CALLBACK(on_session_closed), editor->window, 0);
+	g_signal_connect_object(s, "edited", G_CALLBACK(on_session_edited), editor->window, 0);
 	keys = gtk_event_controller_key_new();
 	gtk_event_controller_set_propagation_phase(keys, GTK_PHASE_CAPTURE);
 	g_signal_connect(keys, "key-pressed", G_CALLBACK(on_key_pressed), NULL);
@@ -1224,10 +1420,20 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	gtk_label_set_wrap(GTK_LABEL(editor->message), TRUE);
 	gtk_label_set_xalign(GTK_LABEL(editor->message), 0.0);
 	gtk_widget_set_visible(editor->message, FALSE);
+	editor->template_info = gtk_label_new(NULL);
+	g_object_add_weak_pointer(G_OBJECT(editor->template_info), (gpointer *)&editor->template_info);
+	gtk_widget_set_name(editor->template_info, "macro-template-info");
+	gtk_accessible_update_property(GTK_ACCESSIBLE(editor->template_info), GTK_ACCESSIBLE_PROPERTY_LABEL, _("Macros template"), -1);
+	gtk_label_set_wrap(GTK_LABEL(editor->template_info), TRUE);
+	gtk_label_set_wrap_mode(GTK_LABEL(editor->template_info), PANGO_WRAP_WORD_CHAR);
+	gtk_label_set_selectable(GTK_LABEL(editor->template_info), TRUE);
+	gtk_label_set_xalign(GTK_LABEL(editor->template_info), 0.0);
+	template_info_update(editor, gt_session_get_macros(s));
 	bottom = button_row();
 	add_button(bottom, _("Help"), "macro-help", G_CALLBACK(on_help), 0);
 	add_button(bottom, _("Cancel"), "macro-cancel", G_CALLBACK(on_cancel), 0);
 	add_button(bottom, _("OK"), "macro-ok", G_CALLBACK(on_ok), 0);
+	gtk_box_append(GTK_BOX(vbox), editor->template_info);
 	gtk_box_append(GTK_BOX(vbox), switcher);
 	gtk_box_append(GTK_BOX(vbox), stack);
 	gtk_box_append(GTK_BOX(vbox), editor->message);
@@ -1246,6 +1452,16 @@ void gt_macro_editor_macros_changed(GtSession *s)
 
 	if(editor != NULL && gt_macros_get_set(gt_session_get_macros(s)) != editor->set)
 		gtk_window_destroy(GTK_WINDOW(window));	/* sans close-request : rien n'est appliqué ni enregistré */
+	else if(editor != NULL)
+		template_info_update(editor, gt_session_get_macros(s));	/* lien détaché ou rafraîchi */
+}
+
+void gt_macro_editor_close(GtSession *s)
+{
+	GtkWidget *window = s != NULL ? g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) : NULL;
+
+	if(window != NULL)
+		close_editor_window(window);
 }
 
 /* app.macros : éditeur de la session active au moment de l'activation */

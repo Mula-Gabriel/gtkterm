@@ -55,6 +55,7 @@ const GtMacroLists *gt_macro_set_get_lists    (const GtMacroSet *set);
 void                gt_macro_set_take_lists   (GtMacroSet *set, GtMacroLists *lists);
 gboolean            gt_macro_set_set_arg      (GtMacroSet *set, guint id, gint arg_index, const gchar *value);
 gboolean            gt_macro_set_set_args     (GtMacroSet *set, guint id, const gchar *const *args, gint n_args);
+gboolean            gt_macro_set_clear_args   (GtMacroSet *set, guint id);	/* valeurs par défaut remises à NULL (aucune) ; FALSE : macro inconnue */
 /* Limites d'une macro : chaque vecteur NULL ou de n_args éléments (n_args = nombre d'arguments de la macro), sinon -1 et rien ne change
  * (macro inconnue : -1). Les entrées invalides pour le type de l'argument de même rang sont remises à "" ; rend leur nombre. */
 gint                gt_macro_set_set_limits   (GtMacroSet *set, guint id, const gchar *const *min, const gchar *const *max,
@@ -62,6 +63,11 @@ gint                gt_macro_set_set_limits   (GtMacroSet *set, guint id, const 
 gboolean            gt_macro_set_set_polling  (GtMacroSet *set, guint id, gboolean polling, guint period_ms);
 GtMacroSet         *gt_macro_set_copy         (const GtMacroSet *set);	/* copie profonde ; nouveaux identifiants */
 void                gt_macro_set_apply_edits  (GtMacroSet *set, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists);
+/* Même structure (§2.2 de la spec des modèles) : même nombre de macros et, rang par rang, mêmes libellé, raccourci, action, onglet et
+ * limites (NULL ≡ vecteur entièrement vide), mêmes listes (noms, entrées et ordre) ; identifiants, valeurs par défaut et polling ignorés. */
+gboolean            gt_macro_set_same_structure(const GtMacroSet *a, const GtMacroSet *b);
+/* Copie profonde gardant les identifiants : simulations seulement, jamais installée à côté de l'original. */
+GtMacroSet         *gt_macro_set_clone        (const GtMacroSet *set);
 
 gboolean            gt_macro_action_is_separator(const gchar *action, gchar **label_out);
 gboolean            gt_macro_is_sendable      (const GtMacro *macro);

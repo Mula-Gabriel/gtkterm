@@ -395,6 +395,37 @@ static GtSession *session_weak_take(GWeakRef *ref)
 	return s;
 }
 
+/* Question « Use this macros file in the project » (spec modèles de macros §2.6) : session (référence faible), génération relevée en posant la
+ * question, fichier choisi */
+typedef struct
+{
+	GWeakRef session;
+	guint64 generation;
+	gchar *path;
+} MacrosUse;
+
+enum { MACROS_USE_COPY, MACROS_USE_LINK, MACROS_USE_CANCEL };
+
+/* Réponse : rien si la session est fermée, n'est plus en projet ou si son jeu ou son lien a changé depuis la question */
+static void on_macros_use_answer(gint choice, gpointer user_data)
+{
+	MacrosUse *mu = user_data;
+	GtSession *s = weak_session(&mu->session);
+
+	if(s != NULL && gt_session_get_in_project(s) && gt_macros_get_generation(gt_session_get_macros(s)) == mu->generation)
+	{
+		/* Interactif : un fichier illisible ouvre une boîte, rien ne change */
+		if(choice == MACROS_USE_COPY)
+			gt_macros_load_file(gt_session_get_macros(s), mu->path, TRUE);	/* copie : l'onglet n'est plus lié */
+		else if(choice == MACROS_USE_LINK)
+			gt_macros_link_template(gt_session_get_macros(s), mu->path);
+	}
+	g_clear_object(&s);
+	g_weak_ref_clear(&mu->session);
+	g_free(mu->path);
+	g_free(mu);
+}
+
 static void on_macros_load_chosen(GFile *file, gpointer user_data)
 {
 	GtSession *s = session_weak_take(user_data);
@@ -406,8 +437,20 @@ static void on_macros_load_chosen(GFile *file, gpointer user_data)
 		return;
 	}
 	path = g_file_get_path(file);
-	/* Interactif : un fichier illisible ouvre une boîte ; le jeu et le chemin restent ceux d'avant */
-	if(path != NULL && gt_macros_load_file(gt_session_get_macros(s), path, TRUE))
+	if(path != NULL && gt_session_get_in_project(s))
+	{
+		/* Onglet de projet : copier le fichier dans le projet ou le lier comme modèle (question non bloquante, aucun destructeur) */
+		const gchar *const labels[] = { _("Copy into the project"), _("Link as template"), _("Cancel"), NULL };	/* ordre de l'enum */
+		MacrosUse *mu = g_new0(MacrosUse, 1);
+
+		g_weak_ref_init(&mu->session, s);
+		mu->generation = gt_macros_get_generation(gt_session_get_macros(s));
+		mu->path = g_steal_pointer(&path);
+		gt_ui_choose(gt_app_get_main_window(), _("Use this macros file in the project"), mu->path, labels, MACROS_USE_COPY, -1,
+			     on_macros_use_answer, mu);
+	}
+	/* Onglet libre, interactif : un fichier illisible ouvre une boîte ; le jeu et le chemin restent ceux d'avant */
+	else if(path != NULL && gt_macros_load_file(gt_session_get_macros(s), path, TRUE))
 		config_remember_macros_file(s);
 	g_free(path);
 	g_object_unref(s);

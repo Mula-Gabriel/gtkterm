@@ -1,5 +1,5 @@
 # Macros intégrées d'un projet (sous-projet 6c, spec §3.2-5 et §3.2-6) : dans un onglet de projet, « Configure Macros » (OK), un changement de polling
-# et « Load macros file… » n'écrivent aucun .ini (le projet est modifié) ; « Save macros file… » exporte sans retenir le chemin (macros_file vide) ;
+# et « Load macros file… » (réponse « Copy into the project ») n'écrivent aucun .ini (le projet est modifié) ; « Save macros file… » exporte sans retenir le chemin (macros_file vide) ;
 # « New port… » donne au nouvel onglet une copie du jeu de macros, indépendante de celle du premier ; Close project (profil default sans macros_file)
 # rend un onglet libre sur le fichier de macros par défaut, comme au démarrage, et Configure Macros y ajoute sans rien perdre.
 import os, sys, time
@@ -63,11 +63,17 @@ check(wait_until(lambda: e.project().get('modified') is True, 3), 'projet modifi
 check(inis() == avant, 'aucun .ini cree ni modifie : %r' % {p: v for p, v in inis().items() if avant.get(p) != v})
 check(e.sessions()[0]['macros_file'] == '', 'macros_file reste vide')
 
-# 3. Load macros file… : le panneau montre les macros du .ini ; un changement de polling ne le réécrit pas
+# 3. Load macros file… : question « Use this macros file in the project » (Copy par défaut, aucun destructeur) → « Copy into the project » ; le
+# panneau montre les macros du .ini ; un changement de polling ne le réécrit pas
 e.action('load-macros')
 file_dialog(e, 'Load macros file', charge)
+check(wait_until(lambda: any(a.startswith('Use this macros file in the project') for a in e.alerts()), 5), 'question copie ou lien : %r' % e.alerts())
+check(any(charge in a for a in e.alerts()), 'question nommant le fichier : %r' % e.alerts())
+e.close_alert('Copy into the project')
 check(wait_until(lambda: libelles() == ['L2', '⏱ L1'], 5), 'panneau : macros du .ini charge : %r' % libelles())
 check(e.sessions()[0]['macros_file'] == '', 'chemin du .ini charge non retenu : %r' % e.sessions()[0]['macros_file'])
+check(e.sessions()[0]['template'] == '', 'copie : onglet non lie : %r' % e.sessions()[0]['template'])
+check(not e.describe('detach-macros-template')[0], 'copie : Detach from template inactif')
 st_charge = os.stat(charge).st_mtime_ns
 contenu_charge = open(charge).read()
 bouton = 'macro-%d' % macro_id(e, '⏱ L1')

@@ -4,6 +4,7 @@
 #include <pty.h>
 #include <unistd.h>
 
+#include "macro_file.h"
 #include "project.h"
 #include "test_util.h"
 
@@ -409,6 +410,162 @@ test_end(void)
 	fix_clear(&f);
 }
 
+/* Modèle de macros écrit dans le dossier du banc : une macro « M » (x%s, défaut 5) et une macro « N » */
+static gchar *
+ecrire_modele(Fix *f)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	gchar *chemin = g_build_filename(f->dir, "modele.ini", NULL);
+	const gchar *args[] = { "5", NULL };
+	GError *err = NULL;
+	guint id;
+
+	id = gt_macro_set_append(set, "M", "", "x%s", "");
+	gt_macro_set_set_args(set, id, args, 1);
+	gt_macro_set_append(set, "N", "", "y", "");
+	g_assert_true(gt_macro_file_save(set, chemin, &err));
+	g_assert_no_error(err);
+	gt_macro_set_free(set);
+	return chemin;
+}
+
+static gboolean
+detacher_actif(GtSession *s)
+{
+	return g_action_group_get_action_enabled(gt_session_get_actions(s), "detach-macros-template");
+}
+
+static void
+test_capture_lie(void)
+{
+	Fix f;
+	GtProjectData *d;
+	GtProjectTab *t;
+	GtMacros *m;
+	GtMacroSet *set;
+	const GtMacroOverride *o;
+	gchar *modele;
+	const gchar *args[] = { "7", NULL };
+
+	fix_init(&f);
+	modele = ecrire_modele(&f);
+	gt_project_begin(f.p, NULL, NULL, NULL);
+	m = gt_session_get_macros(f.a);
+	g_assert_true(gt_macros_link_template(m, modele));
+	/* Valeur propre : défaut de « M » changé dans le jeu effectif */
+	set = gt_macros_get_set(m);
+	gt_macro_set_set_args(set, gt_macro_set_get(set, 0)->id, args, 1);
+	gt_macros_changed(m);
+
+	d = gt_project_capture(f.p);
+	t = g_ptr_array_index(d->tabs, 0);
+	g_assert_cmpstr(t->macros_template, ==, modele);
+	/* La base, pas le jeu effectif */
+	g_assert_cmpuint(gt_macro_set_count(t->macros), ==, 2);
+	g_assert_cmpstr(gt_macro_set_get(t->macros, 0)->args[0], ==, "5");
+	g_assert_cmpuint(gt_macro_overrides_count(t->overrides), ==, 1);
+	o = gt_macro_overrides_get(t->overrides, 0);
+	g_assert_cmpstr(o->label, ==, "M");
+	g_assert_cmpuint(o->occurrence, ==, 0);
+	g_assert_cmpuint(o->args->len, ==, 1);
+	g_assert_cmpstr(g_ptr_array_index(o->args, 0), ==, "7");
+	/* Onglet non lié : ni chemin ni valeur propre */
+	t = g_ptr_array_index(d->tabs, 1);
+	g_assert_null(t->macros_template);
+	g_assert_cmpuint(gt_macro_overrides_count(t->overrides), ==, 0);
+	gt_project_data_free(d);
+
+	/* Détaché : copie du jeu effectif, plus de lien */
+	gt_macros_detach_template(m);
+	d = gt_project_capture(f.p);
+	t = g_ptr_array_index(d->tabs, 0);
+	g_assert_null(t->macros_template);
+	g_assert_cmpuint(gt_macro_overrides_count(t->overrides), ==, 0);
+	g_assert_cmpstr(gt_macro_set_get(t->macros, 0)->args[0], ==, "7");
+	gt_project_data_free(d);
+	g_remove(modele);
+	g_free(modele);
+	fix_clear(&f);
+}
+
+static void
+test_lie_modifie(void)
+{
+	Fix f;
+	GtMacros *m;
+	GtMacroSet *base, *autre;
+	GtMacroOverrides *ov;
+	gchar *modele;
+
+	fix_init(&f);
+	modele = ecrire_modele(&f);
+	m = gt_session_get_macros(f.a);
+	g_assert_true(gt_macros_link_template(m, modele));
+	gt_project_begin(f.p, NULL, NULL, NULL);
+	g_assert_false(gt_project_is_modified(f.p));
+
+	/* Même base relue, mêmes valeurs propres (aucune) : pas modifié */
+	base = gt_macro_set_copy(gt_macros_get_template_set(m));
+	ov = gt_macros_get_overrides(m);
+	g_assert_cmpint(gt_macros_link_from_project(m, modele, base, ov, NULL, NULL), ==, GT_MACROS_TEMPLATE_UNCHANGED);
+	g_assert_true(reste_propre(f.p));
+	/* Base du projet différente du modèle relu (modèle mis à jour) : la base n'est pas dans l'instantané */
+	autre = gt_macro_set_new();
+	gt_macro_set_append(autre, "Z", "", "z", "");
+	g_assert_cmpint(gt_macros_link_from_project(m, modele, autre, ov, NULL, NULL), ==, GT_MACROS_TEMPLATE_UPDATED);
+	g_assert_true(reste_propre(f.p));
+	gt_macro_set_free(autre);
+	gt_macro_set_free(base);
+	gt_macro_overrides_free(ov);
+
+	/* Détacher : le lien disparaît de l'instantané */
+	gt_macros_detach_template(m);
+	g_assert_true(devient_modifie(f.p));
+	g_remove(modele);
+	g_free(modele);
+	fix_clear(&f);
+}
+
+static void
+test_action_detacher(void)
+{
+	Fix f;
+	GtMacros *m;
+	gchar *modele;
+
+	fix_init(&f);
+	modele = ecrire_modele(&f);
+	m = gt_session_get_macros(f.a);
+	gt_project_begin(f.p, NULL, NULL, NULL);
+	g_assert_true(g_action_group_has_action(gt_session_get_actions(f.a), "detach-macros-template"));
+	g_assert_false(detacher_actif(f.a));
+
+	g_assert_true(gt_macros_link_template(m, modele));
+	g_assert_true(detacher_actif(f.a));
+	g_assert_false(detacher_actif(f.b));
+
+	/* Activation : détache */
+	g_action_group_activate_action(gt_session_get_actions(f.a), "detach-macros-template", NULL);
+	g_assert_null(gt_macros_get_template(m));
+	g_assert_false(detacher_actif(f.a));
+
+	/* Onglet rendu libre (fermeture du projet) : détache aussi */
+	g_assert_true(gt_macros_link_template(m, modele));
+	g_assert_true(detacher_actif(f.a));
+	gt_project_end(f.p);
+	gt_session_set_in_project(f.a, FALSE);
+	g_assert_null(gt_macros_get_template(m));
+	g_assert_false(detacher_actif(f.a));
+
+	/* Arrêt : désactivée, reste désactivée même si le lien change ensuite */
+	g_assert_true(gt_macros_link_template(m, modele));
+	gt_session_shutdown(f.a);
+	g_assert_false(detacher_actif(f.a));
+	g_remove(modele);
+	g_free(modele);
+	fix_clear(&f);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -426,6 +583,9 @@ main(int argc, char *argv[])
 	g_test_add_func("/project/identite-inconnue", test_identite_inconnue);
 	g_test_add_func("/project/begin-avec-donnees", test_begin_avec_donnees);
 	g_test_add_func("/project/end", test_end);
+	g_test_add_func("/project/capture-lie", test_capture_lie);
+	g_test_add_func("/project/lie-modifie", test_lie_modifie);
+	g_test_add_func("/project/action-detacher", test_action_detacher);
 	ret = g_test_run();
 	test_rmdir_recursive(racine);
 	g_free(racine);

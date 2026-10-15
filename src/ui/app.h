@@ -24,6 +24,7 @@ GtProject        *gt_app_get_project(void);	/* projet de la fenêtre (6c) ; NULL
 GtkWindow        *gt_app_get_main_window(void);	/* NULL avant « activate » et après la fermeture */
 GtkWidget        *gt_app_get_active_view(void);	/* page de la session active (session_view.h), NULL sans fenêtre ni page */
 void              gt_app_foreach_view(GFunc func, gpointer user_data);	/* chaque page non arrêtée, dans l'ordre des onglets ; func(page, user_data) */
+void              gt_app_refresh_template_siblings(GtSession *s);	/* autres sessions liées au même modèle de macros que s : relues (§2.8) */
 /* Nouvel onglet (plan, décision 7) : session créée sur une copie de profile (nom de profil profile_name, NULL : « default »), son fichier de
  * macros chargé (non interactif ; projet ouvert : copie du jeu de l'onglet actif, aucun fichier, onglet de projet au script vide), page et
  * étiquette insérées à droite de l'onglet actif et affichées, profil appliqué, port ouvert (échec : boîte open-failed préfixée du nom de

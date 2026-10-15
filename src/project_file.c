@@ -29,6 +29,8 @@ GtProjectTab *gt_project_tab_new(void)
 	t->script_layout = g_strdup("topbottom");
 	t->macros = gt_macro_set_new();
 	t->script = g_strdup("");
+	t->macros_template = NULL;
+	t->overrides = gt_macro_overrides_new();
 	return t;
 }
 
@@ -41,6 +43,8 @@ void gt_project_tab_free(GtProjectTab *t)
 	g_free(t->script_layout);
 	gt_macro_set_free(t->macros);
 	g_free(t->script);
+	g_free(t->macros_template);
+	gt_macro_overrides_free(t->overrides);
 	g_free(t);
 }
 
@@ -60,7 +64,8 @@ void gt_project_data_free(GtProjectData *d)
 	g_free(d);
 }
 
-/* Sérialisation commune : with_page FALSE = instantané de comparaison (ni état de page, ni script_layout, ni active) */
+/* Sérialisation commune : with_page FALSE = instantané de comparaison (ni état de page, ni script_layout, ni active, ni base d'un onglet
+ * lié : un modèle réimporté à l'ouverture ne rend pas le projet « modifié ») */
 static GKeyFile *write_key_file(const GtProjectData *d, gboolean with_page)
 {
 	GKeyFile *kf = g_key_file_new();
@@ -89,7 +94,16 @@ static GKeyFile *write_key_file(const GtProjectData *d, gboolean with_page)
 			g_key_file_set_string(kf, group, "script_layout", t->script_layout != NULL ? t->script_layout : "topbottom");
 		}
 		g_key_file_set_string(kf, group, "script", t->script != NULL ? t->script : "");
-		gt_macro_set_to_key_file(t->macros, kf, prefix);
+		if(t->macros_template != NULL)
+		{
+			/* Onglet lié : base (sauf dans l'instantané), puis valeurs propres */
+			g_key_file_set_string(kf, group, "macros_template", t->macros_template);
+			if(with_page)
+				gt_macro_set_to_key_file(t->macros, kf, prefix);
+			gt_macro_overrides_to_key_file(t->overrides, kf, prefix);
+		}
+		else
+			gt_macro_set_to_key_file(t->macros, kf, prefix);
 		g_free(prefix);
 		g_free(group);
 	}
@@ -199,6 +213,20 @@ static gboolean read_tab(GKeyFile *kf, guint n, const gchar *path, GtProjectData
 	}
 	gt_macro_set_free(t->macros);
 	t->macros = gt_macro_set_from_key_file(kf, prefix, path);
+	/* Modèle lié : chemin absolu seulement ; sinon onglet non lié et groupes override ignorés */
+	s = read_string(kf, group, "macros_template", path);
+	if(s != NULL && g_path_is_absolute(s))
+	{
+		t->macros_template = s;
+		gt_macro_overrides_free(t->overrides);
+		t->overrides = gt_macro_overrides_from_key_file(kf, prefix, path);
+	}
+	else
+	{
+		if(s != NULL)
+			g_warning(_("%s: [%s] macros_template must be an absolute path: ignored"), path, group);
+		g_free(s);
+	}
 	g_ptr_array_add(d->tabs, t);
 	g_free(group);
 	g_free(prefix);

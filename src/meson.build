@@ -22,6 +22,8 @@ core_sources = [
 	'macro_set.h',
 	'macro_preview.c',
 	'macro_preview.h',
+	'macro_override.c',
+	'macro_override.h',
 	'macro_file.c',
 	'macro_file.h',
 	'project_file.c',

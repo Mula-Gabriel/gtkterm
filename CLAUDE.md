@@ -39,7 +39,7 @@ Dependencies: `gtk4` ≥ 4.14, `vte-2.91-gtk4` ≥ 0.76, `gtksourceview-5` ≥ 5
 **Layers (sub-projects 2 to 6b):** three layers; a layer never includes a header of the one below it.
 1. **Core** (`gtkterm_core`, GLib/GObject/GIO only, unit-tested): transport (`transport.c`, `serial_termios.c`, `baud.c`, `baudrates.c`), history and rendering
    (`history.c`, `rx_transform.c`, `view_render.c`), `device_match.c`, configuration (`config_file.c`, `profile.c`, `config_store.c`), macros model
-   (`macro_set.c`, `macros_format.c`, `macros_list.c`, `macro_file.c`, `macro_poller.c`, `macro_arg.c`, `macro_preview.c`), Lua ports (`rx_queue.c`, `script_port.c`), and the sub-project 6a
+   (`macro_set.c`, `macros_format.c`, `macros_list.c`, `macro_file.c`, `macro_poller.c`, `macro_arg.c`, `macro_preview.c`, `macro_override.c`), Lua ports (`rx_queue.c`, `script_port.c`), and the sub-project 6a
    modules: `term_options.c` (`GtTermOptions`), `hex_input.c`, `capture.c`, `file_sender.c` (`GtFileSender`), `rx_logger.c` (`GtRxLogger`), `update_check.c`, `update_versions.c`, `update_fetch.c`,
    `app_ui.c` (`GtAppUi`), `serial_ports.c` (serial device discovery), `port_form.c` (Port dialog validation), `macro_view.c` (macro panel display rules),
    `action_relay.c` (`GtActionRelay`, 6b), `port_activity.c` (`GtPortActivity`: activity state of a port, see below), and the sub-project 6c modules: `profile_keyfile.c` (`GtProfile` ↔ named GKeyFile group, shared by `.gtktermrc`, the macro `.ini` and the
@@ -87,7 +87,8 @@ presented, queued messages shown, port opened, SIGUSR1/SIGUSR2 (open/close the p
 `app.<name>` by a **relay** (`GtActionRelay`, core: delegates `activate`/`change_state` to the action of the same name in its target group, mirrors `enabled`
 and `state`, notifies only on change; without a target or action: disabled, last state kept) retargeted to the active session (`notify::active` of the
 manager). The session puts in its group `local-echo`, `crlf-auto`, `timestamp`, `esc-clear-screen`, `hex-index`, `view-mode`, `hex-bytes` (`GPropertyAction`s
-on its `GtTermOptions`), `auto-reconnect` (on its link), `clear-screen`, `open-port`, `close-port`, `send-break`, `toggle-dtr`, `toggle-rts`; the page adds
+on its `GtTermOptions`), `auto-reconnect` (on its link), `clear-screen`, `open-port`, `close-port`, `send-break`, `toggle-dtr`, `toggle-rts`, `detach-macros-template` (enabled only while its macros are linked to a
+template); the page adds
 `clear-scrollback`, `copy`, `paste`, `select-all`, `find`, `show-hex-bar`, `show-macro-panel`, `show-script-panel` (`GPropertyAction`s on a widget's
 `visible`), `script-layout`, `send-file`, `save-raw`, `save-ascii`, `log-start`, `log-paused` (boolean), `log-stop`, `log-clear` (list: `tab_action_names` in
 `app.c`). Application actions without relay read the active session when activated: `quit`, `about`, `updates`, `port`, `terminal`, `macros`,
@@ -97,7 +98,7 @@ tab; `SetState(i)` shows tab `i`, out of range ignored). Menus are a `GMenuModel
 resource `src/ui/gtkterm.gresource.xml`) whose items name existing actions (order File, Edit, View, Port, Terminal, Macros, Log, Help; the **project is the document**, so
 File = New project, Open project…, Save project, Save project as…, Close project | Send RAW file…, Save RAW file…, Save ASCII file… | Quit; Edit = Copy, Paste, Select All, Find |
 Clear screen, Clear scrollback; Port = New port… (`new-tab`), Close tab | Settings… (`port`), Open Port, Close Port, Autoreconnect | Send break, Toggle DTR, Toggle RTS |
-Load/Save/Delete profile…; Terminal = Settings… (`terminal`), Local echo, CR LF auto, ESC clear screen, Timestamp; Macros = Configure macros…, Load macros file…, Save macros file…;
+Load/Save/Delete profile…; Terminal = Settings… (`terminal`), Local echo, CR LF auto, ESC clear screen, Timestamp; Macros = Configure macros…, Load macros file…, Save macros file…, Detach from template;
 « configuration » is « profile » in labels); accelerators go through
 `gtk_application_set_accels_for_action` (Ctrl+Shift+L/K/R/C/V/F/A/B and F5–F8 in `app_actions.c`, Ctrl+Shift+S in `port_dialog.c`, Ctrl+Shift+Q/T/W/O (O = Open project) and
 Ctrl+Shift+Page Down/Up in `app.c` (no shortcut for Save project: Ctrl+Shift+S is taken); no plain Ctrl shortcut, so Ctrl+letter, Ctrl+B and Ctrl+Page included, reaches the port); menu labels carry no
@@ -226,11 +227,14 @@ a `gtkterm.*` function: work on the Lua thread, run any GTK/transport/link side 
 across it, register it through the guarded wrappers (`api_guard`), and make any blocking wait check `stop_requested` at least every 20 ms.** Example scripts
 live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
 
-**Macros subsystem (sub-projects 4, 6a, 6b and macro arguments, spec `docs/superpowers/specs/2026-10-14-arguments-macros-design.md`):**
+**Macros subsystem (sub-projects 4, 6a, 6b, macro arguments and linked templates, specs `docs/superpowers/specs/2026-10-14-arguments-macros-design.md`,
+`docs/superpowers/specs/2026-10-15-modeles-macros-design.md`):**
 - `macro_set.c` (core) — `GtMacroSet`: ordered macros with a **stable in-memory id** (never reused), label/shortcut/action/tab, stored arguments, polling mode +
   period (1 ms – 24 h), its own named lists (`GtMacroLists`, `macros_list.c`); `gt_macro_expand()` is the only expansion (format then escapes; `n_args < 0` =
   stored arguments); `gt_macro_set_apply_edits()` applies the edit window rows by id, so arguments and polling follow the macro, never the position. `GtMacro.args` are the **default values** of the
-  arguments (saved with the macro); `gt_macro_set_copy()` copies a set. **Limits:** `GtMacro.arg_min`, `arg_max`, `arg_charset`, vectors parallel to the
+  arguments (saved with the macro); `gt_macro_set_copy()` copies a set (new ids), `gt_macro_set_clone()` keeps the ids (simulations only, never installed),
+  `gt_macro_set_clear_args()` drops a macro's defaults, `gt_macro_set_same_structure()` compares two sets ignoring ids, defaults and polling (same count and,
+  rank by rank, label, shortcut, action, tab, limits (NULL ≡ all empty); same lists, names, entries and order). **Limits:** `GtMacro.arg_min`, `arg_max`, `arg_charset`, vectors parallel to the
   arguments like `args` (`""` = no constraint, dropped with `args` when the argument count changes, each limit re-validated for the argument of the same rank);
   numbers: min/max values; `%s`: min/max length in **bytes sent** and a charset; `%c` and lists: none (`gt_macro_set_set_limits()`). `gt_macro_expand_segments()`
   gives the same bytes as `gt_macro_expand()` plus segments (text, argument N, escape) for the preview; `gt_macro_check_args()` checks arguments before a send.
@@ -240,6 +244,15 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   `gt_macro_arg_describe` (« integer, 0 – 100 (default 50) »), `gt_macro_arg_type_name`.
 - `macro_preview.c` (core) — preview of the line sent: `gt_macro_preview_runs()` (runs of text, argument, special: control characters named `CR`, `LF`…,
   else `\xHH`) and `gt_macro_preview_hex()` (uppercase hex, truncated with « … »).
+- `macro_override.c` (core) — **project values** of a tab linked to a template (`GtMacroOverrides`, list of `GtMacroOverride`): a macro is named by its
+  **label** and its **occurrence** (rank among macros of the same label, 0 first; the empty label is a label), with per-rank default values (any string, `""`
+  included) and optionally a polling setting (mode + period). `gt_macro_overrides_diff(base, effective)` (NULL unless same structure; equality rule: `args`
+  NULL ≡ all `""`), `gt_macro_overrides_apply(o, base, &dropped)` (copy of base, new ids; drops, one per argument or polling: macro gone, rank beyond its
+  arguments, value refused by `gt_macro_arg_check` with the template's type and limits (lists not checked), polling of a non-sendable macro or period out of
+  [`GT_MACRO_PERIOD_MIN_MS`, `GT_MACRO_PERIOD_MAX_MS`], never clamped), `gt_macro_overrides_merge_template(base, before, after)` (new template after an edit:
+  a default unchanged by the edit, of a rank of the same type, takes back the base's value if `after`'s limits accept it, so a project value never leaks into
+  the template; polling taken from base), key file groups `<prefix>override:K` (tolerant read, one entry per label + occurrence, the last read wins).
+  A project value equal to the template's is no project value any more (difference semantics, assumed). Usage values and running state are never in it.
 - `macros_format.c` (core) — printf-style arguments (`%d`, `%s`, `%#ListName`, length modifiers); the lists are passed in (`%#x` is a list only if list `x`
   exists).
 - `macro_file.c` (core) — the standalone `.ini`: v2 format (`[gtkterm-macros] version=2`, `[macro:N]`, `[list:N]`, values escaped by GKeyFile); old
@@ -267,7 +280,25 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   `GtMacros` with a file keeps a `GtFileStamp` (taken before the read); `gt_macros_save_file(m, path, interactive, force)` returns `GT_MACROS_CONFLICT` when the file changed on disk since the last
   read or write, or, without a current file nor a path, when the default file exists and is not empty (never read by this tab: a silent write would lose it) (non-interactive: warning, nothing
   written); `src/ui/macros_save.c` then asks Overwrite / Reload (re-read, usage values cleared; without a current file, the default file) / Cancel, Cancel by default.
-  `gt_macros_apply_edits()` applies the editor's rows and clears the usage values of a macro whose default values changed (they would hide the new default).
+  `gt_macros_apply_edits()` applies the editor's rows and clears the usage values of a macro whose default values changed (they would hide the new default);
+  `gt_macros_commit_edits()` (= apply with a copy of the lists + `gt_macro_poller_sync` + `gt_macros_changed`) is the editor's single apply path.
+  **Linked template** (project tabs only): a `GtMacros` can be linked, in fields distinct from `path`/`stamp`: `template_path` (absolute), `base` (the template's
+  set as last read, `gt_macros_get_template_set()`), `template_stamp` (taken before the read) and a `generation` counter (`gt_macros_get_generation()`) bumped
+  by every change of the effective set or of the link (replace_set, apply, `gt_macros_edited`, link, detach, refresh): an asynchronous answer records it when
+  asking and applies nothing if it changed. **Invariant:** the current set (the **effective** set: panel, editor, sends, polling, Lua) has the **same structure**
+  as the base; project values are not stored, they are `gt_macros_get_overrides()` = diff(base, effective) (a `gt_macros_replace_set` of another structure
+  drops the link with a `g_warning`). `gt_macros_link_template(m, path)` (interactive read, a missing file refused: « Cannot load macros file: … », nothing
+  changes; else base = read set, effective = copy, usage and polling reset); `gt_macros_link_from_project(m, path, cached_base, overrides, &dropped,
+  &error_text)` (project open: template re-read, `UPDATED` if its text differs from the cached base, else `UNCHANGED`; unreadable: base = cached copy,
+  `MISSING`, still linked; effective = apply); `gt_macros_detach_template()` (forgets template, base and stamp; effective set, polling, usage kept; flash
+  « Detached from macros template %s », `edited`); `gt_macros_copy_from(dst, src)` (new tab: set and link copied); `gt_macros_classify_edits()` (simulates the
+  rows on a clone: `NONE`, `DEFAULTS` (only defaults changed), `STRUCTURE`; the lists passed are never taken); `gt_macros_save_template_edits(m, rows, n,
+  lists, force)` (new base = merge_template, `CONFLICT` unless forced when the template changed on disk (a `MISSING` one that now exists too), `FAILED` +
+  « Cannot save macros template: … », `SAVED`: stamp retaken, base replaced, commit, flash « Macros template %s saved »); `gt_macros_refresh_template()` /
+  `gt_macros_reload_template()` (re-read, current project values reapplied: in place when the structure is unchanged (defaults and polling copied rank by
+  rank, running polling kept), else `gt_macros_replace_set`). `gt_macros_set_embedded(TRUE)` keeps the link, `gt_macros_set_embedded(FALSE)` detaches;
+  `gt_macros_load_file()` forgets the link as soon as it replaces the set (an interactive failure changes nothing); `gt_macros_reload` and
+  `gt_macros_save_file` ignore the template. The link changing calls `gt_macros_edited`: the session updates `detach-macros-template` in its `edited` callback.
 - `src/ui/macro_shortcuts.c` — one `GtkShortcutController` per page (`GTK_SHORTCUT_SCOPE_LOCAL`, capture phase, on the page), rebuilt on `macros_changed`: only
   the shown tab's macros answer; the shortcut of a sendable macro consumes the key (M43), otherwise the key goes on to the terminal.
 - `src/ui/macro_panel.c` — the button panel, a view of the set and the poller: tabs are grouped toggle buttons in a `GtkFlowBox` + a `GtkStack` of pages;
@@ -287,10 +318,18 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   (defaults, min, max, charsets) is kept only when all its fields are valid, a default only if it passes its limits; OK applies them with the row. Below,
   `macro-preview-box`: « Line sent (default values): », `macro-preview` (Pango markup: arguments blue, red when invalid, specials purple) and
   `macro-preview-bytes` (« 50 35 30 3B · 4 bytes »), for a single selected sendable row. Default size 820 × 580. The columns have a fixed starting width, never narrower
-  than their title (`natural_w` in the test dump), and only the last one takes the remaining room.
+  than their title (`natural_w` in the test dump), and only the last one takes the remaining room. **Linked tab:** a label `macro-template-info`
+  (« Template: <full path> », hidden when not linked, updated on the session's `edited`) at the top; OK applies nothing before the answer:
+  `gt_macros_classify_edits()` → `NONE` closes, `DEFAULTS` asks « These macros come from the template %s » Keep in this project (default) / Save to template /
+  Cancel, `STRUCTURE` asks Save to template / Detach and keep a copy / Cancel (default); no destructive button. Keep = commit; Detach = detach then commit;
+  Save to template keeps the editor open until `SAVED` (`FAILED`: stays; `CONFLICT`: Overwrite (destructive, forced save with the rows re-read) / Reload /
+  Cancel (default)); Cancel or Escape leaves it open. The answer holds a `GWeakRef` on the window and the generation; while a question is pending OK does
+  nothing and closing is refused (the title bar is OK, so it asks too). After a `SAVED`, `gt_app_refresh_template_siblings()` (`app.c`) refreshes every other
+  tab of the window linked to the same path and closes that tab's open editor (`gt_macro_editor_close()`) without applying anything.
 
 Macros and lists live in that standalone `.ini`, separate from the port config; each free tab can use a different file; the last-used path is remembered in the
-active profile of that tab (`config_remember_macros_file(session)`, no-op in a project tab). A project tab has no `.ini`: see « Projects ».
+active profile of that tab (`config_remember_macros_file(session)`, no-op in a project tab). A project tab has no `.ini` of its own (it may be linked to a
+template `.ini`): see « Projects ».
 
 **Config (`config_store.c` + `profile.c` + `app_config.c`):** `.gtktermrc` under `$XDG_CONFIG_HOME` (migrated from `$HOME`) is read and written only by
 `GtConfigStore` (GKeyFile): `[general]` (update settings), `[profile:NAME]` (one `GtProfile` each), and the owner groups `[window]` (`app_config.c`, as a
@@ -321,17 +360,25 @@ once, by `close-request`. An unreadable file makes the store read-only: nothing 
 **Projects (sub-project 6c; spec `docs/superpowers/specs/2026-10-10-refonte-projets-design.md`):** a project is **one `.gtkterm` file holding a whole workstation**: every tab with its port and
 terminal settings, its page state, **a copy** of its macro set and **a copy** of its Lua script text (never a path to a `.ini` or a `.lua`). Format (`project_file.c`, GKeyFile, hand-editable):
 `[gtkterm-project]` (`version=1`, `active=N`), one `[tab:N]` per tab (N = 0, 1, … in tab order: the keys of a `[profile:…]` through `profile_keyfile.c`, plus page state and `script`), the macros as
-`[tab:N:macro:M]` and `[tab:N:list:K]` (keys of the v2 macro format). `gt_project_data_load()` reads and validates the **whole** file before anything else (unknown version, missing header, no tab, tab
+`[tab:N:macro:M]` and `[tab:N:list:K]` (keys of the v2 macro format); a tab linked to a macros template also has `macros_template` (absolute path; empty or
+relative → not linked, warning), its groups `macro`/`list` hold the **base** (template as of the last project save) and its project values are
+`[tab:N:override:K]` (`label`, `occurrence` if ≠ 0, `arg_<k>` from 1, `polling` + `polling_period_ms` together; an invalid value or group ignored with a
+warning naming file, group and key; version stays 1, an older GTKTerm opens the base copy). `GtProjectTab` has `macros_template` (NULL: not linked) and
+`overrides` (never NULL). `gt_project_data_load()` reads and validates the **whole** file before anything else (unknown version, missing header, no tab, tab
 without a valid profile → refused with a message, nothing closed; an out-of-range profile is corrected with a warning like a loaded profile and the project is then « modified »; a value that is not
 valid UTF-8 (a hand-edited script) is made valid, invalid bytes replaced, with a warning); `gt_project_data_save()` writes atomically (`g_file_set_contents`); `gt_project_data_snapshot()` is the text
-compared for « modified » (same serialisation, **without** page state, active tab or usage values).
+compared for « modified » (same serialisation, **without** page state, active tab, usage values or the base of a linked tab: a template re-imported at open
+never makes the project modified).
 - **Free tabs and project tabs, never mixed:** with no project open, tabs work as in 6b (profiles in `.gtktermrc`, macros in a `.ini`). Once a project is open or saved, **every** tab of the window
   belongs to it (`gt_session_set_in_project()`, property `in-project`): its macros are **embedded** (`GtMacros` without a path, Configure Macros and polling edit the set in memory; Load macros file…
-  imports a copy, Save macros file… exports to a chosen `.ini` without linking the tab), its script text is the project's (`script-text` property, held by the session; Open… loads a file into the
-  editor, Save exports to a `.lua`, `[session] script_path` is neither read nor written), a new tab gets a copy of the active tab's macros and an empty script. Load/Save/Delete profile stay available
+  asks « Use this macros file in the project »: Copy into the project (default; the tab is no longer linked) / Link as template (`gt_macros_link_template`) /
+  Cancel, the answer ignored if the session closed, left the project or its generation changed; Save macros file… exports to a chosen `.ini` without linking
+  the tab; Macros › Detach from template turns a linked tab into a copy; polling set from the panel on a linked tab is a project value, without question), its script text is the project's (`script-text` property, held by the session; Open… loads a file into the
+  editor, Save exports to a `.lua`, `[session] script_path` is neither read nor written), a new tab gets a copy of the active tab's macros (and of its template link, `gt_macros_copy_from`) and an empty script. Load/Save/Delete profile stay available
   (loading changes the tab, so the project becomes modified; saving writes the profile to `.gtktermrc`).
 - **`GtProject`** (`project.c`, application layer, one per window held by `src/ui/app.c`): properties `open`, `path` (NULL: no file, shown « Untitled project »), `modified`; `gt_project_capture()`
-  builds a `GtProjectData` from the sessions (profile through `gt_term_options_store_profile`, set copy, script text, page state through the UI callback `GtProjectPageFunc`);
+  builds a `GtProjectData` from the sessions (profile through `gt_term_options_store_profile`, set copy (linked tab: base copy, template path and project values
+  by diff), script text, page state through the UI callback `GtProjectPageFunc`);
   `gt_project_begin/end/save`; `gt_project_save()` on a closed project fails (« No project is open »). **« Modified »** is not tracked event by event: the session's `edited` signal (macros changed or
   polling set, `GtTermOptions` `changed`, `profile_applied`, script text, tab added / closed / moved) schedules a recompute at `G_PRIORITY_DEFAULT_IDLE`, grouped, at most once per 300 ms, comparing
   snapshots; closing recomputes at once. Title: « <name> • - <short name> » when modified, « <name> - <short name> » otherwise; no project: the 6b title.
@@ -340,7 +387,10 @@ compared for « modified » (same serialisation, **without** page state, active 
   one free tab with the `default` profile, its macros loaded like at start-up by `app_config_load_profile_macros()`, `last_project` cleared). Each destructive operation first asks `gt_ui_confirm` if a
   tab is busy, then Save / Don't save / Cancel (`gt_ui_choose`) if the project is modified; a project request arriving while another one is pending (a project dialog already open) is ignored. Open
   reads and validates the file before the questions, and reads it again if it was rewritten meanwhile (Save of the project being reopened); the tabs are then recreated in order, each with its profile,
-  page, macros and script, the `active` tab shown; the recreated tabs keep the `lock_port` (-L) of the tab active before. Save as from free tabs copies each tab's in-memory macro set and editor text;
+  page, macros and script, the `active` tab shown (a linked tab goes through `gt_macros_link_from_project()` before its page; once the page exists, `UPDATED` →
+  5 s flash « Macros template %s updated », with drops « …: %u project values no longer apply » (ngettext; same flash for `UNCHANGED` with drops), `MISSING`
+  → warning message « Cannot read the macros template %s: %s. The copy saved in the project is used. »; without drops the reference data take the live
+  diff, so a hand-written file does not show « modified », with drops the project is modified and saving removes them); the recreated tabs keep the `lock_port` (-L) of the tab active before. Save as from free tabs copies each tab's in-memory macro set and editor text;
   if it fails the project stays open as « Untitled project » (modified, embedded macros), like New project, and Save as can be retried. Quitting with a modified project asks the same question; SIGTERM
   or session end asks nothing and saves nothing. Reload after a conflict replaces the tabs too, so it asks the same « Close all tabs? » confirmation first when a tab is busy.
 - **`last_project`:** `[general] last_project` (absolute path) is written by a successful open or save and cleared by Close project; New project leaves it alone. Start-up: `--project FILE` opens that
@@ -376,13 +426,13 @@ prefix, fake `pkexec` counting authorizations) and `publier_version`, `test_upda
 `settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`). Release: `tools/publier-version.sh vX.Y.Z` (clean tree, `meson.build`
 version, `NEWS` section; annotated tag, no push).
 
-**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 68 scenarios drive
+**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 69 scenarios drive
 GTKTerm through three bricks: (1) **D-Bus actions** — `org.gtk.Actions` (`Activate`, `SetState`, `Describe`) on the private session bus; start-up is detected
 when the name `eu.mulagabriel.gtkterm.test.p<PID>` appears; (2) the **test hook** (`src/ui/test_hooks.c`, compiled unless `-Dtest_hooks=false`, active only
 when `GTKTERM_TEST_HOOKS=1`, which also switches the application id to `eu.mulagabriel.gtkterm.test.p<PID>` without `NON_UNIQUE`): actions `app.test-dump`
 (every widget of the visible windows and popovers: type, accessible role, label, widget name, CSS classes `css`, flags, geometry), `app.test-terminal-text`,
 `app.test-terminal-props` (both on the active tab), `app.test-activate(s)`, `app.test-set-text((ss))`, `app.test-sessions` (state `aa{sv}`, one dict per tab in
-order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`, `activity` (state nick), `unread`), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name`); the dump also gives
+order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`, `activity` (state nick), `unread`, `template` (linked macros template path, empty if none)), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name`); the dump also gives
 `natural_w` (natural width measured by `gtk_widget_measure`, for mapped widgets), and when not empty `placeholder` (`GtkEntry`), `tooltip` and `markup` (a `GtkLabel` using Pango markup); (3) a **fake broadway browser** (`tests/gui/broadway.py`, `gtk4-broadwayd`'s protocol) for real gestures:
 typing in the terminal, shortcuts, menus by clicks, file choosers by Ctrl+L, context menus (a click waits for the widget's geometry to be stable), tab
 drags (`drag_in_surface`). Widgets a test must reach carry a stable `gtk_widget_set_name()` and an accessible name: name them when adding UI; `find`/`find1`

@@ -135,7 +135,7 @@ Both delays are per profile, in the port dialog › **Advanced Configuration Opt
 ### Projects
 
 A project is one `.gtkterm` file holding a whole workstation: every tab with its port and terminal settings, its page layout, **a copy** of its macros and
-**a copy** of its Lua script. Nothing in it points to another file.
+**a copy** of its Lua script. Nothing in it points to another file, unless you link a macros template (below).
 
 | Action | What it does |
 |---|---|
@@ -146,6 +146,12 @@ A project is one `.gtkterm` file holding a whole workstation: every tab with its
 
 GTKTerm reopens the last project at start-up (unless the command line gives a profile or port settings), and `gtkterm --project FILE` opens a given one.
 Before writing over a project or macros file that someone else changed on disk, GTKTerm asks **Overwrite / Reload / Cancel**, with Cancel as the default.
+
+**Macros templates.** In a project tab, **Macros › Load macros file…** asks whether to **copy** the file into the project or **link** it as a template
+shared by several projects. A linked tab keeps its own default values and polling settings in the project; when you change macros in Configure macros,
+GTKTerm asks whether to keep the new default values in this project or save them to the template (renaming, adding or removing macros can only go to the
+template, or the tab can be detached and keep its own copy). The template is re-read each time the project opens, your project values are applied on top,
+and other tabs linked to it are refreshed when you save it. **Macros › Detach from template** turns the tab back into a plain copy.
 
 Without a project, tabs work with named profiles (Port › Load / Save / Delete profile…, stored in `~/.config/.gtktermrc`) and one macros file (`.ini`) per
 tab.

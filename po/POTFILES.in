@@ -10,6 +10,7 @@ src/file_sender.c
 src/link.c
 src/macro_arg.c
 src/macro_file.c
+src/macro_override.c
 src/macros.c
 src/port_form.c
 src/profile.c

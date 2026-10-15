@@ -45,6 +45,11 @@ struct _GtMacros
   GtFileStamp stamp;		/* identité du fichier courant à sa dernière lecture ou écriture */
   void (*edited) (gpointer data);
   gpointer edited_data;
+  /* Lien à un modèle (spec modèles §2.1), distinct de path/stamp */
+  gchar *template_path;		/* chemin absolu ; NULL : non lié */
+  GtMacroSet *base;		/* jeu du modèle tel que lu (ou écrit) en dernier ; NULL : non lié */
+  GtFileStamp template_stamp;	/* identité du modèle, prise avant la lecture */
+  guint64 generation;		/* relevée à chaque changement du jeu effectif ou du lien */
 };
 
 static gboolean
@@ -122,6 +127,8 @@ gt_macros_free (GtMacros *m)
     return;
   gt_macros_shutdown (m);
   gt_macro_set_free (m->set);
+  gt_macro_set_free (m->base);
+  g_free (m->template_path);
   g_free (m->path);
   g_free (m->last_save_error);
   g_hash_table_unref (m->usage);
@@ -212,6 +219,7 @@ gt_macros_changed (GtMacros *m)
 void
 gt_macros_edited (GtMacros *m)
 {
+  m->generation++;
   if (m->edited != NULL)
     m->edited (m->edited_data);
 }
@@ -223,6 +231,19 @@ gt_macros_set_edited_func (GtMacros *m, void (*func) (gpointer data), gpointer d
   m->edited_data = data;
 }
 
+/* Lien oublié (modèle, base, identité), sans message ni rappel ; FALSE si m n'était pas lié */
+static gboolean
+forget_template (GtMacros *m)
+{
+  if (m->template_path == NULL)
+    return FALSE;
+  g_clear_pointer (&m->template_path, g_free);
+  g_clear_pointer (&m->base, gt_macro_set_free);
+  memset (&m->template_stamp, 0, sizeof m->template_stamp);
+  m->generation++;
+  return TRUE;
+}
+
 void
 gt_macros_set_embedded (GtMacros *m, gboolean embedded)
 {
@@ -232,6 +253,8 @@ gt_macros_set_embedded (GtMacros *m, gboolean embedded)
       g_clear_pointer (&m->path, g_free);
       memset (&m->stamp, 0, sizeof m->stamp);
     }
+  else if (forget_template (m))
+    gt_macros_edited (m);	/* onglet libre : plus de lien (action Détacher de la session) */
 }
 
 gboolean
@@ -385,6 +408,13 @@ gt_macros_replace_set (GtMacros *m, GtMacroSet *set)
   old = m->set;
   m->set = set;
   gt_macro_set_free (old);
+  m->generation++;
+  /* Garde-fou de l'invariant (spec modèles §2.1) : un jeu effectif d'une autre structure que la base ne peut plus suivre le modèle */
+  if (m->base != NULL && !gt_macro_set_same_structure (m->base, m->set))
+    {
+      g_warning ("macros: set of another structure than the template %s: template forgotten", m->template_path);
+      forget_template (m);
+    }
   g_hash_table_remove_all (m->usage);
   forget_derived (m, 0);
   /* Panneau et raccourcis reconstruits par l'interface ; une fenêtre d'édition ouverte sur l'ancien jeu s'y ferme sans enregistrer
@@ -426,6 +456,7 @@ gt_macros_apply_edits (GtMacros *m, const GtMacroEdit *rows, guint n_rows, GtMac
     }
   g_hash_table_unref (before);
   forget_derived (m, 0);
+  m->generation++;
 }
 
 const gchar *
@@ -509,6 +540,9 @@ gt_macros_load_file (GtMacros *m, const gchar *path, gboolean interactive)
       g_clear_error (&error);
       set = gt_macro_set_new ();
     }
+  /* Le jeu est remplacé (réussite, ou échec non interactif qui installe un jeu vide) : l'onglet n'est plus lié à un modèle, intégré ou non
+     (oublié avant replace_set, dont le rappel edited voit l'onglet non lié). Un échec interactif est déjà sorti sans rien changer. */
+  forget_template (m);
   /* Mode intégré : le fichier est importé, son chemin n'est pas retenu. Identité prise avant la lecture (absent : « absent »). */
   if (!m->embedded)
     {
@@ -606,4 +640,317 @@ gt_macros_reload (GtMacros *m)
   ok = gt_macros_load_file (m, path, TRUE);
   g_free (path);
   return ok;
+}
+
+/* ---- Onglet lié à un modèle (spec 2026-10-15-modeles-macros-design.md) ---- */
+
+guint64
+gt_macros_get_generation (GtMacros *m)
+{
+  return m->generation;
+}
+
+const gchar *
+gt_macros_get_template (GtMacros *m)
+{
+  return m->template_path;
+}
+
+const GtMacroSet *
+gt_macros_get_template_set (GtMacros *m)
+{
+  return m->base;
+}
+
+GtMacroOverrides *
+gt_macros_get_overrides (GtMacros *m)
+{
+  GtMacroOverrides *o;
+
+  if (m->template_path == NULL)
+    return NULL;
+  o = gt_macro_overrides_diff (m->base, m->set);
+  /* Invariant (même structure) rompu : aucune valeur propre plutôt que NULL, qui voudrait dire « non lié » */
+  if (o == NULL)
+    {
+      g_warning ("macros: set and template %s differ in structure: no project value", m->template_path);
+      o = gt_macro_overrides_new ();
+    }
+  return o;
+}
+
+static gchar *
+template_name (GtMacros *m)
+{
+  return g_path_get_basename (m->template_path);
+}
+
+/* Lecture du modèle ; identité relevée avant la lecture (une réécriture pendant la lecture sera un conflit) */
+static gboolean
+read_template (const gchar *path, GtMacroSet **set, GtFileStamp *stamp, GError **error)
+{
+  gt_file_stamp_take (path, stamp);
+  return gt_macro_file_load (path, set, error);
+}
+
+/* Lien installé (le jeu effectif n'est pas touché) ; base prise en charge */
+static void
+set_template (GtMacros *m, const gchar *path, GtMacroSet *base, const GtFileStamp *stamp)
+{
+  gchar *abs = g_canonicalize_filename (path, NULL);
+
+  g_free (m->template_path);
+  m->template_path = abs;
+  gt_macro_set_free (m->base);
+  m->base = base;
+  m->template_stamp = *stamp;
+  m->generation++;
+}
+
+gboolean
+gt_macros_link_template (GtMacros *m, const gchar *path)
+{
+  gchar *abs = g_canonicalize_filename (path, NULL);
+  GtMacroSet *set = NULL;
+  GError *error = NULL;
+  GtFileStamp stamp;
+
+  /* Fichier absent compris : un modèle doit exister (au contraire d'un fichier de macros, créé au premier enregistrement) */
+  if (!read_template (abs, &set, &stamp, &error))
+    {
+      gt_app_message (GT_APP_MSG_ERROR, _ ("Cannot load macros file: %s"), error->message);
+      g_error_free (error);
+      g_free (abs);
+      return FALSE;
+    }
+  set_template (m, abs, set, &stamp);
+  g_free (abs);
+  g_clear_pointer (&m->last_save_error, g_free);
+  /* Aucune valeur propre ; replace_set remet usage et polling à zéro, et son rappel edited voit l'onglet lié */
+  gt_macros_replace_set (m, gt_macro_set_copy (m->base));
+  return TRUE;
+}
+
+/* Texte d'un jeu au format du fichier de macros (préfixe vide) : comparaison d'un modèle relu à la copie du projet */
+static gchar *
+set_text (const GtMacroSet *set)
+{
+  GKeyFile *kf = g_key_file_new ();
+  gchar *text;
+
+  if (set != NULL)
+    gt_macro_set_to_key_file (set, kf, "");
+  text = g_key_file_to_data (kf, NULL, NULL);
+  g_key_file_unref (kf);
+  return text;
+}
+
+GtMacrosTemplateStatus
+gt_macros_link_from_project (GtMacros *m, const gchar *path, const GtMacroSet *cached_base, const GtMacroOverrides *overrides,
+                             guint *dropped, gchar **error_text)
+{
+  GtMacrosTemplateStatus status;
+  GtMacroSet *set = NULL;
+  GError *error = NULL;
+  GtFileStamp stamp;
+  guint lost = 0;
+
+  if (error_text != NULL)
+    *error_text = NULL;
+  if (read_template (path, &set, &stamp, &error))
+    {
+      gchar *read_text = set_text (set), *cached_text = set_text (cached_base);
+
+      status = strcmp (read_text, cached_text) != 0 ? GT_MACROS_TEMPLATE_UPDATED : GT_MACROS_TEMPLATE_UNCHANGED;
+      g_free (read_text);
+      g_free (cached_text);
+    }
+  else
+    {
+      /* Support démonté, fichier déplacé : la copie du projet sert, le lien reste (identité « absent » si le fichier manque) */
+      status = GT_MACROS_TEMPLATE_MISSING;
+      if (error_text != NULL)
+        *error_text = g_strdup (error->message);
+      g_error_free (error);
+      set = cached_base != NULL ? gt_macro_set_copy (cached_base) : gt_macro_set_new ();
+    }
+  set_template (m, path, set, &stamp);
+  gt_macros_replace_set (m, gt_macro_overrides_apply (overrides, m->base, &lost));
+  if (dropped != NULL)
+    *dropped = lost;
+  return status;
+}
+
+void
+gt_macros_detach_template (GtMacros *m)
+{
+  gchar *name;
+
+  if (m->template_path == NULL)
+    return;
+  name = template_name (m);
+  forget_template (m);
+  /* Le jeu effectif reste : les valeurs propres deviennent les valeurs de la copie */
+  gt_app_status_flash (m->owner, 3000, _ ("Detached from macros template %s"), name);
+  g_free (name);
+  gt_macros_edited (m);
+}
+
+void
+gt_macros_copy_from (GtMacros *dst, GtMacros *src)
+{
+  if (src->template_path != NULL)
+    set_template (dst, src->template_path, gt_macro_set_copy (src->base), &src->template_stamp);
+  else
+    forget_template (dst);
+  gt_macros_replace_set (dst, gt_macro_set_copy (src->set));
+}
+
+/* Lignes appliquées à un jeu ; lists (NULL : listes du jeu) copiées, gt_macro_set_apply_edits prenant possession des siennes */
+static void
+apply_rows (GtMacroSet *set, const GtMacroEdit *rows, guint n_rows, const GtMacroLists *lists)
+{
+  gt_macro_set_apply_edits (set, rows, n_rows, lists != NULL ? gt_macro_lists_copy (lists) : NULL);
+}
+
+GtMacrosEditKind
+gt_macros_classify_edits (GtMacros *m, const GtMacroEdit *rows, guint n_rows, const GtMacroLists *lists)
+{
+  GtMacroSet *sim = gt_macro_set_clone (m->set);	/* identifiants gardés : les lignes s'y appliquent comme au jeu effectif */
+  GtMacrosEditKind kind = GT_MACROS_EDIT_STRUCTURE;
+  GtMacroOverrides *diff;
+
+  apply_rows (sim, rows, n_rows, lists);
+  diff = gt_macro_overrides_diff (m->set, sim);
+  if (diff != NULL)
+    kind = gt_macro_overrides_count (diff) == 0 ? GT_MACROS_EDIT_NONE : GT_MACROS_EDIT_DEFAULTS;
+  gt_macro_overrides_free (diff);
+  gt_macro_set_free (sim);
+  return kind;
+}
+
+void
+gt_macros_commit_edits (GtMacros *m, const GtMacroEdit *rows, guint n_rows, const GtMacroLists *lists)
+{
+  gt_macros_apply_edits (m, rows, n_rows, lists != NULL ? gt_macro_lists_copy (lists) : NULL);
+  gt_macro_poller_sync (m->poller);
+  gt_macros_changed (m);
+}
+
+GtMacrosSaveResult
+gt_macros_save_template_edits (GtMacros *m, const GtMacroEdit *rows, guint n_rows, const GtMacroLists *lists, gboolean force)
+{
+  GtMacroSet *before, *after, *new_base;
+  GError *error = NULL;
+  gchar *name;
+
+  if (m->template_path == NULL)
+    return GT_MACROS_FAILED;	/* lien perdu entre la question et la réponse : l'appelant a relevé la génération, ne doit pas arriver */
+  /* Garde d'identité ; un modèle marqué absent qui existe maintenant est aussi un changement */
+  if (!force && gt_file_stamp_changed (m->template_path, &m->template_stamp))
+    return GT_MACROS_CONFLICT;
+  before = gt_macro_set_clone (m->set);
+  after = gt_macro_set_clone (m->set);
+  apply_rows (after, rows, n_rows, lists);
+  /* Les valeurs propres non touchées par l'édition ne fuient pas dans le modèle */
+  new_base = gt_macro_overrides_merge_template (m->base, before, after);
+  gt_macro_set_free (before);
+  gt_macro_set_free (after);
+  if (!gt_macro_file_save (new_base, m->template_path, &error))
+    {
+      gt_app_message (GT_APP_MSG_ERROR, _ ("Cannot save macros template: %s"), error->message);
+      g_error_free (error);
+      gt_macro_set_free (new_base);
+      return GT_MACROS_FAILED;
+    }
+  gt_file_stamp_take (m->template_path, &m->template_stamp);
+  gt_macro_set_free (m->base);
+  m->base = new_base;
+  /* Mêmes lignes sur le jeu effectif : même structure que la nouvelle base, valeurs propres restantes */
+  gt_macros_commit_edits (m, rows, n_rows, lists);
+  name = template_name (m);
+  gt_app_status_flash (m->owner, 3000, _ ("Macros template %s saved"), name);
+  g_free (name);
+  return GT_MACROS_SAVED;
+}
+
+/* Égalité des valeurs par défaut de la spec : NULL ≡ vecteur de "" */
+static gboolean
+defaults_equal (const GtMacro *a, const GtMacro *b)
+{
+  guint na = a->args != NULL ? g_strv_length (a->args) : 0;
+  guint nb = b->args != NULL ? g_strv_length (b->args) : 0;
+
+  for (guint k = 0; k < MAX (na, nb); k++)
+    {
+      const gchar *va = k < na ? a->args[k] : "";
+      const gchar *vb = k < nb ? b->args[k] : "";
+
+      if (strcmp (va, vb) != 0)
+        return FALSE;
+    }
+  return TRUE;
+}
+
+gboolean
+gt_macros_refresh_template (GtMacros *m, gboolean interactive)
+{
+  GtMacroOverrides *overrides;
+  GtMacroSet *set = NULL, *effective;
+  GError *error = NULL;
+  GtFileStamp stamp;
+
+  if (m->template_path == NULL)
+    return FALSE;
+  if (!read_template (m->template_path, &set, &stamp, &error))
+    {
+      gchar *text = g_strdup_printf (_ ("Cannot load macros file: %s"), error->message);
+
+      report_error (interactive, text);
+      g_free (text);
+      g_error_free (error);
+      return FALSE;
+    }
+  /* Valeurs propres actuelles (différence avec l'ancienne base) réappliquées au modèle relu */
+  overrides = gt_macro_overrides_diff (m->base, m->set);
+  if (overrides == NULL)
+    g_warning ("macros: set and template %s differ in structure: project values lost", m->template_path);
+  effective = gt_macro_overrides_apply (overrides, set, NULL);
+  gt_macro_overrides_free (overrides);
+  gt_macro_set_free (m->base);
+  m->base = set;
+  m->template_stamp = stamp;
+  m->generation++;
+  if (!gt_macro_set_same_structure (effective, m->set))
+    {
+      /* Polling arrêté, usage effacé, éditeur de cet onglet fermé (jeu remplacé) */
+      gt_macros_replace_set (m, effective);
+      return TRUE;
+    }
+  /* En place, rang par rang : identifiants, polling en marche et éditeur ouvert gardés */
+  for (guint i = 0; i < gt_macro_set_count (m->set); i++)
+    {
+      const GtMacro *dst = gt_macro_set_get (m->set, i);
+      const GtMacro *src = gt_macro_set_get (effective, i);
+      guint id = dst->id;
+
+      if (!defaults_equal (dst, src))
+        g_hash_table_remove (m->usage, GUINT_TO_POINTER (id));	/* masquerait la nouvelle valeur par défaut */
+      if (src->args == NULL)
+        gt_macro_set_clear_args (m->set, id);
+      else
+        gt_macro_set_set_args (m->set, id, (const gchar *const *) src->args, (gint) g_strv_length (src->args));
+      gt_macro_set_set_polling (m->set, id, src->polling, src->polling_period_ms);
+    }
+  gt_macro_set_free (effective);
+  forget_derived (m, 0);
+  gt_macro_poller_sync (m->poller);
+  gt_macros_changed (m);
+  return TRUE;
+}
+
+gboolean
+gt_macros_reload_template (GtMacros *m)
+{
+  return gt_macros_refresh_template (m, TRUE);
 }
