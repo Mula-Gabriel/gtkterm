@@ -63,6 +63,7 @@ typedef struct
 	gboolean           asking;	/* question en cours (modèle, spec modèles §2.7, ou Reload) : OK et Reload sans effet, fermeture refusée */
 	gboolean           reloading;	/* Reload en cours : un jeu remplacé refait les lignes au lieu de fermer la fenêtre */
 	gboolean           reloaded;	/* lignes refaites pendant ce Reload (crochet macros_changed) */
+	gboolean           prefix_message;	/* message « Prefix of argument %d removed » affiché */
 } MacroEditor;
 
 /* Question posée sur un onglet lié : la réponse retrouve l'éditeur par sa fenêtre (jamais le MacroEditor, libéré avec elle) et n'applique rien
@@ -131,6 +132,7 @@ static GtMacros *editor_macros(MacroEditor *editor)
 
 static void set_message(MacroEditor *editor, const gchar *text, gboolean error)
 {
+	editor->prefix_message = FALSE;	/* remis par prefix_message_update après son propre message */
 	gtk_label_set_text(GTK_LABEL(editor->message), text != NULL ? text : "");
 	gtk_widget_set_visible(editor->message, text != NULL && text[0] != '\0');
 	if(error)
@@ -1268,6 +1270,18 @@ static const gchar *nth(const gchar *const *v, gint k)
 	return v != NULL ? v[k] : "";
 }
 
+/* Vue de n éléments d'un vecteur de la ligne : tronqué ou complété par "" (règle du cœur, spec §5.1, appliquée à l'OK) ; NULL s'il est
+ * entièrement vide ; g_strfreev. Optional et Prefix sont lus ainsi : la ligne garde ses vecteurs pendant une frappe dans l'action. */
+static gchar **vector_resize(const gchar *const *v, gint n)
+{
+	gchar **out = g_new0(gchar *, n + 1);
+	gint len = v != NULL ? (gint)g_strv_length((gchar **)v) : 0;
+
+	for(gint k = 0; k < n; k++)
+		out[k] = g_strdup(k < len ? v[k] : "");
+	return vector_or_null(out);
+}
+
 /* Vérifie les champs de la table (classe « error ») et, si write, écrit dans la ligne les vecteurs dont tous les champs sont valides :
  * limites (min, max, jeux), puis valeurs par défaut vérifiées avec les limites retenues de la ligne. Tout vide → NULL. */
 static void defaults_commit(MacroEditor *editor, gboolean write)
@@ -1470,7 +1484,13 @@ static void preview_render(MacroEditor *editor)
 		gt_macro_set_set_args(set, id, gt_macro_row_get_args(row), n);
 	gt_macro_set_set_limits(set, id, row_vector(gt_macro_row_get_arg_min(row), n), row_vector(gt_macro_row_get_arg_max(row), n),
 	                        row_vector(gt_macro_row_get_arg_charset(row), n), n);
-	gt_macro_set_set_optional(set, id, row_vector(gt_macro_row_get_arg_optional(row), n), row_vector(gt_macro_row_get_arg_prefix(row), n), n);
+	{
+		gchar **opt = vector_resize(gt_macro_row_get_arg_optional(row), n), **pre = vector_resize(gt_macro_row_get_arg_prefix(row), n);
+
+		gt_macro_set_set_optional(set, id, (const gchar *const *)opt, (const gchar *const *)pre, n);
+		g_strfreev(opt);
+		g_strfreev(pre);
+	}
 	macro = gt_macro_set_find(set, id);
 	if(!gt_macro_is_sendable(macro))
 	{
@@ -1527,49 +1547,33 @@ static void preview_render(MacroEditor *editor)
 	gt_macro_set_free(set);
 }
 
-/* Vecteur de n éléments : v tronqué ou complété par "" (règle du cœur, spec §5.1) ; NULL s'il est entièrement vide ; g_strfreev */
-static gchar **vector_resize(const gchar *const *v, gint n)
+/* Action de la ligne affichée modifiée : les vecteurs de la ligne ne sont pas touchés (une frappe passe par des états transitoires, l'OK les
+ * ajuste par le cœur) ; un préfixe non vide au-delà du nombre d'arguments est signalé (spec §5.1 : « Prefix of argument %d removed », premier
+ * rang perdu), le message est retiré quand le nombre revient */
+static void prefix_message_update(MacroEditor *editor, GtMacroRow *row)
 {
-	gchar **out = g_new0(gchar *, n + 1);
-	gint len = v != NULL ? (gint)g_strv_length((gchar **)v) : 0;
-
-	for(gint k = 0; k < n; k++)
-		out[k] = g_strdup(k < len ? v[k] : "");
-	return vector_or_null(out);
-}
-
-/* Action de la ligne affichée modifiée : Optional et Prefix gardés rang par rang (tronqués ou complétés) ; un préfixe non vide perdu par la
- * troncature est signalé (spec §5.1 : « Prefix of argument %d removed », premier rang perdu) */
-static void optional_follow_action(MacroEditor *editor, GtMacroRow *row)
-{
-	const gchar *const *opt = gt_macro_row_get_arg_optional(row), *const *pre = gt_macro_row_get_arg_prefix(row);
+	const gchar *const *pre = gt_macro_row_get_arg_prefix(row);
 	GtMacroLists *lists;
-	gchar **new_opt, **new_pre;
-	gint n, len;
+	gint n, len = pre != NULL ? (gint)g_strv_length((gchar **)pre) : 0;
 
-	if(opt == NULL && pre == NULL)
-		return;
 	lists = gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows));
 	n = macro_count_format_args(lists, gt_macro_row_get_action(row));
 	gt_macro_lists_free(lists);
-	len = pre != NULL ? (gint)g_strv_length((gchar **)pre) : 0;
 	for(gint k = n; k < len; k++)
 		if(pre[k][0] != '\0')
 		{
 			gchar *text = g_strdup_printf(_("Prefix of argument %d removed"), k + 1);
 
 			set_message(editor, text, TRUE);
+			editor->prefix_message = TRUE;
 			g_free(text);
-			break;
+			return;
 		}
-	new_opt = vector_resize(opt, n);
-	new_pre = vector_resize(pre, n);
-	gt_macro_row_set_optional(row, (const gchar *const *)new_opt, (const gchar *const *)new_pre);	/* ne notifie que si changé */
-	g_strfreev(new_opt);
-	g_strfreev(new_pre);
+	if(editor->prefix_message)
+		set_message(editor, NULL, FALSE);
 }
 
-/* Ligne affichée modifiée : action → Optional et Prefix ajustés, table refaite ; défauts, limites, Optional ou Prefix → aperçu */
+/* Ligne affichée modifiée : action → message de préfixe perdu, table refaite ; défauts, limites, Optional ou Prefix → aperçu */
 static void on_defaults_row_notify(GObject *row, GParamSpec *pspec, gpointer data)
 {
 	MacroEditor *editor = data;
@@ -1577,7 +1581,7 @@ static void on_defaults_row_notify(GObject *row, GParamSpec *pspec, gpointer dat
 
 	if(g_strcmp0(name, "action") == 0)
 	{
-		optional_follow_action(editor, GT_MACRO_ROW(row));
+		prefix_message_update(editor, GT_MACRO_ROW(row));
 		defaults_rebuild(editor);
 	}
 	else if(g_strcmp0(name, "args") == 0 || g_str_has_prefix(name, "arg-"))
@@ -1661,14 +1665,16 @@ static void optional_write(MacroEditor *editor, gint k, gboolean optional, const
 {
 	GtMacroRow *row = g_object_ref(editor->defaults_row);	/* notify::action peut changer la ligne affichée */
 	gint n = editor->defaults_n;
-	const gchar *const *ropt = row_vector(gt_macro_row_get_arg_optional(row), n), *const *rpre = row_vector(gt_macro_row_get_arg_prefix(row), n);
+	gchar **ropt = vector_resize(gt_macro_row_get_arg_optional(row), n), **rpre = vector_resize(gt_macro_row_get_arg_prefix(row), n);
 	gchar **opt = g_new0(gchar *, n + 1), **pre = g_new0(gchar *, n + 1);
 
 	for(gint i = 0; i < n; i++)
 	{
-		opt[i] = g_strdup(i == k ? (optional ? "1" : "") : nth(ropt, i));
-		pre[i] = g_strdup(i == k ? prefix : nth(rpre, i));
+		opt[i] = g_strdup(i == k ? (optional ? "1" : "") : nth((const gchar *const *)ropt, i));
+		pre[i] = g_strdup(i == k ? prefix : nth((const gchar *const *)rpre, i));
 	}
+	g_strfreev(ropt);
+	g_strfreev(rpre);
 	opt = vector_or_null(opt);
 	pre = vector_or_null(pre);
 	gt_macro_row_set_optional(row, (const gchar *const *)opt, (const gchar *const *)pre);
@@ -1684,6 +1690,16 @@ static gboolean keep_until_idle(gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
+/* Valeur de l'argument k dans la vue (vector_resize) d'un vecteur de la ligne ; g_free */
+static gchar *row_nth(const gchar *const *v, gint n, gint k)
+{
+	gchar **view = vector_resize(v, n);
+	gchar *value = g_strdup(nth((const gchar *const *)view, k));
+
+	g_strfreev(view);
+	return value;
+}
+
 /* Case Optional de l'argument k : cochée, le texte qui précède l'argument passe de l'action au préfixe (spec §5.4) ; décochée, le préfixe
  * revient dans l'action et le champ est vidé */
 static void on_optional_toggled(GtkCheckButton *check, gpointer data)
@@ -1697,39 +1713,38 @@ static void on_optional_toggled(GtkCheckButton *check, gpointer data)
 
 	if(editor == NULL || editor->defaults_building || editor->defaults_row == NULL || k >= editor->defaults_n)
 		return;
-	/* La table se refait sur notify::action pendant cette émission : la case reste vivante jusqu'à la fin de l'événement qui l'a basculée */
-	g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, keep_until_idle, g_object_ref(check), g_object_unref);
-	entry = table_cell(editor, COL_PREFIX, k);
 	lists = gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows));
-	if(on && gt_macro_action_split_prefix(lists, gt_macro_row_get_action(editor->defaults_row), k, &action, &prefix))
+	if(on)
 	{
-		if(entry != NULL)
+		if(!gt_macro_action_split_prefix(lists, gt_macro_row_get_action(editor->defaults_row), k, &action, &prefix))
 		{
-			editor->defaults_building = TRUE;	/* le préfixe est écrit dans la ligne par optional_write */
-			gtk_editable_set_text(GTK_EDITABLE(entry), prefix);
-			gtk_widget_set_sensitive(entry, TRUE);
-			editor->defaults_building = FALSE;
+			gt_macro_lists_free(lists);
+			return;
 		}
-		optional_write(editor, k, TRUE, prefix, strcmp(action, gt_macro_row_get_action(editor->defaults_row)) != 0 ? action : NULL);
 	}
-	else if(!on)
+	else
 	{
-		gchar *old = g_strdup(nth(row_vector(gt_macro_row_get_arg_prefix(editor->defaults_row), editor->defaults_n), k));
-
-		action = gt_macro_action_join_prefix(lists, gt_macro_row_get_action(editor->defaults_row), k, old);
-		if(entry != NULL)
-		{
-			editor->defaults_building = TRUE;
-			gtk_editable_set_text(GTK_EDITABLE(entry), "");
-			gtk_widget_set_sensitive(entry, FALSE);
-			editor->defaults_building = FALSE;
-		}
-		optional_write(editor, k, FALSE, "", action != NULL && strcmp(action, gt_macro_row_get_action(editor->defaults_row)) != 0 ? action : NULL);
-		g_free(old);
+		prefix = row_nth(gt_macro_row_get_arg_prefix(editor->defaults_row), editor->defaults_n, k);
+		action = gt_macro_action_join_prefix(lists, gt_macro_row_get_action(editor->defaults_row), k, prefix);
+		g_clear_pointer(&prefix, g_free);
 	}
+	gt_macro_lists_free(lists);
+	if(action != NULL && strcmp(action, gt_macro_row_get_action(editor->defaults_row)) == 0)
+		g_clear_pointer(&action, g_free);	/* action inchangée : pas de reconstruction de la table */
+	/* La table se refait sur notify::action pendant cette émission : la case reste vivante jusqu'à la fin de l'événement qui l'a basculée */
+	if(action != NULL)
+		g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, keep_until_idle, g_object_ref(check), g_object_unref);
+	entry = table_cell(editor, COL_PREFIX, k);
+	if(entry != NULL)
+	{
+		editor->defaults_building = TRUE;	/* le préfixe est écrit dans la ligne par optional_write */
+		gtk_editable_set_text(GTK_EDITABLE(entry), on ? prefix : "");
+		gtk_widget_set_sensitive(entry, on);
+		editor->defaults_building = FALSE;
+	}
+	optional_write(editor, k, on, on ? prefix : "", action);
 	g_free(action);
 	g_free(prefix);
-	gt_macro_lists_free(lists);
 }
 
 /* Prefix modifié à la main : un préfixe est toujours valide, le vecteur de la ligne est réécrit */
@@ -1737,12 +1752,13 @@ static void on_prefix_changed(GtkEditable *editable, gpointer data)
 {
 	MacroEditor *editor = editor_of(GTK_WIDGET(editable));
 	gint k = GPOINTER_TO_INT(data);
-	gboolean optional;
+	gchar *value;
 
 	if(editor == NULL || editor->defaults_building || editor->defaults_row == NULL || k >= editor->defaults_n)
 		return;
-	optional = g_strcmp0(nth(row_vector(gt_macro_row_get_arg_optional(editor->defaults_row), editor->defaults_n), k), "1") == 0;
-	optional_write(editor, k, optional, gtk_editable_get_text(editable), NULL);
+	value = row_nth(gt_macro_row_get_arg_optional(editor->defaults_row), editor->defaults_n, k);
+	optional_write(editor, k, strcmp(value, "1") == 0, gtk_editable_get_text(editable), NULL);
+	g_free(value);
 }
 
 /* Cellules Optional (case) et Prefix (entrée, insensible si la case est décochée) de l'argument k */
@@ -1775,7 +1791,8 @@ static void defaults_rebuild(MacroEditor *editor)
 	GtMacroLists *lists = NULL;
 	const gchar *const headers[N_COLS] = { _("#"), _("Format"), _("Type"), _("Default"), _("Min"), _("Max"), _("Charset"), _("Optional"),
 	                                         _("Prefix") };
-	const gchar *const *args, *const *mins, *const *maxs, *const *css, *const *opts, *const *pres;
+	const gchar *const *args, *const *mins, *const *maxs, *const *css;
+	gchar **opts = NULL, **pres = NULL;
 	gint n_args = 0;
 
 	g_free(pos);
@@ -1807,8 +1824,8 @@ static void defaults_rebuild(MacroEditor *editor)
 		mins = row_vector(gt_macro_row_get_arg_min(row), n_args);
 		maxs = row_vector(gt_macro_row_get_arg_max(row), n_args);
 		css = row_vector(gt_macro_row_get_arg_charset(row), n_args);
-		opts = row_vector(gt_macro_row_get_arg_optional(row), n_args);
-		pres = row_vector(gt_macro_row_get_arg_prefix(row), n_args);
+		opts = vector_resize(gt_macro_row_get_arg_optional(row), n_args);	/* vues : les vecteurs de la ligne gardent leur longueur jusqu'à l'OK */
+		pres = vector_resize(gt_macro_row_get_arg_prefix(row), n_args);
 		for(gint c = 0; c < N_COLS; c++)
 			gtk_grid_attach(GTK_GRID(editor->defaults), table_header(headers[c]), c, 0, 1, 1);
 		for(gint k = 0; k < n_args; k++)
@@ -1840,10 +1857,12 @@ static void defaults_rebuild(MacroEditor *editor)
 			}
 			if(text)
 				gtk_grid_attach(GTK_GRID(editor->defaults), charset_cell(k, nth(css, k)), COL_CHARSET, k + 1, 1, 1);
-			optional_cells_attach(editor, k, g_strcmp0(nth(opts, k), "1") == 0, nth(pres, k));
+			optional_cells_attach(editor, k, g_strcmp0(nth((const gchar *const *)opts, k), "1") == 0, nth((const gchar *const *)pres, k));
 		}
 	}
 	gtk_widget_set_visible(editor->defaults_scroll, n_args > 0);
+	g_strfreev(opts);
+	g_strfreev(pres);
 	if(infos != NULL)
 		macro_arg_infos_free(infos, n_args);
 	if(lists != NULL)

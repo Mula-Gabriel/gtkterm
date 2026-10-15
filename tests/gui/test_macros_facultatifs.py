@@ -49,6 +49,17 @@ check(wait_until(lambda: editor_rows(e)[0]['action'] == 'login %s -password=%s;'
 check(wait_until(lambda: e.find1(name='macro-prefix-1').get('label') == '', 3), 'decoche : champ vide')
 e.activate('macro-optional-1')
 check(wait_until(lambda: editor_rows(e)[0]['action'] == 'login %s%s;', 3), 'recoche')
+# Frappe dans l'action : un état transitoire à un argument de moins ne perd ni la case ni le préfixe (message seulement)
+cellule = editor_rows(e)[0]['cells']['action']['id']
+e.set_text(cellule, 'login %s;')
+check(wait_until(lambda: (e.find1(name='macro-editor-error').get('label') or '') == 'Prefix of argument 2 removed', 3),
+      'message de prefixe perdu : %r' % e.find1(name='macro-editor-error').get('label'))
+check(not e.find(name='macro-optional-1'), 'etat transitoire : plus de deuxieme argument')
+e.set_text(cellule, 'login %s%s;')
+check(wait_until(lambda: bool(e.find(name='macro-optional-1')) and e.find1(name='macro-optional-1').get('active') is True, 3),
+      'case toujours cochee apres l\'etat transitoire')
+check(e.find1(name='macro-prefix-1').get('label') == ' -password=', 'prefixe garde : %r' % e.find1(name='macro-prefix-1').get('label'))
+check(not e.find(name='macro-editor-error') or not e.find1(name='macro-editor-error').get('label'), 'message retire')
 e.activate('macro-ok')
 # Envoi depuis le panneau avec le champ vide : le préfixe ne part pas ; rempli, il part
 pw = macro_id(e, 'Pw')
