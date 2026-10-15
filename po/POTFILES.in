@@ -27,6 +27,7 @@ src/ui/dialogs.c
 src/ui/file_actions.c
 src/ui/file_send_window.c
 src/ui/hex_send_bar.c
+src/ui/macro_arg_widget.c
 src/ui/macro_editor.c
 src/ui/macro_panel.c
 src/ui/macros_save.c

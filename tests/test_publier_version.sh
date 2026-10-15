@@ -41,7 +41,7 @@ refuse "option -D non déclarée dans meson_options.txt" v1.3.2
 mv "$T/meson_options.sauve" meson_options.txt
 git add meson_options.txt
 git commit -qm "avec option"
-check "publication acceptée" sh "$OUTIL" v1.3.2
+check "publication acceptée" sh -c 'sh "$1" v1.3.2 >/dev/null' _ "$OUTIL"
 check "tag annoté créé" [ "$(git cat-file -t v1.3.2)" = tag ]
 check "message du tag" [ "$(git tag -l --format='%(contents:subject)' v1.3.2)" = "GTKTerm v1.3.2" ]
 refuse "tag déjà présent" v1.3.2

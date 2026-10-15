@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 08:38+0200\n"
+"POT-Creation-Date: 2026-10-15 14:31+0200\n"
 "PO-Revision-Date: 2020-03-10 14:11+0800\n"
 "Last-Translator: 玉堂白鹤 <yjwork@qq.com>\n"
 "Language-Team: \n"
@@ -387,28 +387,42 @@ msgstr ""
 msgid " (default %s)"
 msgstr ""
 
-#: src/macro_file.c:62
+#: src/macro_arg.c:550
+msgid "optional"
+msgstr ""
+
+#: src/macro_arg.c:551
+#, c-format
+msgid "optional, prefix \"%s\""
+msgstr ""
+
+#: src/macro_file.c:82
 #, c-format
 msgid "%s: [%s] %s: invalid escape, value kept as written"
 msgstr ""
 
-#: src/macro_file.c:170
+#: src/macro_file.c:190
 #, c-format
 msgid "%s: [%s] invalid argument limits replaced by none"
 msgstr ""
 
-#: src/macro_file.c:205
+#: src/macro_file.c:219
+#, c-format
+msgid "%s: [%s] %s: invalid value adjusted"
+msgstr ""
+
+#: src/macro_file.c:259
 #, c-format
 msgid "Unsupported macros file version (written by a newer GTKTerm?)"
 msgstr ""
 
 #. Des groupes, aucun de connu : fichier étranger refusé, jamais lu comme un jeu vide qui l'écraserait ensuite
-#: src/macro_file.c:352
+#: src/macro_file.c:407
 #, c-format
 msgid "%s is not a GTKTerm macros file"
 msgstr ""
 
-#: src/macro_file.c:409
+#: src/macro_file.c:464
 #, c-format
 msgid ""
 "%s was not overwritten: it is not in the current macros format and its "
@@ -591,46 +605,69 @@ msgstr ""
 msgid "\"%s\" is a reserved name."
 msgstr ""
 
-#: src/project.c:180
+#: src/project.c:195
 msgid "Untitled project"
 msgstr ""
 
-#: src/project.c:318
-msgid "No project is open"
-msgstr ""
-
-#: src/project.c:323
+#: src/project.c:223 src/project.c:388
 msgid "The project has no file"
 msgstr ""
 
-#: src/project_file.c:163
+#: src/project.c:232
+#, c-format
+msgid "A file named %s already exists."
+msgstr ""
+
+#: src/project.c:240
+#, fuzzy, c-format
+msgid "Cannot rename the project file: %s"
+msgstr "无法打开文件 %s: %s\n"
+
+#: src/project.c:383
+msgid "No project is open"
+msgstr ""
+
+#: src/project_file.c:166
 #, c-format
 msgid "%s: [%s] %s is not valid UTF-8: invalid bytes replaced"
 msgstr ""
 
-#: src/project_file.c:184
+#: src/project_file.c:187
 #, c-format
 msgid "%s: tab %u has no valid port settings"
 msgstr ""
 
-#: src/project_file.c:227
+#: src/project_file.c:230
 #, c-format
 msgid "%s: [%s] macros_template must be an absolute path: ignored"
 msgstr ""
 
-#: src/project_file.c:257
+#: src/project_file.c:260
 #, c-format
 msgid "%s is not a GTKTerm project"
 msgstr ""
 
-#: src/project_file.c:266
+#: src/project_file.c:269
 #, c-format
 msgid "%s: unsupported project version (written by a newer GTKTerm?)"
 msgstr ""
 
-#: src/project_file.c:290
+#: src/project_file.c:293
 #, c-format
 msgid "%s: the project has no tab"
+msgstr ""
+
+#: src/project_file.c:320 src/project_file.c:331
+msgid "The project name cannot contain control characters"
+msgstr ""
+
+#: src/project_file.c:322
+#, fuzzy
+msgid "The project name cannot be empty"
+msgstr "配置名称： "
+
+#: src/project_file.c:324
+msgid "The project name is too long (128 characters at most)"
 msgstr ""
 
 #: src/rx_logger.c:53
@@ -804,122 +841,124 @@ msgstr ""
 msgid "Port closed"
 msgstr ""
 
-#: src/ui/app.c:543
+#: src/ui/app.c:545
 msgid "Close this tab?"
 msgstr ""
 
-#: src/ui/app.c:543
+#: src/ui/app.c:545
 msgid "A script is running or a file is being sent in this tab."
 msgstr ""
 
-#: src/ui/app.c:543 src/ui/menus.ui:152 src/ui/tab_label.c:74
+#: src/ui/app.c:545 src/ui/menus.ui:156 src/ui/tab_label.c:74
 #: src/ui/tab_label.c:75
 #, fuzzy
 msgid "Close tab"
 msgstr "关闭端口(_C)"
 
-#: src/ui/app.c:579
+#: src/ui/app.c:581
 #, c-format
 msgid ""
 "Cannot read the macros template %s: %s. The copy saved in the project is "
 "used."
 msgstr ""
 
-#: src/ui/app.c:582
+#: src/ui/app.c:584
 #, c-format
 msgid "Macros template %s updated: %u project value no longer applies"
 msgid_plural "Macros template %s updated: %u project values no longer apply"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/app.c:585
+#: src/ui/app.c:587
 #, c-format
 msgid "Macros template %s updated"
 msgstr ""
 
-#: src/ui/app.c:840 src/ui/app.c:1017
+#: src/ui/app.c:842 src/ui/app.c:1021
 #, fuzzy
 msgid "Close all tabs?"
 msgstr "关闭端口(_C)"
 
-#: src/ui/app.c:840 src/ui/app.c:1017
+#: src/ui/app.c:842 src/ui/app.c:1021
 msgid "A script is running or a file is being sent."
 msgstr ""
 
-#: src/ui/app.c:840 src/ui/app.c:1017
+#: src/ui/app.c:842 src/ui/app.c:1021
 #, fuzzy
 msgid "Close tabs"
 msgstr "关闭端口(_C)"
 
-#: src/ui/app.c:900
+#: src/ui/app.c:902
 msgid "A project file with this name already exists. Replace it?"
 msgstr ""
 
-#: src/ui/app.c:900
+#: src/ui/app.c:902
 msgid "Replace"
 msgstr ""
 
-#: src/ui/app.c:933 src/ui/menus.ui:19
+#: src/ui/app.c:937 src/ui/menus.ui:19
 msgid "Save project"
 msgstr ""
 
-#: src/ui/app.c:941 src/ui/macro_editor.c:575 src/ui/macros_save.c:55
+#: src/ui/app.c:945 src/ui/macro_editor.c:848 src/ui/macros_save.c:55
 #: src/ui/profile_dialogs.c:209
 msgid "Overwrite"
 msgstr ""
 
-#: src/ui/app.c:941 src/ui/macro_editor.c:575 src/ui/macros_save.c:55
+#: src/ui/app.c:945 src/ui/macro_editor.c:848 src/ui/macro_editor.c:1018
+#: src/ui/macro_editor.c:1165 src/ui/macro_editor.c:1176
+#: src/ui/macros_save.c:55
 msgid "Reload"
 msgstr ""
 
-#: src/ui/app.c:941 src/ui/app.c:972 src/ui/macro_editor.c:575
-#: src/ui/macro_editor.c:587 src/ui/macro_editor.c:595
-#: src/ui/macro_editor.c:1434 src/ui/macros_save.c:55
-#: src/ui/profile_dialogs.c:443
+#: src/ui/app.c:945 src/ui/app.c:976 src/ui/macro_editor.c:848
+#: src/ui/macro_editor.c:860 src/ui/macro_editor.c:868
+#: src/ui/macro_editor.c:1018 src/ui/macro_editor.c:2114
+#: src/ui/macros_save.c:55 src/ui/profile_dialogs.c:443
 msgid "Cancel"
 msgstr "取消"
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail du tiers
-#: src/ui/app.c:944
+#: src/ui/app.c:948
 msgid "The project file changed on disk."
 msgstr ""
 
-#: src/ui/app.c:972 src/ui/script_panel.c:951
+#: src/ui/app.c:976 src/ui/script_panel.c:951
 msgid "Save"
 msgstr ""
 
-#: src/ui/app.c:972
+#: src/ui/app.c:976
 msgid "Don't save"
 msgstr ""
 
-#: src/ui/app.c:975
+#: src/ui/app.c:979
 msgid "Save changes to the project?"
 msgstr ""
 
-#: src/ui/app.c:1193
+#: src/ui/app.c:1199
 #, c-format
 msgid ""
 "Cannot open the project: %s\n"
 "It is no longer reopened at start-up."
 msgstr ""
 
-#: src/ui/app.c:1196
+#: src/ui/app.c:1202
 #, fuzzy, c-format
 msgid "Cannot open the project: %s"
 msgstr "无法打开文件 %s: %s\n"
 
-#: src/ui/app.c:1303
+#: src/ui/app.c:1309
 #, fuzzy
 msgid "GTKTerm projects"
 msgstr ""
 "\n"
 "GTKTerm 版本 %s\n"
 
-#: src/ui/app.c:1308 src/ui/script_panel.c:464
+#: src/ui/app.c:1314 src/ui/script_panel.c:464
 msgid "All files"
 msgstr ""
 
-#: src/ui/app.c:1312
+#: src/ui/app.c:1318
 #, fuzzy
 msgid "Open project"
 msgstr "打开端口(_O)"
@@ -938,11 +977,13 @@ msgid "Error"
 msgstr ""
 
 #: src/ui/dialogs.c:169 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:344
+#: src/ui/project_rename.c:159
 msgid "_OK"
 msgstr ""
 
 #: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
-#: src/ui/profile_dialogs.c:341 src/ui/script_panel.c:805
+#: src/ui/profile_dialogs.c:341 src/ui/project_rename.c:156
+#: src/ui/script_panel.c:805
 #, fuzzy
 msgid "_Cancel"
 msgstr "取消"
@@ -997,7 +1038,15 @@ msgstr ""
 msgid "%d byte(s) sent!"
 msgstr "已发送 %d 个字节！"
 
-#: src/ui/macro_editor.c:71
+#: src/ui/macro_arg_widget.c:36
+msgid "(none)"
+msgstr ""
+
+#: src/ui/macro_arg_widget.c:62
+msgid "(omitted)"
+msgstr ""
+
+#: src/ui/macro_editor.c:95
 msgid ""
 "Action: the data sent on the port. Plain text, plus the escapes \\r "
 "(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
@@ -1031,272 +1080,337 @@ msgid ""
 "same; \"SPEED %d\\r\" asks for a number."
 msgstr ""
 
-#: src/ui/macro_editor.c:207 src/ui/macro_panel.c:308 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:274
+msgid "All"
+msgstr ""
+
+#: src/ui/macro_editor.c:286 src/ui/macro_panel.c:81
+msgid "General"
+msgstr ""
+
+#: src/ui/macro_editor.c:442 src/ui/macro_panel.c:310 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr ""
 
-#: src/ui/macro_editor.c:376
+#: src/ui/macro_editor.c:648
 msgid "Select a macro first."
 msgstr ""
 
-#: src/ui/macro_editor.c:382
+#: src/ui/macro_editor.c:654
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr ""
 
-#: src/ui/macro_editor.c:406
+#: src/ui/macro_editor.c:678
 msgid "(no label)"
 msgstr ""
 
-#: src/ui/macro_editor.c:412
+#: src/ui/macro_editor.c:684
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
 "Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:414
+#: src/ui/macro_editor.c:686
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
 "cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:438
+#: src/ui/macro_editor.c:710
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
 msgstr ""
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail d'un autre
-#: src/ui/macro_editor.c:578
+#: src/ui/macro_editor.c:851
 msgid "The macros template changed on disk."
 msgstr ""
 
-#: src/ui/macro_editor.c:583
+#: src/ui/macro_editor.c:856
 #, c-format
 msgid "These macros come from the template %s"
 msgstr ""
 
-#: src/ui/macro_editor.c:587
+#: src/ui/macro_editor.c:860
 #, fuzzy
 msgid "Keep in this project"
 msgstr "打开端口(_O)"
 
-#: src/ui/macro_editor.c:587 src/ui/macro_editor.c:595
+#: src/ui/macro_editor.c:860 src/ui/macro_editor.c:868
 msgid "Save to template"
 msgstr ""
 
-#: src/ui/macro_editor.c:590
+#: src/ui/macro_editor.c:863
 msgid ""
 "Keep the new default values in this project only, or save them to the "
 "template, for every project that uses it?"
 msgstr ""
 
-#: src/ui/macro_editor.c:595
+#: src/ui/macro_editor.c:868
 msgid "Detach and keep a copy"
 msgstr ""
 
-#: src/ui/macro_editor.c:598
+#: src/ui/macro_editor.c:871
 msgid ""
 "These changes can only be saved to the template (every project that uses "
 "it), or the tab can be detached from the template and keep its own copy."
 msgstr ""
 
-#: src/ui/macro_editor.c:732
+#: src/ui/macro_editor.c:958
+#, c-format
+msgid "The macros file %s no longer exists."
+msgstr ""
+
+#: src/ui/macro_editor.c:972
+#, fuzzy, c-format
+msgid "Cannot reload the macros file %s."
+msgstr "无法读取文件 %s: %s\n"
+
+#. Cancel par défaut, Reload destructeur : Entrée ne jette jamais les modifications
+#: src/ui/macro_editor.c:1025
+msgid "Discard your changes and reload the macros file?"
+msgstr ""
+
+#: src/ui/macro_editor.c:1146
 #, c-format
 msgid "Template: %s"
 msgstr ""
 
-#: src/ui/macro_editor.c:1039
+#: src/ui/macro_editor.c:1148
+#, fuzzy
+msgid "Embedded in the project"
+msgstr "打开端口(_O)"
+
+#: src/ui/macro_editor.c:1150
+#, fuzzy, c-format
+msgid "File: %s"
+msgstr "文件(_F)"
+
+#: src/ui/macro_editor.c:1152
+#, fuzzy
+msgid "No macros file"
+msgstr "保存 RAW 文件(_S)"
+
+#: src/ui/macro_editor.c:1169
+#, fuzzy
+msgid "Macros file"
+msgstr "保存 RAW 文件(_S)"
+
+#: src/ui/macro_editor.c:1528
 #, c-format
 msgid "%u byte"
 msgid_plural "%u bytes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/ui/macro_editor.c:1117
+#: src/ui/macro_editor.c:1565
+#, c-format
+msgid "Prefix of argument %d removed"
+msgstr ""
+
+#: src/ui/macro_editor.c:1633
 msgid "UTF-8"
 msgstr ""
 
-#: src/ui/macro_editor.c:1117
+#: src/ui/macro_editor.c:1633
 msgid "Printable ASCII"
 msgstr ""
 
-#: src/ui/macro_editor.c:1117 src/ui/menus.ui:87
+#: src/ui/macro_editor.c:1633 src/ui/menus.ui:91
 #, fuzzy
 msgid "ASCII"
 msgstr "ASCII(_A)"
 
-#: src/ui/macro_editor.c:1117
+#: src/ui/macro_editor.c:1633
 msgid "8 bits (Latin-1)"
 msgstr ""
 
-#: src/ui/macro_editor.c:1117
+#: src/ui/macro_editor.c:1633
 msgid "Custom class"
 msgstr ""
 
-#: src/ui/macro_editor.c:1154
+#: src/ui/macro_editor.c:1792
 msgid "#"
 msgstr ""
 
-#: src/ui/macro_editor.c:1154
+#: src/ui/macro_editor.c:1792
 msgid "Format"
 msgstr ""
 
-#: src/ui/macro_editor.c:1154
+#: src/ui/macro_editor.c:1792
 msgid "Type"
 msgstr ""
 
-#: src/ui/macro_editor.c:1154
+#: src/ui/macro_editor.c:1792
 msgid "Default"
 msgstr ""
 
-#: src/ui/macro_editor.c:1154
+#: src/ui/macro_editor.c:1792
 msgid "Min"
 msgstr ""
 
-#: src/ui/macro_editor.c:1154
+#: src/ui/macro_editor.c:1792
 msgid "Max"
 msgstr ""
 
-#: src/ui/macro_editor.c:1154
+#: src/ui/macro_editor.c:1792
 msgid "Charset"
 msgstr ""
 
-#: src/ui/macro_editor.c:1199
+#: src/ui/macro_editor.c:1792
+msgid "Optional"
+msgstr ""
+
+#: src/ui/macro_editor.c:1793
+msgid "Prefix"
+msgstr ""
+
+#: src/ui/macro_editor.c:1841
 msgid "text (bytes)"
 msgstr ""
 
-#: src/ui/macro_editor.c:1257
+#: src/ui/macro_editor.c:1902
 msgid "Arguments"
 msgstr ""
 
-#: src/ui/macro_editor.c:1277
+#: src/ui/macro_editor.c:1922
 msgid "Line sent (default values):"
 msgstr ""
 
-#: src/ui/macro_editor.c:1321
+#: src/ui/macro_editor.c:1956
+msgid "Tab:"
+msgstr ""
+
+#: src/ui/macro_editor.c:1956
+msgid "List:"
+msgstr ""
+
+#: src/ui/macro_editor.c:1960
+#, fuzzy
+msgid "Tab filter"
+msgstr "至文件..."
+
+#: src/ui/macro_editor.c:1960
+msgid "List filter"
+msgstr ""
+
+#: src/ui/macro_editor.c:1989
 msgid "Label"
 msgstr ""
 
-#: src/ui/macro_editor.c:1322
+#: src/ui/macro_editor.c:1990
 msgid "Shortcut"
 msgstr "快捷键"
 
-#: src/ui/macro_editor.c:1323
+#: src/ui/macro_editor.c:1991
 msgid "Action"
 msgstr ""
 
-#: src/ui/macro_editor.c:1324
+#: src/ui/macro_editor.c:1992
 msgid "Tab"
 msgstr ""
 
-#: src/ui/macro_editor.c:1325
+#: src/ui/macro_editor.c:1993
 msgid "_Add"
 msgstr "添加(_A)"
 
-#: src/ui/macro_editor.c:1326 src/ui/profile_dialogs.c:344
+#: src/ui/macro_editor.c:1994 src/ui/profile_dialogs.c:344
 msgid "_Delete"
 msgstr "删除(_D)"
 
-#: src/ui/macro_editor.c:1327
+#: src/ui/macro_editor.c:1995
 msgid "_Capture Shortcut"
 msgstr "捕捉快捷键"
 
-#: src/ui/macro_editor.c:1328
+#: src/ui/macro_editor.c:1996
 #, fuzzy
 msgid "Delete Shortcut"
 msgstr "快捷键"
 
-#: src/ui/macro_editor.c:1329 src/ui/macro_editor.c:1341
+#: src/ui/macro_editor.c:1997 src/ui/macro_editor.c:2009
 msgid "Move _Up"
 msgstr ""
 
-#: src/ui/macro_editor.c:1330 src/ui/macro_editor.c:1342
+#: src/ui/macro_editor.c:1998 src/ui/macro_editor.c:2010
 msgid "Move _Down"
 msgstr ""
 
-#: src/ui/macro_editor.c:1336
+#: src/ui/macro_editor.c:2004
 msgid "List"
 msgstr ""
 
-#: src/ui/macro_editor.c:1337
+#: src/ui/macro_editor.c:2005
 msgid "Display"
 msgstr ""
 
-#: src/ui/macro_editor.c:1338
+#: src/ui/macro_editor.c:2006
 msgid "Value"
 msgstr ""
 
-#: src/ui/macro_editor.c:1339
+#: src/ui/macro_editor.c:2007
 msgid "_Add Entry"
 msgstr ""
 
-#: src/ui/macro_editor.c:1340
+#: src/ui/macro_editor.c:2008
 #, fuzzy
 msgid "_Delete Entry"
 msgstr "删除(_D)"
 
 #. Titre au nom court de l'onglet (fixé à l'ouverture)
-#: src/ui/macro_editor.c:1387
+#: src/ui/macro_editor.c:2072
 #, c-format
 msgid "Configure Macros — %s"
 msgstr "配置宏 — %s"
 
-#: src/ui/macro_editor.c:1412 src/ui/menus.ui:229
+#: src/ui/macro_editor.c:2097 src/ui/menus.ui:233
 #, fuzzy
 msgid "Macros"
 msgstr "宏(_M)"
 
-#: src/ui/macro_editor.c:1413
+#: src/ui/macro_editor.c:2098
 msgid "Lists"
 msgstr ""
 
-#: src/ui/macro_editor.c:1426
-msgid "Macros template"
-msgstr ""
-
-#: src/ui/macro_editor.c:1433 src/ui/menus.ui:271
+#: src/ui/macro_editor.c:2113 src/ui/menus.ui:275
 #, fuzzy
 msgid "Help"
 msgstr "帮助(_F)"
 
-#: src/ui/macro_editor.c:1435
+#: src/ui/macro_editor.c:2115
 msgid "OK"
 msgstr ""
 
-#: src/ui/macro_panel.c:81
-msgid "General"
-msgstr ""
-
-#: src/ui/macro_panel.c:308
+#: src/ui/macro_panel.c:310
 #, c-format
 msgid ""
 "Shortcut: %s\n"
 "Action: %s"
 msgstr ""
 
-#: src/ui/macro_panel.c:550
+#: src/ui/macro_panel.c:552
 msgid ""
 "No macros defined\n"
 "with labels"
 msgstr ""
 
-#: src/ui/macro_panel.c:606
+#: src/ui/macro_panel.c:608
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 
-#: src/ui/macro_panel.c:784
+#: src/ui/macro_panel.c:786
 msgid "Period (ms)"
 msgstr ""
 
-#: src/ui/macro_panel.c:792
+#: src/ui/macro_panel.c:794
 msgid "Polling Mode"
 msgstr ""
 
-#: src/ui/macro_panel.c:811 src/ui/macro_panel.c:813
+#: src/ui/macro_panel.c:813 src/ui/macro_panel.c:815
 msgid "Reset arguments"
 msgstr ""
 
@@ -1328,216 +1442,221 @@ msgstr ""
 
 #: src/ui/menus.ui:27
 #, fuzzy
+msgid "Rename project…"
+msgstr "打开端口(_O)"
+
+#: src/ui/menus.ui:31
+#, fuzzy
 msgid "Close project"
 msgstr "关闭端口(_C)"
 
-#: src/ui/menus.ui:33
+#: src/ui/menus.ui:37
 #, fuzzy
 msgid "Send RAW file…"
 msgstr "发送 RAW 文件(_R)"
 
-#: src/ui/menus.ui:37
+#: src/ui/menus.ui:41
 #, fuzzy
 msgid "Save RAW file…"
 msgstr "保存 RAW 文件(_S)"
 
-#: src/ui/menus.ui:41
+#: src/ui/menus.ui:45
 #, fuzzy
 msgid "Save ASCII file…"
 msgstr "保存 RAW 文件(_S)"
 
-#: src/ui/menus.ui:47
+#: src/ui/menus.ui:51
 msgid "Quit"
 msgstr ""
 
-#: src/ui/menus.ui:53
+#: src/ui/menus.ui:57
 #, fuzzy
 msgid "Edit"
 msgstr "编辑(_E)"
 
-#: src/ui/menus.ui:56 src/ui/menus.ui:287
+#: src/ui/menus.ui:60 src/ui/menus.ui:291
 msgid "Copy"
 msgstr ""
 
-#: src/ui/menus.ui:60 src/ui/menus.ui:291
+#: src/ui/menus.ui:64 src/ui/menus.ui:295
 msgid "Paste"
 msgstr ""
 
-#: src/ui/menus.ui:64 src/ui/menus.ui:301
+#: src/ui/menus.ui:68 src/ui/menus.ui:305
 msgid "Select All"
 msgstr ""
 
-#: src/ui/menus.ui:68 src/ui/menus.ui:295
+#: src/ui/menus.ui:72 src/ui/menus.ui:299
 msgid "Find"
 msgstr ""
 
-#: src/ui/menus.ui:74
+#: src/ui/menus.ui:78
 #, fuzzy
 msgid "Clear screen"
 msgstr "清除屏幕(_C)"
 
-#: src/ui/menus.ui:78
+#: src/ui/menus.ui:82
 #, fuzzy
 msgid "Clear scrollback"
 msgstr "清除回滚(_C)"
 
-#: src/ui/menus.ui:84
+#: src/ui/menus.ui:88
 #, fuzzy
 msgid "View"
 msgstr "视图(_V)"
 
-#: src/ui/menus.ui:92
+#: src/ui/menus.ui:96
 #, fuzzy
 msgid "Hexadecimal"
 msgstr "十六进制(_H)"
 
-#: src/ui/menus.ui:97
+#: src/ui/menus.ui:101
 #, fuzzy
 msgid "Hexadecimal chars"
 msgstr "十六进制字符(_C)"
 
-#: src/ui/menus.ui:125
+#: src/ui/menus.ui:129
 #, fuzzy
 msgid "Show index"
 msgstr "显示索引(_I)"
 
-#: src/ui/menus.ui:131
+#: src/ui/menus.ui:135
 #, fuzzy
 msgid "Send hexadecimal data"
 msgstr "发送十六进制数据(_S)"
 
-#: src/ui/menus.ui:135
+#: src/ui/menus.ui:139
 msgid "Macro panel"
 msgstr ""
 
-#: src/ui/menus.ui:139
+#: src/ui/menus.ui:143
 msgid "Script panel"
 msgstr ""
 
-#: src/ui/menus.ui:145
+#: src/ui/menus.ui:149
 #, fuzzy
 msgid "Port"
 msgstr "端口(_P)"
 
-#: src/ui/menus.ui:148
+#: src/ui/menus.ui:152
 #, fuzzy
 msgid "New port…"
 msgstr "无打开的端口"
 
-#: src/ui/menus.ui:158 src/ui/menus.ui:207
+#: src/ui/menus.ui:162 src/ui/menus.ui:211
 msgid "Settings…"
 msgstr ""
 
-#: src/ui/menus.ui:162
+#: src/ui/menus.ui:166
 #, fuzzy
 msgid "Open Port"
 msgstr "打开端口(_O)"
 
-#: src/ui/menus.ui:166
+#: src/ui/menus.ui:170
 #, fuzzy
 msgid "Close Port"
 msgstr "关闭端口(_C)"
 
-#: src/ui/menus.ui:170
+#: src/ui/menus.ui:174
 msgid "Autoreconnect"
 msgstr ""
 
-#: src/ui/menus.ui:176
+#: src/ui/menus.ui:180
 msgid "Send break"
 msgstr "发送中断"
 
-#: src/ui/menus.ui:180
+#: src/ui/menus.ui:184
 msgid "Toggle DTR"
 msgstr "切换 DTR"
 
-#: src/ui/menus.ui:184
+#: src/ui/menus.ui:188
 msgid "Toggle RTS"
 msgstr "切换 RTS"
 
-#: src/ui/menus.ui:190
+#: src/ui/menus.ui:194
 #, fuzzy
 msgid "Load profile…"
 msgstr "至文件..."
 
-#: src/ui/menus.ui:194
+#: src/ui/menus.ui:198
 #, fuzzy
 msgid "Save profile…"
 msgstr "保存 RAW 文件(_S)"
 
-#: src/ui/menus.ui:198
+#: src/ui/menus.ui:202
 msgid "Delete profile…"
 msgstr ""
 
-#: src/ui/menus.ui:204 src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
+#: src/ui/menus.ui:208 src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
 #, fuzzy
 msgid "Terminal"
 msgstr "终端字体"
 
-#: src/ui/menus.ui:211
+#: src/ui/menus.ui:215
 #, fuzzy
 msgid "Local echo"
 msgstr "本地回显(_E)"
 
-#: src/ui/menus.ui:215
+#: src/ui/menus.ui:219
 #, fuzzy
 msgid "CR LF auto"
 msgstr "CR LF 自动(_C)"
 
-#: src/ui/menus.ui:219
+#: src/ui/menus.ui:223
 #, fuzzy
 msgid "ESC clear screen"
 msgstr "清除屏幕(_C)"
 
-#: src/ui/menus.ui:223
+#: src/ui/menus.ui:227
 msgid "Timestamp"
 msgstr "时间戳"
 
-#: src/ui/menus.ui:232
+#: src/ui/menus.ui:236
 #, fuzzy
 msgid "Configure macros…"
 msgstr "配置宏 — %s"
 
-#: src/ui/menus.ui:236
+#: src/ui/menus.ui:240
 #, fuzzy
 msgid "Load macros file…"
 msgstr "至文件..."
 
-#: src/ui/menus.ui:240
+#: src/ui/menus.ui:244
 #, fuzzy
 msgid "Save macros file…"
 msgstr "保存 RAW 文件(_S)"
 
-#: src/ui/menus.ui:244
+#: src/ui/menus.ui:248
 msgid "Detach from template"
 msgstr ""
 
-#: src/ui/menus.ui:250
+#: src/ui/menus.ui:254
 #, fuzzy
 msgid "Log"
 msgstr "日志(_L)"
 
-#: src/ui/menus.ui:253
+#: src/ui/menus.ui:257
 msgid "To file..."
 msgstr "至文件..."
 
-#: src/ui/menus.ui:257
+#: src/ui/menus.ui:261
 msgid "Pause"
 msgstr ""
 
-#: src/ui/menus.ui:261 src/ui/script_panel.c:954
+#: src/ui/menus.ui:265 src/ui/script_panel.c:954
 #, fuzzy
 msgid "Stop"
 msgstr "停止位:"
 
-#: src/ui/menus.ui:265
+#: src/ui/menus.ui:269
 msgid "Clear"
 msgstr ""
 
-#: src/ui/menus.ui:274
+#: src/ui/menus.ui:278
 msgid "Check for updates…"
 msgstr ""
 
-#: src/ui/menus.ui:278
+#: src/ui/menus.ui:282
 msgid "About"
 msgstr ""
 
@@ -1785,6 +1904,23 @@ msgstr ""
 #, fuzzy
 msgid "Save macros file"
 msgstr "保存 RAW 文件(_S)"
+
+#: src/ui/project_rename.c:109
+#, fuzzy
+msgid "Rename project"
+msgstr "打开端口(_O)"
+
+#: src/ui/project_rename.c:125
+msgid "Project _name:"
+msgstr ""
+
+#: src/ui/project_rename.c:128
+msgid "Project name"
+msgstr ""
+
+#: src/ui/project_rename.c:139
+msgid "_Also rename the file"
+msgstr ""
 
 #: src/ui/script_panel.c:24
 msgid "Editor background"
