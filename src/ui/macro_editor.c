@@ -943,10 +943,22 @@ static void editor_reload_rows(MacroEditor *editor, GtMacroSet *set)
 /* Relit le modèle (onglet lié) ou le fichier courant ; l'éditeur reste ouvert sur les lignes relues ; échec : rien ne change */
 static void do_reload(MacroEditor *editor, GtMacros *macros)
 {
+	const gchar *tpl = gt_macros_get_template(macros);
+	const gchar *path = tpl != NULL ? tpl : gt_macros_get_path(macros);
 	gboolean ok;
 
 	stop_capture(editor);
 	set_message(editor, NULL, FALSE);
+	/* Fichier .ini disparu : gt_macros_reload le prendrait pour un jeu vide et jetterait la seule copie restante (spec §4 : rien ne change).
+	 * Un modèle disparu est déjà refusé par gt_macros_reload_template. */
+	if(tpl == NULL && path != NULL && !g_file_test(path, G_FILE_TEST_EXISTS))
+	{
+		gchar *text = g_strdup_printf(_("The macros file %s no longer exists."), path);
+
+		set_message(editor, text, TRUE);
+		g_free(text);
+		return;
+	}
 	editor->reloading = TRUE;
 	editor->reloaded = FALSE;
 	ok = gt_macros_get_template(macros) != NULL ? gt_macros_reload_template(macros) : gt_macros_reload(macros);
@@ -954,7 +966,12 @@ static void do_reload(MacroEditor *editor, GtMacros *macros)
 	if(ok && !editor->reloaded)	/* sans crochet macros_changed (ne devrait pas arriver) : lignes refaites quand même */
 		editor_reload_rows(editor, gt_macros_get_set(macros));
 	if(!ok)
-		set_message(editor, _("Cannot reload the macros file."), TRUE);	/* le détail est déjà passé par le crochet message */
+	{
+		gchar *text = g_strdup_printf(_("Cannot reload the macros file %s."), path != NULL ? path : "");
+
+		set_message(editor, text, TRUE);	/* la raison détaillée est déjà passée par le crochet message */
+		g_free(text);
+	}
 }
 
 /* Réponse à « Discard your changes and reload the macros file? » : Reload (0) seulement si la fenêtre vit et que rien n'a changé entre-temps */

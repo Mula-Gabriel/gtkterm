@@ -1,8 +1,9 @@
 # Configure Macros, fichier visé et Reload (spec docs/superpowers/specs/2026-10-15-nom-projet-et-editeur-macros-design.md, §4) :
 # onglet libre : « File: <chemin> » ; fichier réécrit sur le disque → Reload sans modification : lignes relues, éditeur ouvert ; avec une ligne
-# modifiée : question, Cancel garde les lignes, Reload les jette ; onglet de projet non lié : « Embedded in the project », pas de bouton ;
+# modifiée : question (Reload insensible pendant elle), Cancel garde les lignes, Reload les jette ; fichier supprimé : refus, rien ne change ;
+# onglet de projet non lié : « Embedded in the project », pas de bouton ;
 # onglet lié à un modèle : « Template: <chemin> », modèle réécrit → Reload relit les lignes (valeurs par défaut en place, puis structure changée).
-import sys
+import os, sys
 from gtktest import *
 
 e = Env('macro_editor_recharger')
@@ -24,6 +25,7 @@ check(wait_until(lambda: any('Discard your changes' in a for a in e.alerts()), 3
 b = {w['label']: w for w in e.dump() if w.get('type') == 'GtkButton' and w.get('mapped') and w.get('label') in ('Reload', 'Cancel')}
 check(b.get('Cancel', {}).get('focus') is True, 'Cancel par defaut : %r' % {k: v.get('focus') for k, v in b.items()})
 check('destructive-action' in classes(b.get('Reload')), 'Reload destructeur : %r' % classes(b.get('Reload')))
+check(e.find1(name='macro-reload').get('sensitive') is False, 'macro-reload insensible pendant la question')
 e.close_alert('Cancel')
 check(len(editor_rows(e)) == 3, 'Cancel : lignes gardees : %r' % [r['label'] for r in editor_rows(e)])
 e.activate('macro-reload')
@@ -32,6 +34,17 @@ e.close_alert('Reload')
 check(wait_until(lambda: [r['label'] for r in editor_rows(e)] == ['q'], 3), 'Reload : lignes du disque : %r' % [r['label'] for r in editor_rows(e)])
 check(e.find(name='macro-editor'), 'editeur ouvert apres Reload')
 check(wait_until(lambda: 'q' in macro_buttons(e), 3), 'panneau : macro q : %r' % macro_buttons(e))
+check(e.find1(name='macro-reload').get('sensitive') is True, 'macro-reload de nouveau sensible')
+# Fichier supprimé : Reload refusé avec un message, lignes et panneau inchangés (jamais un jeu vide)
+os.remove(ini)
+e.activate('macro-reload')
+check(wait_until(lambda: e.find(name='macro-editor-error')
+                 and e.find1(name='macro-editor-error').get('label') == 'The macros file %s no longer exists.' % ini, 3),
+      'message fichier disparu : %r' % (e.find(name='macro-editor-error') or [{}])[0].get('label'))
+check(e.alerts() == [], 'aucune question pour un fichier disparu : %r' % e.alerts())
+check([r['label'] for r in editor_rows(e)] == ['q'], 'fichier disparu : lignes gardees : %r' % [r['label'] for r in editor_rows(e)])
+check('q' in macro_buttons(e), 'fichier disparu : panneau garde : %r' % macro_buttons(e))
+check(e.find(name='macro-editor'), 'editeur ouvert apres le refus')
 e.activate('macro-cancel')
 check(wait_until(lambda: not e.find(name='macro-editor'), 3), 'editeur ferme')
 
