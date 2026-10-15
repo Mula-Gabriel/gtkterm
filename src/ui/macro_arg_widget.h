@@ -10,6 +10,10 @@
 /* initial NULL : champ vide (liste : première entrée). placeholder : texte indicatif de l'entrée (NULL ou "" : indication du type,
  * « text », « 0 » ou « 0.0 »). Les valeurs de la liste sont copiées (le jeu peut être remplacé). Aucun rappel n'est branché. */
 GtkWidget *gt_macro_arg_widget_new(const GtMacroLists *lists, const macro_arg_info_t *info, const gchar *initial, const gchar *placeholder);
+/* Variante : optional et liste → première entrée « (none) » (valeur ""), choisie si initial vaut "" ou NULL ; optional et entrée → texte indicatif « (omitted) » par défaut */
+GtkWidget *gt_macro_arg_widget_new_full(const GtMacroLists *lists, const macro_arg_info_t *info, const gchar *initial, const gchar *placeholder, gboolean optional);
+/* Argument facultatif (et son préfixe) : une entrée vide est valide, la bulle ajoute la description de l'argument facultatif. Revalide le champ. */
+void       gt_macro_arg_widget_set_optional(GtkWidget *w, gboolean optional, const gchar *prefix);
 gchar     *gt_macro_arg_widget_get_value(GtkWidget *w);	/* texte de l'entrée, valeur de l'élément choisi ("" sans choix) ; g_free */
 /* Limites (macro_arg.h, NULL ou "" : aucune) et valeur par défaut de l'argument, copiées. Une fois posées, la validation donne au champ une
  * bulle d'aide décrivant l'argument (gt_macro_arg_describe), complétée par la raison quand la valeur est refusée. Revalide le champ. */

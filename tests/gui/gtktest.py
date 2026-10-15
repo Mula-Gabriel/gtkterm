@@ -730,7 +730,7 @@ def write_macros_v2(path, macros, lists=None):
         out.append('[macro:%d]' % (i + 1))
         for k in ('label', 'shortcut', 'action', 'tab'):
             out.append('%s=%s' % (k, _gk(m.get(k, ''))))
-        for k in ('args', 'arg_min', 'arg_max', 'arg_charset'):
+        for k in ('args', 'arg_min', 'arg_max', 'arg_charset', 'arg_optional', 'arg_prefix'):
             if m.get(k) is not None:
                 out.append('%s=%s' % (k, _gk_list(m[k])))
         out.append('polling=%s' % ('true' if m.get('polling') else 'false'))

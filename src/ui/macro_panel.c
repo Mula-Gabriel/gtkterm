@@ -271,6 +271,7 @@ static GtkWidget *make_arg_widget(MacroPanel *panel, const GtMacroSet *set, cons
 	const gchar *usage = arg_usage(panel_macros(panel), m->id, k);
 	const gchar *initial;
 	gchar *name = g_strdup_printf("macro-%u-arg-%d", m->id, k);
+	gboolean opt = gt_macro_arg_is_optional(m, k);
 	GtkWidget *w;
 
 	/* Champ vide = défaut (§2.7) : l'entrée montre la valeur d'usage, vide si elle est absente ou égale au défaut (montré en grisé) ;
@@ -279,8 +280,9 @@ static GtkWidget *make_arg_widget(MacroPanel *panel, const GtMacroSet *set, cons
 		initial = (usage != NULL && usage[0] != '\0') ? usage : def;
 	else
 		initial = (usage != NULL && strcmp(usage, def) != 0) ? usage : "";
-	w = gt_macro_arg_widget_new(lists, info, initial, def[0] != '\0' ? def : NULL);
+	w = gt_macro_arg_widget_new_full(lists, info, initial, def[0] != '\0' ? def : NULL, opt);
 	gt_macro_arg_widget_set_empty_is_default(w, TRUE);
+	gt_macro_arg_widget_set_optional(w, opt, gt_macro_arg_prefix(m, k));
 	gt_macro_arg_widget_set_limits(w, arg_limit(m->arg_min, k), arg_limit(m->arg_max, k), arg_limit(m->arg_charset, k), def);
 	if(GTK_IS_DROP_DOWN(w))
 		g_signal_connect(w, "notify::selected", G_CALLBACK(on_dropdown_selected), panel);

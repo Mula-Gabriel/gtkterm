@@ -3,13 +3,20 @@
 #include <config.h>
 #include <gtk/gtk.h>
 
+#include <glib/gi18n.h>
+
 #include "macro_arg.h"
 #include "macro_arg_widget.h"
 
 /* Données de l'objet : "arg-type", "arg-list" (nom de la liste), "values" (liste), "arg-min", "arg-max", "arg-charset", "arg-default",
- * "arg-described" (set_limits appelé), "empty-is-default" */
+ * "arg-described" (set_limits appelé), "empty-is-default", "arg-optional", "arg-prefix" */
 
 GtkWidget *gt_macro_arg_widget_new(const GtMacroLists *lists, const macro_arg_info_t *info, const gchar *initial, const gchar *placeholder)
+{
+	return gt_macro_arg_widget_new_full(lists, info, initial, placeholder, FALSE);
+}
+
+GtkWidget *gt_macro_arg_widget_new_full(const GtMacroLists *lists, const macro_arg_info_t *info, const gchar *initial, const gchar *placeholder, gboolean optional)
 {
 	GtkWidget *w;
 
@@ -17,24 +24,33 @@ GtkWidget *gt_macro_arg_widget_new(const GtMacroLists *lists, const macro_arg_in
 	{
 		gint li = gt_macro_lists_find(lists, info->list_name);
 		gint n = li >= 0 ? gt_macro_lists_entry_count(lists, li) : 0;
-		gchar **displays = g_new0(gchar *, n + 1);
-		gchar **values = g_new0(gchar *, n + 1);
+		gint n_extra = optional ? 1 : 0;
+		gchar **displays = g_new0(gchar *, n + n_extra + 1);
+		gchar **values = g_new0(gchar *, n + n_extra + 1);
 		guint selected = 0;
 		gboolean found = FALSE;
 
+		/* argument facultatif : première entrée « (none) » de valeur "" (la première valeur égale à initial gagne, donc "" ou NULL → « (none) ») */
+		if(optional)
+		{
+			displays[0] = g_strdup(_("(none)"));
+			values[0] = g_strdup("");
+			if(initial == NULL || initial[0] == '\0')
+				found = TRUE;
+		}
 		for(gint e = 0; e < n; e++)
 		{
-			displays[e] = g_strdup(gt_macro_lists_entry_display(lists, li, e));
-			values[e] = g_strdup(gt_macro_lists_entry_value(lists, li, e));
-			if(!found && initial != NULL && g_strcmp0(values[e], initial) == 0)
+			displays[e + n_extra] = g_strdup(gt_macro_lists_entry_display(lists, li, e));
+			values[e + n_extra] = g_strdup(gt_macro_lists_entry_value(lists, li, e));
+			if(!found && initial != NULL && g_strcmp0(values[e + n_extra], initial) == 0)
 			{
-				selected = (guint)e;
+				selected = (guint)(e + n_extra);
 				found = TRUE;
 			}
 		}
 		w = gtk_drop_down_new_from_strings((const char *const *)displays);
 		g_strfreev(displays);
-		if(n > 0)
+		if(n + n_extra > 0)
 			gtk_drop_down_set_selected(GTK_DROP_DOWN(w), selected);
 		g_object_set_data_full(G_OBJECT(w), "values", values, (GDestroyNotify)g_strfreev);
 		g_object_set_data_full(G_OBJECT(w), "arg-list", g_strdup(info->list_name), g_free);
@@ -42,6 +58,8 @@ GtkWidget *gt_macro_arg_widget_new(const GtMacroLists *lists, const macro_arg_in
 	else
 	{
 		w = gtk_entry_new();
+		if(optional && (placeholder == NULL || placeholder[0] == '\0'))
+			placeholder = _("(omitted)");
 		if(placeholder == NULL || placeholder[0] == '\0')
 			placeholder = g_strcmp0(info->type, "s") == 0 ? "text" : macro_type_is_float(info->type) ? "0.0" : "0";
 		gtk_entry_set_placeholder_text(GTK_ENTRY(w), placeholder);
@@ -86,6 +104,13 @@ void gt_macro_arg_widget_set_empty_is_default(GtkWidget *w, gboolean empty_is_de
 	gt_macro_arg_widget_validate(w);
 }
 
+void gt_macro_arg_widget_set_optional(GtkWidget *w, gboolean optional, const gchar *prefix)
+{
+	g_object_set_data(G_OBJECT(w), "arg-optional", optional ? GINT_TO_POINTER(1) : NULL);
+	set_string(w, "arg-prefix", prefix);
+	gt_macro_arg_widget_validate(w);
+}
+
 gboolean gt_macro_arg_widget_check(GtkWidget *w, gchar **reason)
 {
 	GObject *o = G_OBJECT(w);
@@ -99,6 +124,8 @@ gboolean gt_macro_arg_widget_check(GtkWidget *w, gchar **reason)
 	value = gtk_editable_get_text(GTK_EDITABLE(w));
 	if(value[0] == '\0' && g_object_get_data(o, "empty-is-default") != NULL && g_object_get_data(o, "arg-default") != NULL)
 		value = g_object_get_data(o, "arg-default");
+	if(g_object_get_data(o, "arg-optional") != NULL && value[0] == '\0')
+		return TRUE;	/* argument facultatif vide : omis à l'envoi */
 	verdict = gt_macro_arg_check(g_object_get_data(o, "arg-type"), value, g_object_get_data(o, "arg-min"), g_object_get_data(o, "arg-max"),
 	                             g_object_get_data(o, "arg-charset"), reason);
 	return verdict == GT_MACRO_ARG_OK;
@@ -123,6 +150,15 @@ void gt_macro_arg_widget_validate(GtkWidget *w)
 		                                    g_object_get_data(o, "arg-max"), g_object_get_data(o, "arg-charset"),
 		                                    g_object_get_data(o, "arg-default"));
 
+		if(g_object_get_data(o, "arg-optional") != NULL)
+		{
+			gchar *opt = gt_macro_arg_describe_optional(g_object_get_data(o, "arg-prefix"));
+			gchar *full = g_strconcat(text, ", ", opt, NULL);
+
+			g_free(opt);
+			g_free(text);
+			text = full;
+		}
 		if(reason != NULL)
 		{
 			gchar *full = g_strconcat(text, "\n", reason, NULL);
