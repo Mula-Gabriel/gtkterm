@@ -6,6 +6,13 @@ montré en tête de la fenêtre), toute autre ligne un texte affiché tel quel (
 prolonge l'élément précédent. Une section sans tag publié n'est jamais affichée.
 Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusqu'à la prochaine section, n'est pas affiché.
 
+## v2.1.0 — 2026-10-15
+- Ports : un indicateur d'activité dans chaque onglet (pastille, roue, Zzz, tête de mort) et « non lu » en gras ; délais réglables par profil (Port › Options avancées).
+- Macros : limites des arguments (valeurs min/max, longueur et jeu de caractères des textes), champ vide = valeur par défaut, envoi refusé hors limites,
+  table des arguments et aperçu de la ligne envoyée dans « Configurer les macros ».
+- Macros : un onglet de projet peut lier un fichier de macros comme modèle, avec ses valeurs propres au projet (défauts, scrutation) ; à l'OK de
+  « Configurer les macros », question « garder dans le projet / enregistrer dans le modèle » ; modèle relu à l'ouverture du projet ; menu « Détacher du modèle ».
+
 ## v2.0.2 — 2026-10-13
 - Panneau de macros : séparateurs de section plus visibles (titre en gras, plus grand, non grisé, une ligne sautée au-dessus).
 
