@@ -40,6 +40,7 @@
 #include "port_dialog.h"
 #include "profile_dialogs.h"
 #include "project.h"
+#include "project_rename.h"
 #include "terminal_dialog.h"
 #include "script_engine.h"
 #include "script_panel.h"
@@ -65,6 +66,7 @@ typedef struct
 	GtkWidget *notebook;		/* GtkNotebook « tabs » de la fenêtre (pointeur faible) */
 	gulong switch_id, reorder_id;	/* switch-page, page-reordered du notebook */
 	GSimpleAction *close_tab_action, *active_tab_action;	/* tenues par l'application (actions app.close-tab, app.active-tab) */
+	GSimpleAction *project_rename_action;	/* app.project-rename, sensible avec un projet ouvert */
 	GSimpleAction *project_close_action;	/* tenue par l'application (app.project-close, sensible avec un projet ouvert) */
 	GtkWidget *focus_view;		/* page dont le terminal prend le focus à la prochaine inactivité (pointeur faible) */
 	guint focus_id;
@@ -928,6 +930,8 @@ static void project_save(gboolean as, gboolean then)
 			g_free(base);
 			g_free(dir);
 		}
+		else if(gt_project_get_stored_name(gt_app.project) != NULL)
+			name = gt_project_file_name_for(gt_project_get_stored_name(gt_app.project));	/* nom stocké dans le projet */
 		else
 			name = g_strdup("project.gtkterm");
 		gt_ui_save_file(gt_app_get_main_window(), _("Save project"), folder, name, on_save_as_chosen, GINT_TO_POINTER(then));
@@ -1045,6 +1049,8 @@ static void project_actions_update(void)
 {
 	if(gt_app.project_close_action != NULL && gt_app.project != NULL)
 		g_simple_action_set_enabled(gt_app.project_close_action, gt_project_is_open(gt_app.project) && !gt_app.services_stopped);
+	if(gt_app.project_rename_action != NULL && gt_app.project != NULL)
+		g_simple_action_set_enabled(gt_app.project_rename_action, gt_project_is_open(gt_app.project) && !gt_app.services_stopped);
 }
 
 /* notify::open, ::path, ::modified du projet */
@@ -1326,6 +1332,12 @@ static void action_project_save_as(GSimpleAction *action, GVariant *param, gpoin
 		project_save(TRUE, FALSE);
 }
 
+static void action_project_rename(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+	if(app_alive() && gt_project_is_open(gt_app.project) && gt_app.pending_op == OP_NONE)
+		gt_project_rename_show(gt_app_get_main_window(), gt_app.project);
+}
+
 static void action_project_close(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
 	if(app_alive() && gt_project_is_open(gt_app.project))
@@ -1382,6 +1394,7 @@ static const GActionEntry app_entries[] =
 	{ .name = "project-open", .activate = action_project_open },
 	{ .name = "project-save", .activate = action_project_save },
 	{ .name = "project-save-as", .activate = action_project_save_as },
+	{ .name = "project-rename", .activate = action_project_rename },
 	{ .name = "project-close", .activate = action_project_close },
 };
 
@@ -1410,6 +1423,7 @@ static void on_startup(GApplication *app, gpointer user_data)
 	gt_app.close_tab_action = G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(app), "close-tab"));
 	gt_app.active_tab_action = G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(app), "active-tab"));
 	gt_app.project_close_action = G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(app), "project-close"));
+	gt_app.project_rename_action = G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(app), "project-rename"));
 	g_simple_action_set_enabled(gt_app.close_tab_action, FALSE);	/* un seul onglet */
 	project_actions_update();	/* aucun projet ouvert */
 	for(gsize i = 0; i < G_N_ELEMENTS(app_accels); i++)
@@ -1433,7 +1447,7 @@ static void on_shutdown(GApplication *app, gpointer user_data)
 /* Application finalisée (main l'a libérée) : plus de session active */
 static void on_app_finalized(gpointer user_data, GObject *where_the_object_was)
 {
-	gt_app.close_tab_action = gt_app.active_tab_action = gt_app.project_close_action = NULL;	/* tenues par l'application */
+	gt_app.close_tab_action = gt_app.active_tab_action = gt_app.project_close_action = gt_app.project_rename_action = NULL;	/* tenues par l'application */
 	pending_clear();
 	g_clear_object(&gt_app.project);	/* avant le gestionnaire : il en tient une référence */
 	g_clear_object(&gt_app.sessions);
@@ -1459,6 +1473,7 @@ GtkApplication *gt_app_new(const GtCmdline *cmd, GtSessionManager *sessions)
 	gt_project_set_page_func(gt_app.project, project_page_func, NULL);
 	g_signal_connect(gt_app.project, "notify::open", G_CALLBACK(on_project_notify), NULL);
 	g_signal_connect(gt_app.project, "notify::path", G_CALLBACK(on_project_notify), NULL);
+	g_signal_connect(gt_app.project, "notify::name", G_CALLBACK(on_project_notify), NULL);
 	g_signal_connect(gt_app.project, "notify::modified", G_CALLBACK(on_project_notify), NULL);
 	g_object_weak_ref(G_OBJECT(app), on_app_finalized, NULL);
 	g_signal_connect(app, "startup", G_CALLBACK(on_startup), NULL);

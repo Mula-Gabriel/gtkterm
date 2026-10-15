@@ -24,6 +24,10 @@
           <attribute name="action">app.project-save-as</attribute>
         </item>
         <item>
+          <attribute name="label" translatable="yes">Rename project…</attribute>
+          <attribute name="action">app.project-rename</attribute>
+        </item>
+        <item>
           <attribute name="label" translatable="yes">Close project</attribute>
           <attribute name="action">app.project-close</attribute>
         </item>

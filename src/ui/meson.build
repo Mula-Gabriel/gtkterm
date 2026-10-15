@@ -42,6 +42,8 @@ ui_sources = [
 	'hex_send_bar.h',
 	'profile_dialogs.c',
 	'profile_dialogs.h',
+	'project_rename.c',
+	'project_rename.h',
 	'port_dialog.c',
 	'port_dialog.h',
 	'terminal_dialog.c',

@@ -33,6 +33,7 @@ src/ui/macros_save.c
 src/ui/menus.ui
 src/ui/port_dialog.c
 src/ui/profile_dialogs.c
+src/ui/project_rename.c
 src/ui/script_panel.c
 src/ui/search_bar.c
 src/ui/tab_label.c

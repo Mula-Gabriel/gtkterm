@@ -395,7 +395,7 @@ static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer us
 	g_simple_action_set_state(action, g_variant_builder_end(&b));
 }
 
-/* test-project (plan, décision 13) : état a{sv} recalculé à chaque activation : open (b), path (s, vide sans fichier), modified (b), name (s) */
+/* test-project (plan, décision 13) : état a{sv} recalculé à chaque activation : open (b), path (s, vide sans fichier), modified (b), name (s), stored_name (s, vide sans nom stocké) */
 static void on_test_project(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
 	GtProject *p = gt_app_get_project();
@@ -410,6 +410,7 @@ static void on_test_project(GSimpleAction *action, GVariant *param, gpointer use
 		g_variant_builder_add(&b, "{sv}", "path", g_variant_new_string(path != NULL ? path : ""));
 		g_variant_builder_add(&b, "{sv}", "modified", g_variant_new_boolean(gt_project_is_modified(p)));
 		g_variant_builder_add(&b, "{sv}", "name", g_variant_new_take_string(gt_project_get_name(p)));
+		g_variant_builder_add(&b, "{sv}", "stored_name", g_variant_new_string(gt_project_get_stored_name(p) != NULL ? gt_project_get_stored_name(p) : ""));
 	}
 	g_simple_action_set_state(action, g_variant_builder_end(&b));
 }
