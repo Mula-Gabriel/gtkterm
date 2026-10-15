@@ -240,6 +240,10 @@
           <attribute name="label" translatable="yes">Save macros file…</attribute>
           <attribute name="action">app.save-macros</attribute>
         </item>
+        <item>
+          <attribute name="label" translatable="yes">Detach from template</attribute>
+          <attribute name="action">app.detach-macros-template</attribute>
+        </item>
       </section>
     </submenu>
     <submenu>

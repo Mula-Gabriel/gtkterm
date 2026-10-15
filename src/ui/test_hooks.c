@@ -356,7 +356,7 @@ static void on_test_terminal_props(GSimpleAction *action, GVariant *param, gpoin
 /* test-sessions (plan, décision 9) : état aa{sv} recalculé à chaque activation (Activate puis Describe, comme test-dump) ; un dict par onglet,
  * dans l'ordre : index (i), id (u), name (s, nom court), state (s, pseudo de GtLinkState), profile (s), macros_file (s, vide si aucun),
  * active (b), busy (b), in_project (b), script (s, texte de l'éditeur de script tenu par la session), activity (s, pseudo de
- * GtPortActivityState), unread (b) */
+ * GtPortActivityState), unread (b), template (s, chemin du modèle de macros lié, "" si non lié) */
 static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
 	GtSessionManager *m = gt_app_get_sessions();
@@ -370,6 +370,7 @@ static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer us
 		GtSession *s = gt_session_manager_get_nth(m, i);
 		GEnumValue *st = g_enum_get_value(states, gt_link_get_state(gt_session_get_link(s)));
 		const gchar *macros = gt_macros_get_path(gt_session_get_macros(s));
+		const gchar *tpl;
 		GVariantBuilder d;
 
 		g_variant_builder_init(&d, G_VARIANT_TYPE_VARDICT);
@@ -386,6 +387,8 @@ static void on_test_sessions(GSimpleAction *action, GVariant *param, gpointer us
 		g_variant_builder_add(&d, "{sv}", "activity",
 		                      g_variant_new_string(gt_port_activity_state_nick(gt_port_activity_get_state(gt_session_get_activity(s)))));
 		g_variant_builder_add(&d, "{sv}", "unread", g_variant_new_boolean(gt_port_activity_get_unread(gt_session_get_activity(s))));
+		tpl = gt_macros_get_template(gt_session_get_macros(s));
+		g_variant_builder_add(&d, "{sv}", "template", g_variant_new_string(tpl != NULL ? tpl : ""));
 		g_variant_builder_add_value(&b, g_variant_builder_end(&d));
 	}
 	g_type_class_unref(states);

@@ -382,7 +382,7 @@ when the name `eu.mulagabriel.gtkterm.test.p<PID>` appears; (2) the **test hook*
 when `GTKTERM_TEST_HOOKS=1`, which also switches the application id to `eu.mulagabriel.gtkterm.test.p<PID>` without `NON_UNIQUE`): actions `app.test-dump`
 (every widget of the visible windows and popovers: type, accessible role, label, widget name, CSS classes `css`, flags, geometry), `app.test-terminal-text`,
 `app.test-terminal-props` (both on the active tab), `app.test-activate(s)`, `app.test-set-text((ss))`, `app.test-sessions` (state `aa{sv}`, one dict per tab in
-order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`, `activity` (state nick), `unread`), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name`); the dump also gives
+order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`, `activity` (state nick), `unread`, `template` (linked macros template path, empty if none)), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name`); the dump also gives
 `natural_w` (natural width measured by `gtk_widget_measure`, for mapped widgets), and when not empty `placeholder` (`GtkEntry`), `tooltip` and `markup` (a `GtkLabel` using Pango markup); (3) a **fake broadway browser** (`tests/gui/broadway.py`, `gtk4-broadwayd`'s protocol) for real gestures:
 typing in the terminal, shortcuts, menus by clicks, file choosers by Ctrl+L, context menus (a click waits for the widget's geometry to be stable), tab
 drags (`drag_in_surface`). Widgets a test must reach carry a stable `gtk_widget_set_name()` and an accessible name: name them when adding UI; `find`/`find1`
