@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "macro_file.h"
+#include "macros_format.h"
 
 #define HEADER_GROUP "gtkterm-macros"
 #define FILE_VERSION 2
@@ -38,6 +39,25 @@ get_period(GKeyFile *kf, const gchar *group)
 		period = (guint)MIN(v, (guint64)GT_MACRO_PERIOD_MAX_MS);
 	g_free(s);
 	return period;
+}
+
+/* Vecteur ajusté à n éléments (tronqué ou complété par "") ; prend v, rend le vecteur ajusté (NULL si v l'était) */
+static gchar **
+fit_vector(gchar **v, gint n)
+{
+	gchar **fitted;
+	guint len;
+
+	if(v == NULL)
+		return NULL;
+	len = g_strv_length(v);
+	if(len == (guint)n)
+		return v;
+	fitted = g_new0(gchar *, n + 1);
+	for(gint k = 0; k < n; k++)
+		fitted[k] = g_strdup((guint)k < len ? v[k] : "");
+	g_strfreev(v);
+	return fitted;
 }
 
 /* Liste « a;b;c » : g_key_file_get_string_list, sinon (échappement inconnu) éléments bruts coupés aux « ; » non échappés, « \; » → « ; » */
@@ -175,6 +195,38 @@ gt_macro_set_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar *origi
 			}
 			for(gint v = 0; v < 3; v++)
 				g_strfreev(vec[v]);
+		}
+		/* Arguments facultatifs (spec 2026-10-15-nom-projet §5.3) : longueur ajustée au nombre d'arguments, avec avertissement */
+		{
+			gsize n_opt = 0, n_pre = 0;
+			gchar **opt = get_list_tolerant(kf, groups[g], "arg_optional", origin, &n_opt);
+			gchar **pre = get_list_tolerant(kf, groups[g], "arg_prefix", origin, &n_pre);
+			gint n = macro_count_format_args(gt_macro_set_get_lists(set), action);
+
+			if(opt != NULL || pre != NULL)
+			{
+				gchar **v[2] = { opt, pre };
+				const gchar *keys[2] = { "arg_optional", "arg_prefix" };
+
+				for(gint i = 0; i < 2; i++)
+				{
+					gboolean bad = v[i] != NULL && g_strv_length(v[i]) != (guint)n;
+
+					for(guint k = 0; i == 0 && v[i] != NULL && v[i][k] != NULL; k++)
+						bad |= v[i][k][0] != '\0' && strcmp(v[i][k], "1") != 0;
+					if(bad)
+					{
+						gchar *msg = g_strdup_printf(_("%s: [%s] %s: invalid value adjusted"), origin, groups[g], keys[i]);
+
+						g_warning("%s", msg);
+						g_free(msg);
+					}
+					v[i] = fit_vector(v[i], n);	/* tronqué ou complété par "" (prend v[i]) */
+				}
+				gt_macro_set_set_optional(set, id, (const gchar *const *)v[0], (const gchar *const *)v[1], n);
+				g_strfreev(v[0]);
+				g_strfreev(v[1]);
+			}
 		}
 		polling = g_key_file_get_boolean(kf, groups[g], "polling", &local);
 		if(local != NULL)
@@ -443,6 +495,10 @@ gt_macro_set_to_key_file(const GtMacroSet *set, GKeyFile *kf, const gchar *prefi
 			g_key_file_set_string_list(kf, group, "arg_max", (const gchar *const *)m->arg_max, g_strv_length(m->arg_max));
 		if(m->arg_charset != NULL)
 			g_key_file_set_string_list(kf, group, "arg_charset", (const gchar *const *)m->arg_charset, g_strv_length(m->arg_charset));
+		if(m->arg_optional != NULL)
+			g_key_file_set_string_list(kf, group, "arg_optional", (const gchar *const *)m->arg_optional, g_strv_length(m->arg_optional));
+		if(m->arg_prefix != NULL)
+			g_key_file_set_string_list(kf, group, "arg_prefix", (const gchar *const *)m->arg_prefix, g_strv_length(m->arg_prefix));
 		g_key_file_set_boolean(kf, group, "polling", m->polling);
 		g_key_file_set_uint64(kf, group, "polling_period_ms", m->polling_period_ms);
 		g_free(group);

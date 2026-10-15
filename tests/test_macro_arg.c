@@ -274,6 +274,18 @@ test_description(void)
 	decrire("o", NULL, "", "", "", "", "octal");
 }
 
+static void
+test_description_facultatif(void)
+{
+	gchar *d = gt_macro_arg_describe_optional(NULL);
+
+	g_assert_cmpstr(d, ==, "optional");
+	g_free(d);
+	d = gt_macro_arg_describe_optional(" -p=");
+	g_assert_cmpstr(d, ==, "optional, prefix \" -p=\"");
+	g_free(d);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -281,6 +293,7 @@ main(int argc, char **argv)
 	setlocale(LC_ALL, "C");
 
 	g_test_add_func("/macro_arg/charset-parse", test_charset_parse);
+	g_test_add_func("/macro_arg/description-facultatif", test_description_facultatif);
 	g_test_add_func("/macro_arg/classes", test_classes);
 	g_test_add_func("/macro_arg/classes-taille", test_classes_taille);
 	g_test_add_func("/macro_arg/classes-contenu", test_classes_contenu);

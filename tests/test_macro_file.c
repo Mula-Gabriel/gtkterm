@@ -942,6 +942,48 @@ test_regroupe_ancien_format(void)
 	g_free(dir);
 }
 
+static void
+test_facultatif_aller_retour(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-mf-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	GtMacroSet *set = gt_macro_set_new(), *relu;
+	guint id = gt_macro_set_append(set, "co", "", "connect %s%s", "");
+	const gchar *opt[] = { "", "1", NULL }, *pre[] = { "", " -password=", NULL };
+	GError *error = NULL;
+	gchar *texte;
+
+	g_assert_true(gt_macro_set_set_optional(set, id, opt, pre, 2));
+	g_assert_true(gt_macro_file_save(set, path, &error));
+	g_assert_no_error(error);
+	texte = lire(path);
+	g_assert_nonnull(strstr(texte, "arg_optional=;1;"));
+	g_assert_nonnull(strstr(texte, "arg_prefix=;\\s-password=;"));	/* espace de tête échappé par GKeyFile */
+	g_free(texte);
+	relu = charger(path);
+	g_assert_cmpstr(gt_macro_arg_prefix(gt_macro_set_get(relu, 0), 1), ==, " -password=");
+	g_assert_true(gt_macro_arg_is_optional(gt_macro_set_get(relu, 0), 1));
+	g_assert_true(gt_macro_set_same_structure(set, relu));
+	gt_macro_set_free(relu);
+	/* Lecture tolérante : longueur fausse ajustée, valeur inconnue -> "" (avertissements attendus) */
+	g_assert_true(g_file_set_contents(path, "[gtkterm-macros]\nversion=2\n\n[macro:1]\nlabel=x\naction=X%s%s\n"
+	                                  "arg_optional=1;oui;1;\narg_prefix=a;\n", -1, NULL));
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*arg_optional*");
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*arg_prefix*");
+	relu = charger(path);
+	g_test_assert_expected_messages();
+	g_assert_true(gt_macro_arg_is_optional(gt_macro_set_get(relu, 0), 0));
+	g_assert_false(gt_macro_arg_is_optional(gt_macro_set_get(relu, 0), 1));
+	g_assert_cmpstr(gt_macro_arg_prefix(gt_macro_set_get(relu, 0), 0), ==, "a");
+	g_assert_cmpstr(gt_macro_arg_prefix(gt_macro_set_get(relu, 0), 1), ==, "");
+	gt_macro_set_free(relu);
+	gt_macro_set_free(set);
+	g_remove(path);
+	g_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -971,6 +1013,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_file/illisible-cause", test_illisible_cause);
 	g_test_add_func("/macro_file/refus-copie-remede", test_refus_copie_remede);
 	g_test_add_func("/macro_file/regroupe-lecture", test_regroupe_lecture);
+	g_test_add_func("/macro_file/facultatif-aller-retour", test_facultatif_aller_retour);
 	g_test_add_func("/macro_file/regroupe-ancien-format", test_regroupe_ancien_format);
 	return g_test_run();
 }

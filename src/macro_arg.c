@@ -542,3 +542,11 @@ gt_macro_arg_describe(const gchar *type, const gchar *list_name, const gchar *mi
 		g_string_append_printf(s, _(" (default %s)"), def);
 	return g_string_free(s, FALSE);
 }
+
+gchar *
+gt_macro_arg_describe_optional(const gchar *prefix)
+{
+	if(prefix == NULL || prefix[0] == '\0')
+		return g_strdup(_("optional"));
+	return g_strdup_printf(_("optional, prefix \"%s\""), prefix);
+}

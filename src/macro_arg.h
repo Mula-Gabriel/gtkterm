@@ -46,5 +46,7 @@ const gchar      *gt_macro_arg_type_name(const gchar *type);	/* traduit : intege
 /* Bulle du panneau : « integer, 0 – 100 (default 50) ». À libérer avec g_free. */
 gchar            *gt_macro_arg_describe(const gchar *type, const gchar *list_name, const gchar *min, const gchar *max,
                                         const gchar *charset, const gchar *def);
+/* « optional » ou « optional, prefix "…" » (bulle, éditeur). À libérer avec g_free. */
+gchar            *gt_macro_arg_describe_optional(const gchar *prefix);
 
 #endif

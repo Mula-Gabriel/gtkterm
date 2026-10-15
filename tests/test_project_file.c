@@ -468,6 +468,33 @@ test_modele_relatif(void)
 	g_free(dir);
 }
 
+static void
+test_arguments_facultatifs(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-project-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "p.gtkterm", NULL);
+	GtProjectData *d = gt_project_data_new(), *r = NULL;
+	GtProjectTab *t = gt_project_tab_new();
+	const gchar *opt[] = { "", "1", NULL }, *pre[] = { "", " -p=", NULL };
+	guint id = gt_macro_set_append(t->macros, "Co", "", "co %s%s", "");
+	const GtMacro *m;
+
+	g_assert_true(gt_macro_set_set_optional(t->macros, id, opt, pre, 2));
+	g_ptr_array_add(d->tabs, t);
+	g_assert_true(gt_project_data_save(d, path, NULL, NULL));
+	g_assert_true(gt_project_data_load(path, &r, NULL, NULL));
+	m = gt_macro_set_get(((GtProjectTab *)g_ptr_array_index(r->tabs, 0))->macros, 0);
+	g_assert_cmpstr(gt_macro_arg_prefix(m, 1), ==, " -p=");
+	g_assert_true(gt_macro_arg_is_optional(m, 1));
+	g_assert_false(gt_macro_arg_is_optional(m, 0));
+	gt_project_data_free(r);
+	gt_project_data_free(d);
+	g_remove(path);
+	g_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -482,6 +509,7 @@ main(int argc, char **argv)
 	g_test_add_func("/project_file/lie-aller-retour", test_lie_aller_retour);
 	g_test_add_func("/project_file/non-lie-inchange", test_non_lie_inchange);
 	g_test_add_func("/project_file/lie-instantane", test_lie_instantane);
+	g_test_add_func("/project_file/arguments-facultatifs", test_arguments_facultatifs);
 	g_test_add_func("/project_file/modele-relatif", test_modele_relatif);
 	return g_test_run();
 }
