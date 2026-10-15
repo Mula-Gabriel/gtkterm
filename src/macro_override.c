@@ -206,11 +206,13 @@ limit_at(gchar **v, guint k)
 	return v != NULL ? v[k] : NULL;
 }
 
-/* Valeur acceptable pour l'argument k de la macro (type et limites ; une liste n'est pas vérifiée) */
+/* Valeur acceptable pour l'argument k de la macro (type et limites ; une liste n'est pas vérifiée ; vide pour un argument facultatif : omis) */
 static gboolean
 value_accepted(const GtMacro *m, const macro_arg_info_t *info, guint k, const gchar *value)
 {
 	if(info->list_name != NULL)
+		return TRUE;
+	if(value[0] == '\0' && gt_macro_arg_is_optional(m, (gint)k))
 		return TRUE;
 	return gt_macro_arg_check(info->type, value, limit_at(m->arg_min, k), limit_at(m->arg_max, k), limit_at(m->arg_charset, k),
 	                          NULL) == GT_MACRO_ARG_OK;

@@ -199,15 +199,18 @@ static gint compare_guint(gconstpointer a, gconstpointer b)
 static guint *selected_store_positions(MacroEditor *editor, gint page, guint *n_out)
 {
 	GtkSelectionModel *sel = page_selection(editor, page);
-	guint n = 0, *pos = selected_positions(sel, &n);
+	guint n = 0, kept = 0, *pos = selected_positions(sel, &n);
 
 	for(guint k = 0; k < n; k++)
 	{
 		gpointer item = g_list_model_get_item(G_LIST_MODEL(sel), pos[k]);
 
-		g_list_store_find(page_store(editor, page), item, &pos[k]);
-		g_object_unref(item);
+		/* Introuvable dans le store (ne devrait pas arriver) : écartée, jamais une position de la vue prise pour une position du store */
+		if(item != NULL && g_list_store_find(page_store(editor, page), item, &pos[kept]))
+			kept++;
+		g_clear_object(&item);
 	}
+	n = kept;
 	qsort(pos, n, sizeof *pos, compare_guint);
 	*n_out = n;
 	return pos;
@@ -1730,10 +1733,10 @@ static void on_optional_toggled(GtkCheckButton *check, gpointer data)
 	}
 	gt_macro_lists_free(lists);
 	if(action != NULL && strcmp(action, gt_macro_row_get_action(editor->defaults_row)) == 0)
-		g_clear_pointer(&action, g_free);	/* action inchangée : pas de reconstruction de la table */
-	/* La table se refait sur notify::action pendant cette émission : la case reste vivante jusqu'à la fin de l'événement qui l'a basculée */
-	if(action != NULL)
-		g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, keep_until_idle, g_object_ref(check), g_object_unref);
+		g_clear_pointer(&action, g_free);	/* action inchangée : pas de notify::action */
+	/* La table se refait pendant cette émission (notify::action, ou ci-dessous) : la case reste vivante jusqu'à la fin de l'événement qui
+	 * l'a basculée */
+	g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, keep_until_idle, g_object_ref(check), g_object_unref);
 	entry = table_cell(editor, COL_PREFIX, k);
 	if(entry != NULL)
 	{
@@ -1743,6 +1746,17 @@ static void on_optional_toggled(GtkCheckButton *check, gpointer data)
 		editor->defaults_building = FALSE;
 	}
 	optional_write(editor, k, on, on ? prefix : "", action);
+	/* Action inchangée : la table n'a pas été refaite, la cellule Default du rang k doit suivre l'état facultatif (vide accepté, « (none) ») */
+	if(action == NULL && editor->defaults_row != NULL)
+	{
+		gboolean focused = gtk_widget_has_focus(GTK_WIDGET(check));
+		GtkWidget *again;
+
+		defaults_rebuild(editor);
+		again = table_cell(editor, COL_OPTIONAL, k);
+		if(focused && again != NULL)
+			gtk_widget_grab_focus(again);	/* clavier : la nouvelle case garde le focus */
+	}
 	g_free(action);
 	g_free(prefix);
 }
@@ -1805,6 +1819,9 @@ static void defaults_rebuild(MacroEditor *editor)
 	defaults_clear(editor);
 	if(row != editor->defaults_row)
 	{
+		/* Autre ligne affichée : le message « Prefix of argument %d removed » de la précédente ne la concerne plus */
+		if(editor->prefix_message)
+			set_message(editor, NULL, FALSE);
 		defaults_unwatch(editor);
 		if(row != NULL)
 		{
@@ -1834,12 +1851,16 @@ static void defaults_rebuild(MacroEditor *editor)
 			gboolean text = g_strcmp0(type, "s") == 0;
 			gchar *rank = g_strdup_printf("%d", k + 1);
 			GtkWidget *w;
+			gboolean optional;
 
 			gtk_grid_attach(GTK_GRID(editor->defaults), table_text(rank), COL_RANK, k + 1, 1, 1);
 			g_free(rank);
 			gtk_grid_attach(GTK_GRID(editor->defaults), table_text(infos[k].spec), COL_FORMAT, k + 1, 1, 1);
 			gtk_grid_attach(GTK_GRID(editor->defaults), table_text(text ? _("text (bytes)") : gt_macro_arg_type_name(type)), COL_TYPE, k + 1, 1, 1);
-			w = gt_macro_arg_widget_new(lists, &infos[k], args != NULL ? args[k] : "", NULL);
+			optional = g_strcmp0(nth((const gchar *const *)opts, k), "1") == 0;
+			/* Défaut d'un argument facultatif : vide accepté malgré les limites, liste avec « (none) » (valeur "") */
+			w = gt_macro_arg_widget_new_full(lists, &infos[k], args != NULL ? args[k] : "", NULL, optional);
+			gt_macro_arg_widget_set_optional(w, optional, nth((const gchar *const *)pres, k));
 			if(GTK_IS_DROP_DOWN(w))
 				g_signal_connect(w, "notify::selected", G_CALLBACK(on_default_dropdown_selected), NULL);
 			else
@@ -1857,7 +1878,7 @@ static void defaults_rebuild(MacroEditor *editor)
 			}
 			if(text)
 				gtk_grid_attach(GTK_GRID(editor->defaults), charset_cell(k, nth(css, k)), COL_CHARSET, k + 1, 1, 1);
-			optional_cells_attach(editor, k, g_strcmp0(nth((const gchar *const *)opts, k), "1") == 0, nth((const gchar *const *)pres, k));
+			optional_cells_attach(editor, k, optional, nth((const gchar *const *)pres, k));
 		}
 	}
 	gtk_widget_set_visible(editor->defaults_scroll, n_args > 0);

@@ -38,7 +38,7 @@ Six parties validées par l'utilisateur :
      enregistrer de `app_config`). Le contenu du fichier n'est **pas** réécrit : le nom n'y entre qu'au prochain Save ;
   2. le nom est appliqué (`gt_project_set_name`), le projet devient modifié (sauf nom identique à celui stocké).
 - Save as d'un projet sans fichier propose `<nom>.gtkterm` (même nettoyage) comme nom par défaut quand le projet a un nom stocké.
-- `app.test-project` expose aussi `name` (le nom stocké, vide si aucun).
+- `app.test-project` expose `name` (le nom **affiché** : nom stocké, sinon nom du fichier sans extension, sinon « Untitled project ») et `stored_name` (le nom stocké, vide si aucun).
 
 ## 2. Regroupement
 

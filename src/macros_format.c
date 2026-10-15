@@ -653,7 +653,8 @@ clamp_ranges (GArray *arg_ranges, gsize text_len)
 static gboolean
 optional_omitted (const gchar *const *optional, gint arg_idx, const gchar **args, gint n_args)
 {
-  if (!optional || g_strcmp0 (optional[arg_idx], "1") != 0)
+  /* Garde-fou : un vecteur plus court que le nombre d'arguments (normalement exact) n'est jamais lu au-delà de sa fin */
+  if (!optional || arg_idx >= (gint) g_strv_length ((gchar **) optional) || g_strcmp0 (optional[arg_idx], "1") != 0)
     return FALSE;
   return arg_idx >= n_args || !args[arg_idx] || !args[arg_idx][0];
 }
@@ -661,7 +662,8 @@ optional_omitted (const gchar *const *optional, gint arg_idx, const gchar **args
 static void
 append_prefix (GString *result, const gchar *const *optional, const gchar *const *prefixes, gint arg_idx)
 {
-  if (optional && g_strcmp0 (optional[arg_idx], "1") == 0 && prefixes && prefixes[arg_idx])
+  if (optional && arg_idx < (gint) g_strv_length ((gchar **) optional) && g_strcmp0 (optional[arg_idx], "1") == 0
+      && prefixes && arg_idx < (gint) g_strv_length ((gchar **) prefixes))
     g_string_append (result, prefixes[arg_idx]);
 }
 

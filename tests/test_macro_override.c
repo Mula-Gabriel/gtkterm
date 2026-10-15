@@ -252,6 +252,53 @@ test_apply_texte_limites(void)
 	gt_macro_set_free(base);
 }
 
+/* Valeur propre vide d'un argument facultatif (omis à l'envoi) : acceptée malgré les limites du modèle, à l'application comme à la fusion ;
+ * un argument non facultatif vide reste refusé par ses limites */
+static void
+test_apply_facultatif_vide(void)
+{
+	GtMacroSet *base = gt_macro_set_new(), *after = NULL, *res;
+	GtMacroOverrides *o = gt_macro_overrides_new();
+	const gchar *mn[] = { "2", "1", NULL }, *def[] = { "ab", "5", NULL }, *opt[] = { "1", "1", NULL }, *pre[] = { ",", ",", NULL };
+	guint id = gt_macro_set_append(base, "T", "", "T%s%d", ""), dropped = 0;
+
+	g_assert_cmpint(gt_macro_set_set_limits(base, id, mn, NULL, NULL, 2), ==, 0);
+	g_assert_true(gt_macro_set_set_args(base, id, def, 2));
+	/* Non facultatifs : "" refusé par la longueur minimale 2 et par le minimum 1 */
+	gt_macro_overrides_set_arg(o, "T", 0, 0, "");
+	gt_macro_overrides_set_arg(o, "T", 0, 1, "");
+	res = gt_macro_overrides_apply(o, base, &dropped);
+	g_assert_cmpuint(dropped, ==, 2);
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 0), ==, "ab");
+	gt_macro_set_free(res);
+	/* Facultatifs : "" appliqué, rien d'abandonné */
+	g_assert_true(gt_macro_set_set_optional(base, id, opt, pre, 2));
+	res = gt_macro_overrides_apply(o, base, &dropped);
+	g_assert_cmpuint(dropped, ==, 0);
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 0), ==, "");
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 1), ==, "");
+	/* Fusion (modèle aux défauts vides, valeurs propres "xy" et "7", édition qui ne touche pas ces défauts) : le défaut vide du modèle est
+	 * repris, la valeur propre ne fuit pas dans le modèle */
+	gt_macro_set_free(base);
+	base = gt_macro_set_copy(res);
+	{
+		const gchar *propres[] = { "xy", "7", NULL };
+		GtMacroSet *before = gt_macro_set_clone(base), *merged;
+
+		g_assert_true(gt_macro_set_set_args(before, gt_macro_set_get(before, 0)->id, propres, 2));
+		after = gt_macro_set_clone(before);
+		merged = gt_macro_overrides_merge_template(base, before, after);
+		g_assert_cmpstr(def_at(gt_macro_set_get(merged, 0), 0), ==, "");
+		g_assert_cmpstr(def_at(gt_macro_set_get(merged, 0), 1), ==, "");
+		gt_macro_set_free(merged);
+		gt_macro_set_free(before);
+	}
+	gt_macro_set_free(after);
+	gt_macro_set_free(res);
+	gt_macro_overrides_free(o);
+	gt_macro_set_free(base);
+}
+
 static void
 test_set_et_copie(void)
 {
@@ -625,6 +672,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_override/apply-aller-retour", test_apply_aller_retour);
 	g_test_add_func("/macro_override/apply-abandons", test_apply_abandons);
 	g_test_add_func("/macro_override/apply-texte-limites", test_apply_texte_limites);
+	g_test_add_func("/macro_override/apply-facultatif-vide", test_apply_facultatif_vide);
 	g_test_add_func("/macro_override/set-et-copie", test_set_et_copie);
 	g_test_add_func("/macro_override/merge-template", test_merge_template);
 	g_test_add_func("/macro_override/merge-template-listes", test_merge_template_listes);

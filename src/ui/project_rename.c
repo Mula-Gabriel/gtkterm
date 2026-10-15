@@ -17,6 +17,7 @@ typedef struct
 	GtkWidget *rename_file;
 	GtkLabel *error;
 	GtkWidget *ok;
+	gulong open_handler;	/* notify::open du projet, retiré avec l'état */
 } RenameDialog;
 
 static GtkWindow *rename_window = NULL;	/* instance unique (pointeur faible) */
@@ -25,8 +26,16 @@ static void rename_dialog_free(gpointer data)
 {
 	RenameDialog *rd = data;
 
+	g_clear_signal_handler(&rd->open_handler, rd->project);
 	g_clear_object(&rd->project);
 	g_free(rd);
+}
+
+/* Projet fermé : la fenêtre se ferme sans rien appliquer ; le gestionnaire se retire d'abord (une seule fermeture) */
+static void on_project_open_changed(GObject *project, GParamSpec *pspec, RenameDialog *rd)
+{
+	g_clear_signal_handler(&rd->open_handler, rd->project);
+	gtk_window_destroy(rd->window);
 }
 
 static void show_error(RenameDialog *rd, const gchar *text)
@@ -112,7 +121,8 @@ void gt_project_rename_show(GtkWindow *parent, GtProject *project)
 	gtk_window_set_destroy_with_parent(rd->window, TRUE);
 	gtk_window_set_default_size(rd->window, 360, -1);
 	g_object_set_data_full(G_OBJECT(rd->window), "rename-dialog", rd, rename_dialog_free);
-	g_signal_connect_object(project, "notify::open", G_CALLBACK(gtk_window_destroy), rd->window, G_CONNECT_SWAPPED);	/* fermé sans rien appliquer */
+	/* Gestionnaire retiré avec l'état (rename_dialog_free), jamais laissé à la finalisation de la fenêtre */
+	rd->open_handler = g_signal_connect(project, "notify::open", G_CALLBACK(on_project_open_changed), rd);
 	rename_window = rd->window;
 	g_object_add_weak_pointer(G_OBJECT(rd->window), (gpointer *)&rename_window);
 

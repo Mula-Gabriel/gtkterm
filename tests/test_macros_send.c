@@ -732,6 +732,35 @@ test_conflit(void)
 /* Aucun fichier courant (onglet dont le profil n'a pas chargé de macros) : la cible est le fichier par défaut ; présent et non vide, il n'est jamais
  * réécrit en silence (conflit, comme un fichier changé sur le disque) ; Reload le lit et en fait le fichier courant ; forcé (Overwrite), il est écrit ;
  * absent ou vide, il est écrit sans question. */
+/* Reload d'un fichier courant disparu (conflit Overwrite / Reload / Cancel) : refusé avec un message nommant le fichier, jeu et chemin inchangés */
+static void
+test_reload_fichier_disparu(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macros-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	guint avant;
+
+	installer_macro_n();
+	g_assert_cmpint(gt_macros_save_file(macros, path, FALSE, FALSE), ==, GT_MACROS_SAVED);
+	avant = gt_macro_set_count(gt_macros_get_set(macros));
+	g_assert_cmpuint(avant, >, 0);
+	g_assert_cmpint(g_unlink(path), ==, 0);
+	stub_reset();
+	g_assert_false(gt_macros_reload(macros));
+	g_assert_cmpint(stub_count("message"), ==, 1);
+	g_assert_nonnull(strstr(stub_last("message"), "no longer exists"));
+	g_assert_nonnull(strstr(stub_last("message"), path));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, avant);
+	g_assert_cmpstr(gt_macros_get_path(macros), ==, path);
+	/* Le chargement (démarrage, profil) garde son comportement : fichier absent = jeu vide, créé au premier enregistrement */
+	g_assert_true(gt_macros_load_file(macros, path, TRUE));
+	g_assert_cmpuint(gt_macro_set_count(gt_macros_get_set(macros)), ==, 0);
+	desinstaller();
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
 static void
 test_defaut_existant_conflit(void)
 {
@@ -844,6 +873,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_send/integre-aucune-ecriture", test_integre_aucune_ecriture);
 	g_test_add_func("/macros_send/conflit", test_conflit);
 	g_test_add_func("/macros_send/defaut-existant-conflit", test_defaut_existant_conflit);
+	g_test_add_func("/macros_send/reload-fichier-disparu", test_reload_fichier_disparu);
 	g_test_add_func("/macros_send/edited", test_edited);
 	ret = g_test_run();
 	gt_macros_free(macros);

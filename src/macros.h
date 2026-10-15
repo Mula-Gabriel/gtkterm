@@ -62,7 +62,8 @@ gboolean       gt_macros_load_file       (GtMacros *m, const gchar *path, gboole
  * ou, sans fichier courant ni path, fichier par défaut présent et non vide (jamais lu par m) ; rien n'est écrit (non interactif : g_warning).
  * FAILED : message (interactif) ou g_warning. Intégré : le chemin n'est pas retenu. */
 GtMacrosSaveResult gt_macros_save_file   (GtMacros *m, const gchar *path, gboolean interactive, gboolean force);
-/* Relit le fichier courant, à défaut le fichier par défaut (interactif) ; FALSE en mode intégré sans fichier courant */
+/* Relit le fichier courant, à défaut le fichier par défaut (interactif) ; FALSE en mode intégré sans fichier courant, et FALSE avec le message
+ * « The macros file %s no longer exists. » (crochet message) quand ce fichier a disparu : jeu, chemin et lien inchangés, jamais un jeu vide */
 gboolean       gt_macros_reload          (GtMacros *m);
 /* Oublie le dernier échec d'enregistrement signalé : le prochain échec, même identique, est de nouveau signalé. Appelé avant un enregistrement
  * explicite (menu « Save macros file ») ; les enregistrements implicites (frappe, fenêtre d'édition) ne l'appellent pas. */

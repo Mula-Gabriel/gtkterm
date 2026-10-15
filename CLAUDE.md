@@ -262,9 +262,9 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   **label** and its **occurrence** (rank among macros of the same label, 0 first; the empty label is a label), with per-rank default values (any string, `""`
   included) and optionally a polling setting (mode + period). `gt_macro_overrides_diff(base, effective)` (NULL unless same structure; equality rule: `args`
   NULL ≡ all `""`), `gt_macro_overrides_apply(o, base, &dropped)` (copy of base, new ids; drops, one per argument or polling: macro gone, rank beyond its
-  arguments, value refused by `gt_macro_arg_check` with the template's type and limits (lists not checked), polling of a non-sendable macro or period out of
+  arguments, value refused by `gt_macro_arg_check` with the template's type and limits (lists not checked; `""` always accepted for an optional argument), polling of a non-sendable macro or period out of
   [`GT_MACRO_PERIOD_MIN_MS`, `GT_MACRO_PERIOD_MAX_MS`], never clamped), `gt_macro_overrides_merge_template(base, before, after)` (new template after an edit:
-  a default unchanged by the edit, of a rank of the same type, takes back the base's value if `after`'s limits accept it, so a project value never leaks into
+  a default unchanged by the edit, of a rank of the same type, takes back the base's value if `after`'s limits accept it (`""` of an optional argument always), so a project value never leaks into
   the template; polling taken from base), key file groups `<prefix>override:K` (tolerant read, one entry per label + occurrence, the last read wins).
   A project value equal to the template's is no project value any more (difference semantics, assumed). Usage values and running state are never in it.
 - `macros_format.c` (core) — printf-style arguments (`%d`, `%s`, `%#ListName`, length modifiers); the lists are passed in (`%#x` is a list only if list `x`
@@ -297,6 +297,8 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   `GtMacros` with a file keeps a `GtFileStamp` (taken before the read); `gt_macros_save_file(m, path, interactive, force)` returns `GT_MACROS_CONFLICT` when the file changed on disk since the last
   read or write, or, without a current file nor a path, when the default file exists and is not empty (never read by this tab: a silent write would lose it) (non-interactive: warning, nothing
   written); `src/ui/macros_save.c` then asks Overwrite / Reload (re-read, usage values cleared; without a current file, the default file) / Cancel, Cancel by default.
+  `gt_macros_reload()` refuses a file that no longer exists (message hook « The macros file %s no longer exists. », FALSE, set, path and link unchanged: never the empty set that
+  `gt_macros_load_file()` still installs for a missing file at start-up or profile load).
   `gt_macros_apply_edits()` applies the editor's rows and clears the usage values of a macro whose default values changed (they would hide the new default);
   `gt_macros_commit_edits()` (= apply with a copy of the lists + `gt_macro_poller_sync` + `gt_macros_changed`) is the editor's single apply path.
   **Linked template** (project tabs only): a `GtMacros` can be linked, in fields distinct from `path`/`stamp`: `template_path` (absolute), `base` (the template's
@@ -330,13 +332,15 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   by the title bar) = `gt_macros_apply_edits()` (`gt_macro_set_apply_edits()` on the current set; a macro whose default values change loses its
   usage values); the window closes without saving if the set is replaced meanwhile. Under the table, the **argument table** `macro-defaults` (a `GtkGrid`, hidden for a macro without argument)
   shows one row per format argument of the selected macro by rank (rebuilt when the action or a list changes): `#`, `Format` (`%.1f`, `%#Mode`), `Type`,
-  `Default` (`macro-default-<k>`), `Min`/`Max` (`macro-min-<k>`, `macro-max-<k>`, none for `%c` and lists), `Charset` (`%s` only: `GtkDropDown`
+  `Default` (`macro-default-<k>`, built with the argument's Optional and Prefix: empty accepted despite the limits, « (none) » first in an optional list; toggling Optional without changing
+  the action rebuilds the table so that cell follows), `Min`/`Max` (`macro-min-<k>`, `macro-max-<k>`, none for `%c` and lists), `Charset` (`%s` only: `GtkDropDown`
   `macro-charset-<k>` UTF-8 / Printable ASCII / ASCII / 8 bits (Latin-1) / Custom class, class entry `macro-class-<k>` shown for Custom class); a vector
   (defaults, min, max, charsets) is kept only when all its fields are valid, a default only if it passes its limits; OK applies them with the row. Below,
   `macro-preview-box`: « Line sent (default values): », `macro-preview` (Pango markup: arguments blue, red when invalid, specials purple) and
   `macro-preview-bytes` (« 50 35 30 3B · 4 bytes »), for a single selected sendable row. Default size 900 × 640. The columns have a fixed starting width, never narrower
   than their title (`natural_w` in the test dump), and only the last one takes the remaining room. **Grouping and filters:** the rows are kept grouped by tab (Lists page: by list) with
-  `gt_macro_rows_group_by_tab()` / `gt_macro_list_rows_group()` (`macro_row.c`, same stable rule as the core), at construction, after Add / Add Entry, after a Reload and, for a Tab / List cell
+  `gt_macro_rows_group(store, GtRowKeyFunc)` with `gt_macro_row_tab_key` / `gt_macro_list_row_key` (`macro_row.c`, same stable rule as the core; Move Up/Down through
+  `gt_macro_rows_move_grouped()`), at construction, after Add / Add Entry, after a Reload and, for a Tab / List cell
   edit, once the edit ends (deferred, not on each keystroke); the selection follows the moved rows. Move Up/Down is all or nothing and never lets a row leave its group. A `GtkDropDown`
   `macro-tab-filter` (« Tab filter », label « Tab: ») above the Macros table and `lists-filter` (« List filter », « List: ») above the Lists table offer « All » then each key in group order (the
   empty tab shown « General »); the `GtkColumnView` shows a `GtkFilterListModel` over the store and one function maps the selected (filtered) positions to store positions (Delete, Move, shortcuts,
@@ -348,11 +352,12 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   the macros file? » Reload (destructive) / Cancel (default) (answer with a `GWeakRef` on the window and the generation; the button is insensitive while a question is pending), then
   `gt_macros_reload_template()` (linked) or `gt_macros_reload()`; **the editor stays open**: a `reloading` flag makes `gt_macro_editor_macros_changed()` rebuild rows (grouped), argument table,
   preview and filters (a filter is kept while its key exists) and take the new `editor->set`; a **missing file is refused** (« The macros file %s no longer exists. ») and an unreadable one too («
-  Cannot reload the macros file %s. »), shown in `macro-editor-error`, nothing changes; outside the flag a set replaced elsewhere still closes the window. **Optional / Prefix:** two argument-table
+  Cannot reload the macros file %s. »), shown in `macro-editor-error`, nothing changes (the editor tests the file itself before `gt_macros_reload()`, which refuses it too, so only the label
+  speaks, without a message box); outside the flag a set replaced elsewhere still closes the window. **Optional / Prefix:** two argument-table
   columns after Charset, `macro-optional-<k>` (`GtkCheckButton`) and `macro-prefix-<k>` (`GtkEntry`, insensitive while unchecked); checking splits the prefix off the action with
   `gt_macro_action_split_prefix()` (text before the specifier of argument k back to the first space, space included, never crossing the previous specifier, a whole escape sequence or the start of
   the action; nothing to take → empty prefix, action unchanged; `%%` becomes `%`), unchecking `gt_macro_action_join_prefix()` puts it back before the specifier; both vectors follow the typing in
-  the Action cell; the preview shows prefix and value in blue and an omitted argument as a greyed « ∅ ». The page layout is, top to bottom: `macro-source`, page switcher, filter row, table, the
+  the Action cell (« Prefix of argument %d removed » in `macro-editor-error` while a non-empty prefix is beyond the arguments, cleared when another row is shown); the preview shows prefix and value in blue and an omitted argument as a greyed « ∅ ». The page layout is, top to bottom: `macro-source`, page switcher, filter row, table, the
   two button rows **right under the table**, separator `macro-settings-separator` + 12 px margin (hidden with the argument table when the macro has no argument), `macro-defaults`,
   `macro-preview-box`. **Linked tab:** OK applies nothing before the answer:
   `gt_macros_classify_edits()` → `NONE` closes, `DEFAULTS` asks « These macros come from the template %s » Keep in this project (default) / Save to template /

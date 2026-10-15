@@ -636,7 +636,16 @@ gt_macros_reload (GtMacros *m)
 
   if (m->path == NULL && m->embedded)
     return FALSE;
-  path = g_strdup (m->path);	/* NULL : le fichier par défaut (cible d'un enregistrement sans fichier courant) */
+  /* NULL : le fichier par défaut (cible d'un enregistrement sans fichier courant) */
+  path = resolve_path (m, m->path);
+  /* Fichier disparu : gt_macros_load_file le prendrait pour un jeu vide (premier lancement) et jetterait la seule copie restante des
+     macros (Reload après un conflit). Relire un fichier absent est refusé, rien ne change. */
+  if (!g_file_test (path, G_FILE_TEST_EXISTS))
+    {
+      gt_app_message (GT_APP_MSG_ERROR, _ ("The macros file %s no longer exists."), path);
+      g_free (path);
+      return FALSE;
+    }
   ok = gt_macros_load_file (m, path, TRUE);
   g_free (path);
   return ok;
