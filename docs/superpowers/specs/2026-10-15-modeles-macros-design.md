@@ -73,7 +73,7 @@ affichage/valeur dans le même ordre). Les identifiants ne comptent pas.
   ignoré avec un avertissement, et une période hors bornes est gardée telle quelle pour être abandonnée par `apply` (comptée dans `dropped`).
 Un onglet non lié n'a ni `macros_template` ni groupe `override` : son format ne change pas. La version du projet reste 1 : un GTKTerm plus ancien ignore la
 clé et les groupes `override` et ouvre la copie de la base (il perd les valeurs propres et le lien, rien d'autre). À la lecture, un groupe `override` sans
-`label`, une `occurrence` négative ou non numérique, une clé `arg_<k>` dont k n'est pas un entier ≥ 1, une période illisible : la valeur concernée (ou le
+`label` ou dont l'`occurrence` est négative ou non numérique (groupe entier ignoré : il viserait une autre macro), une clé `arg_<k>` dont k n'est pas un entier ≥ 1, une période illisible : la valeur concernée (ou le
 groupe sans libellé) est ignorée avec un `g_warning` qui cite fichier, groupe et clé. `macros_template` vide ou relatif : onglet non lié, avec un
 `g_warning`.
 
