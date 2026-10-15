@@ -313,6 +313,17 @@ gt_macro_set_set_args(GtMacroSet *set, guint id, const gchar *const *args, gint 
 	return TRUE;
 }
 
+gboolean
+gt_macro_set_clear_args(GtMacroSet *set, guint id)
+{
+	GtMacro *m = find_mutable(set, id);
+
+	if(m == NULL)
+		return FALSE;
+	g_clear_pointer(&m->args, g_strfreev);
+	return TRUE;
+}
+
 /* Copie un vecteur de n éléments (NULL entrées → "") ; NULL si le vecteur est NULL ; *ok FALSE si sa longueur n'est pas n */
 static gchar **
 copy_vector(const gchar *const *v, gint n, gboolean *ok)

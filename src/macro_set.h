@@ -55,6 +55,7 @@ const GtMacroLists *gt_macro_set_get_lists    (const GtMacroSet *set);
 void                gt_macro_set_take_lists   (GtMacroSet *set, GtMacroLists *lists);
 gboolean            gt_macro_set_set_arg      (GtMacroSet *set, guint id, gint arg_index, const gchar *value);
 gboolean            gt_macro_set_set_args     (GtMacroSet *set, guint id, const gchar *const *args, gint n_args);
+gboolean            gt_macro_set_clear_args   (GtMacroSet *set, guint id);	/* valeurs par défaut remises à NULL (aucune) ; FALSE : macro inconnue */
 /* Limites d'une macro : chaque vecteur NULL ou de n_args éléments (n_args = nombre d'arguments de la macro), sinon -1 et rien ne change
  * (macro inconnue : -1). Les entrées invalides pour le type de l'argument de même rang sont remises à "" ; rend leur nombre. */
 gint                gt_macro_set_set_limits   (GtMacroSet *set, guint id, const gchar *const *min, const gchar *const *max,

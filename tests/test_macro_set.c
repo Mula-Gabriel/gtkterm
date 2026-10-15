@@ -96,6 +96,9 @@ test_arguments(void)
 	g_assert_true(gt_macro_set_set_args(set, sans, NULL, 0));
 	g_assert_null(gt_macro_set_find(set, sans)->args);
 	g_assert_false(gt_macro_set_set_args(set, 9999999, NULL, 0));
+	g_assert_true(gt_macro_set_clear_args(set, id));
+	g_assert_null(gt_macro_set_find(set, id)->args);
+	g_assert_false(gt_macro_set_clear_args(set, 9999999));
 	gt_macro_set_free(set);
 }
 

@@ -93,6 +93,11 @@ integration_tests = {
 		'deps' : [gobject_dep],
 		'link_args' : [],
 	},
+	'test_macros_template' : {
+		'sources' : files('../src/macros.c') + stub_journal + stub_link,
+		'deps' : [gobject_dep],
+		'link_args' : [],
+	},
 	'test_script_engine' : {
 		'sources' : files('../src/script_engine.c', 'stubs/stub_macros.c') + stub_journal + stub_link,
 		'deps' : [gobject_dep, lua_dep, util_dep],
