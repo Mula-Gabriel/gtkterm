@@ -6,7 +6,7 @@ montré en tête de la fenêtre), toute autre ligne un texte affiché tel quel (
 prolonge l'élément précédent. Une section sans tag publié n'est jamais affichée.
 Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusqu'à la prochaine section, n'est pas affiché.
 
-## v2.2.0 (à venir)
+## v2.2.0 — 2026-10-15
 - Projets : un projet a un nom, enregistré dans son fichier et affiché dans le titre ; « Renommer le projet… » (menu Fichier) le change et propose de renommer aussi le fichier .gtkterm.
 - Macros : « Configurer les macros » regroupe les macros par onglet du panneau et les entrées par liste, avec des filtres « Onglet » et « Liste » ; les boutons passent sous le tableau.
 - Macros : « Configurer les macros » montre le fichier visé (modèle, fichier .ini ou intégré au projet) et un bouton « Recharger » qui garde l'éditeur ouvert.
