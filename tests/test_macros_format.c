@@ -413,6 +413,23 @@ test_parse_trace(void)
 	g_array_unref(origines);
 }
 
+static void test_bornes_specificateur(void)
+{
+  gint s, e, l;
+
+  g_assert_true (macro_arg_spec_bounds (NULL, "a [Pw]%s b%d", 0, &s, &e, &l));
+  g_assert_cmpint (s, ==, 6);
+  g_assert_cmpint (e, ==, 7);
+  g_assert_cmpint (l, ==, 2);
+  g_assert_true (macro_arg_spec_bounds (NULL, "a [Pw]%s b%d", 1, &s, &e, &l));
+  g_assert_cmpint (s, ==, 10);
+  g_assert_cmpint (e, ==, 11);
+  g_assert_cmpint (l, ==, -1);
+  g_assert_false (macro_arg_spec_bounds (NULL, "a [Pw]%s b%d", 2, &s, &e, &l));
+  g_assert_true (macro_arg_spec_bounds (NULL, "%%%d", 0, &s, NULL, NULL));
+  g_assert_cmpint (s, ==, 2);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -435,6 +452,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_format/listes-en-parametre", test_listes_en_parametre);
 	g_test_add_func("/macros_format/format-trace", test_format_trace);
 	g_test_add_func("/macros_format/parse-trace", test_parse_trace);
+	g_test_add_func("/macros_format/bornes-specificateur", test_bornes_specificateur);
 
 	resultat = g_test_run();
 	gt_macro_lists_free(listes);

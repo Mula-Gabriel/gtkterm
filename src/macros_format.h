@@ -25,6 +25,9 @@ typedef struct
 
 macro_arg_info_t *macro_get_arg_infos    (const GtMacroLists *lists, const gchar *action, gint *count_out);
 void              macro_arg_infos_free   (macro_arg_info_t *infos, gint count);
+/* Bornes (octets) du k-ième spécificateur : start = « % », end = dernier caractère (inclus), label_start = « [ » de son libellé ou -1.
+   FALSE si k n'existe pas ; pointeurs de sortie nullables. */
+gboolean          macro_arg_spec_bounds  (const GtMacroLists *lists, const gchar *action, gint k, gint *start, gint *end, gint *label_start);
 gboolean          macro_type_is_float    (const gchar *type);
 gboolean          macro_type_value_valid (const gchar *type, const gchar *value);
 

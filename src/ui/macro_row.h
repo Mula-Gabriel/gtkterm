@@ -7,6 +7,7 @@
 #include <gio/gio.h>
 
 #include "macro_set.h"
+#include "macros_list.h"
 
 G_BEGIN_DECLS
 
@@ -30,6 +31,10 @@ const gchar *const *gt_macro_row_get_arg_max(GtMacroRow *row);
 const gchar *const *gt_macro_row_get_arg_charset(GtMacroRow *row);
 /* Copiés ; chaque propriété notifiée seulement si elle change (notifications groupées) ; NULL permis */
 void         gt_macro_row_set_limits(GtMacroRow *row, const gchar *const *min, const gchar *const *max, const gchar *const *charset);
+/* Arguments facultatifs : propriétés "arg-optional" ("1" / "") et "arg-prefix", STRV, même contrat que "arg-min" */
+const gchar *const *gt_macro_row_get_arg_optional(GtMacroRow *row);
+const gchar *const *gt_macro_row_get_arg_prefix(GtMacroRow *row);
+void         gt_macro_row_set_optional(GtMacroRow *row, const gchar *const *optional, const gchar *const *prefix);	/* copiés ; notifications groupées, seulement si changé */
 
 #define GT_TYPE_MACRO_LIST_ROW (gt_macro_list_row_get_type())
 G_DECLARE_FINAL_TYPE(GtMacroListRow, gt_macro_list_row, GT, MACRO_LIST_ROW, GObject)
@@ -50,6 +55,20 @@ guint         gt_macro_rows_insert_position(const guint *selected, guint n_selec
  * FALSE, rien ne bouge : aucune position, delta invalide, ou une position au bord dans le sens demandé. Tout type d'objet. */
 gboolean      gt_macro_rows_move(GListStore *store, guint *positions, guint n, gint delta);
 void          gt_macro_rows_remove(GListStore *store, const guint *positions, guint n);	/* positions croissantes */
+
+/* Clé de regroupement d'un élément (tab d'une GtMacroRow, list d'une GtMacroListRow) */
+typedef const gchar *(*GtRowKeyFunc)(gpointer item);
+const gchar *gt_macro_row_tab_key(gpointer item);
+const gchar *gt_macro_list_row_key(gpointer item);
+/* Regroupe les éléments par clé, groupes dans l'ordre de première apparition, ordre interne conservé ; une seule modification du modèle. TRUE si changé. */
+gboolean      gt_macro_rows_group(GListStore *store, GtRowKeyFunc key);
+/* Comme gt_macro_rows_move, mais FALSE (rien ne bouge) si la suite des groupes changerait */
+gboolean      gt_macro_rows_move_grouped(GListStore *store, guint *positions, guint n, gint delta, GtRowKeyFunc key);
+
+/* Préfixe d'un argument facultatif (spec §5.4, §7 bis) : sépare le texte qui précède le spécificateur k (et son libellé) de l'action.
+ * FALSE si k n'existe pas ; new_action et prefix peuvent être NULL (simple test d'existence). */
+gboolean      gt_macro_action_split_prefix(const GtMacroLists *lists, const gchar *action, gint k, gchar **new_action, gchar **prefix);
+gchar        *gt_macro_action_join_prefix(const GtMacroLists *lists, const gchar *action, gint k, const gchar *prefix);	/* inverse exact ; NULL si k n'existe pas */
 
 G_END_DECLS
 

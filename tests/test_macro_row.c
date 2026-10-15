@@ -294,6 +294,121 @@ static void test_listes(void)
 	g_object_unref(store);
 }
 
+static GtMacroRow *ligne(const gchar *label, const gchar *tab)
+{
+	return gt_macro_row_new(0, label, "", "X", tab);
+}
+
+static void test_regroupe(void)
+{
+	GListStore *store = g_list_store_new(GT_TYPE_MACRO_ROW);
+	const gchar *labels[] = { "a", "b", "c", "d", "e" }, *tabs[] = { "T1", "", "T1", "T2", "" };
+	gchar *o;
+
+	for(guint i = 0; i < 5; i++)
+	{
+		GtMacroRow *r = ligne(labels[i], tabs[i]);
+
+		g_list_store_append(store, r);
+		g_object_unref(r);
+	}
+	g_assert_true(gt_macro_rows_group(store, gt_macro_row_tab_key));
+	o = ordre(store);
+	g_assert_cmpstr(o, ==, "a,c,b,e,d");
+	g_free(o);
+	g_assert_false(gt_macro_rows_group(store, gt_macro_row_tab_key));
+	g_object_unref(store);
+}
+
+static void test_deplacement_borne(void)
+{
+	GListStore *store = g_list_store_new(GT_TYPE_MACRO_ROW);
+	const gchar *labels[] = { "a", "c", "b", "e" }, *tabs[] = { "T1", "T1", "", "" };
+	guint pos[1];
+	gchar *o;
+
+	for(guint i = 0; i < 4; i++)
+	{
+		GtMacroRow *r = ligne(labels[i], tabs[i]);
+
+		g_list_store_append(store, r);
+		g_object_unref(r);
+	}
+	pos[0] = 1;	/* c, dernier de T1 : ne descend pas dans "" */
+	g_assert_false(gt_macro_rows_move_grouped(store, pos, 1, +1, gt_macro_row_tab_key));
+	g_assert_cmpuint(pos[0], ==, 1);
+	g_assert_true(gt_macro_rows_move_grouped(store, pos, 1, -1, gt_macro_row_tab_key));	/* dans son groupe : oui */
+	g_assert_cmpuint(pos[0], ==, 0);
+	o = ordre(store);
+	g_assert_cmpstr(o, ==, "c,a,b,e");
+	g_free(o);
+	pos[0] = 2;	/* b, premier de "" : ne monte pas */
+	g_assert_false(gt_macro_rows_move_grouped(store, pos, 1, -1, gt_macro_row_tab_key));
+	g_object_unref(store);
+}
+
+static void test_decoupe_prefixe(void)
+{
+	const struct { const gchar *action; gint k; const gchar *apres, *prefixe; } cas[] = {
+		{ "connect %s -password=%s", 1, "connect %s%s", " -password=" },
+		{ "connect %s", 0, "connect %s", "" },	/* précédé d'un espace : rien */
+		{ "AT+X=%d,%d", 1, "AT+X=%d%d", "," },	/* sans espace : jusqu'au spécificateur précédent */
+		{ "%s", 0, "%s", "" },	/* en tête */
+		{ "go -r=100%%[Rate]%d", 0, "go[Rate]%d", " -r=100%" },	/* libellé gardé avec son spécificateur ; %% → % */
+		{ "a\\ b%s", 0, "a\\ b%s", "" },	/* espace échappé : pas de coupe */
+		{ "-a=%s", 0, "-a=%s", "" },	/* premier argument sans espace avant : rien */
+	};
+
+	for(guint i = 0; i < G_N_ELEMENTS(cas); i++)
+	{
+		gchar *apres = NULL, *prefixe = NULL, *rejoint;
+
+		g_assert_true(gt_macro_action_split_prefix(NULL, cas[i].action, cas[i].k, &apres, &prefixe));
+		g_assert_cmpstr(apres, ==, cas[i].apres);
+		g_assert_cmpstr(prefixe, ==, cas[i].prefixe);
+		rejoint = gt_macro_action_join_prefix(NULL, apres, cas[i].k, prefixe);
+		g_assert_cmpstr(rejoint, ==, cas[i].action);	/* aller-retour exact */
+		g_free(rejoint);
+		g_free(apres);
+		g_free(prefixe);
+	}
+	g_assert_false(gt_macro_action_split_prefix(NULL, "x%d", 3, NULL, NULL));	/* argument inexistant */
+}
+
+static void test_lignes_facultatives(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	const gchar *opt[] = { "", "1", NULL }, *pre[] = { "", " -p=", NULL };
+	const gchar *opt2[] = { "1", "1", NULL };
+	GListStore *store;
+	GtMacroRow *row;
+	GtMacroEdit *edits;
+	guint id, n;
+
+	id = gt_macro_set_append(set, "M", "", "a %s b%s", "");
+	g_assert_true(gt_macro_set_set_optional(set, id, opt, pre, 2));
+	store = gt_macro_rows_from_set(set);
+	row = g_list_model_get_item(G_LIST_MODEL(store), 0);
+	g_assert_nonnull(gt_macro_row_get_arg_optional(row));
+	g_assert_cmpstr(gt_macro_row_get_arg_optional(row)[1], ==, "1");
+	g_assert_cmpstr(gt_macro_row_get_arg_prefix(row)[1], ==, " -p=");
+	edits = gt_macro_rows_to_edits(G_LIST_MODEL(store), &n);
+	g_assert_cmpuint(n, ==, 1);
+	g_assert_cmpstr(edits[0].arg_optional[1], ==, "1");
+	g_assert_cmpstr(edits[0].arg_prefix[1], ==, " -p=");
+	g_free(edits);
+	notifications = 0;
+	g_signal_connect(row, "notify::arg-optional", G_CALLBACK(compter), NULL);
+	g_signal_connect(row, "notify::arg-prefix", G_CALLBACK(compter), NULL);
+	gt_macro_row_set_optional(row, opt, pre);
+	g_assert_cmpuint(notifications, ==, 0);
+	gt_macro_row_set_optional(row, opt2, pre);
+	g_assert_cmpuint(notifications, ==, 1);
+	g_object_unref(row);
+	g_object_unref(store);
+	gt_macro_set_free(set);
+}
+
 int main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
@@ -306,5 +421,9 @@ int main(int argc, char **argv)
 	g_test_add_func("/macro_row/args-recopies", test_args_recopies);
 	g_test_add_func("/macro_row/limites", test_limites);
 	g_test_add_func("/macro_row/limites-recopiees", test_limites_recopiees);
+	g_test_add_func("/macro_row/regroupe", test_regroupe);
+	g_test_add_func("/macro_row/deplacement-borne", test_deplacement_borne);
+	g_test_add_func("/macro_row/decoupe-prefixe", test_decoupe_prefixe);
+	g_test_add_func("/macro_row/lignes-facultatives", test_lignes_facultatives);
 	return g_test_run();
 }

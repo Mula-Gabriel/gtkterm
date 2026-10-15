@@ -428,6 +428,58 @@ macro_get_arg_infos (const GtMacroLists *lists, const gchar *action, gint *count
   return infos;
 }
 
+gboolean
+macro_arg_spec_bounds (const GtMacroLists *lists, const gchar *action, gint k, gint *start, gint *end, gint *label_start)
+{
+  gint idx = 0;
+
+  if (k < 0)
+    return FALSE;
+  for (gint i = 0; action[i] != '\0'; i++)
+    {
+      gint e;
+      gboolean found = FALSE;
+
+      if (action[i] != '%')
+        continue;
+      if (action[i + 1] == '%')
+        { i++; continue; }
+
+      {
+        gchar *list_name = NULL;
+        if (try_parse_list_spec (lists, action, i, &list_name, &e))
+          {
+            g_free (list_name);
+            found = TRUE;
+          }
+      }
+      if (!found)
+        {
+          gchar *t = parse_one_spec (action, i, &e);
+          if (t != NULL)
+            {
+              g_free (t);
+              found = TRUE;
+            }
+        }
+      if (!found)
+        continue;
+      if (idx == k)
+        {
+          if (start)
+            *start = i;
+          if (end)
+            *end = e;
+          if (label_start)
+            *label_start = try_parse_label (action, i, NULL);
+          return TRUE;
+        }
+      idx++;
+      i = e;
+    }
+  return FALSE;
+}
+
 void
 macro_arg_infos_free (macro_arg_info_t *infos, gint count)
 {

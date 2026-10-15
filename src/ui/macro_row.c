@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "macro_row.h"
+#include "macros_format.h"
 
 /* Remplace *field par value (NULL → "") ; TRUE si la valeur a changé */
 static gboolean replace_string(gchar **field, const gchar *value)
@@ -30,11 +31,13 @@ struct _GtMacroRow
 	gchar **arg_min;	/* limites (macro_arg.h) ; NULL : aucune */
 	gchar **arg_max;
 	gchar **arg_charset;
+	gchar **arg_optional;	/* facultatif ("1") ou non ("") ; NULL : aucun */
+	gchar **arg_prefix;
 };
 
 enum
 {
-	ROW_PROP_0, ROW_PROP_ID, ROW_PROP_LABEL, ROW_PROP_SHORTCUT, ROW_PROP_ACTION, ROW_PROP_TAB, ROW_PROP_ARGS, ROW_PROP_ARG_MIN, ROW_PROP_ARG_MAX,
+	ROW_PROP_0, ROW_PROP_ID, ROW_PROP_LABEL, ROW_PROP_SHORTCUT, ROW_PROP_ACTION, ROW_PROP_TAB, ROW_PROP_ARGS, ROW_PROP_ARG_MIN, ROW_PROP_ARG_MAX, ROW_PROP_ARG_OPTIONAL, ROW_PROP_ARG_PREFIX,
 	ROW_PROP_ARG_CHARSET, ROW_N_PROPS
 };
 static GParamSpec *row_props[ROW_N_PROPS];
@@ -71,6 +74,10 @@ static gchar ***row_strv_field(GtMacroRow *row, guint prop_id)
 		return &row->arg_max;
 	case ROW_PROP_ARG_CHARSET:
 		return &row->arg_charset;
+	case ROW_PROP_ARG_OPTIONAL:
+		return &row->arg_optional;
+	case ROW_PROP_ARG_PREFIX:
+		return &row->arg_prefix;
 	default:
 		return NULL;
 	}
@@ -149,6 +156,8 @@ static void gt_macro_row_finalize(GObject *object)
 	g_strfreev(row->arg_min);
 	g_strfreev(row->arg_max);
 	g_strfreev(row->arg_charset);
+	g_strfreev(row->arg_optional);
+	g_strfreev(row->arg_prefix);
 	G_OBJECT_CLASS(gt_macro_row_parent_class)->finalize(object);
 }
 
@@ -169,6 +178,8 @@ static void gt_macro_row_class_init(GtMacroRowClass *klass)
 	row_props[ROW_PROP_ARG_MIN] = g_param_spec_boxed("arg-min", NULL, NULL, G_TYPE_STRV, flags);
 	row_props[ROW_PROP_ARG_MAX] = g_param_spec_boxed("arg-max", NULL, NULL, G_TYPE_STRV, flags);
 	row_props[ROW_PROP_ARG_CHARSET] = g_param_spec_boxed("arg-charset", NULL, NULL, G_TYPE_STRV, flags);
+	row_props[ROW_PROP_ARG_OPTIONAL] = g_param_spec_boxed("arg-optional", NULL, NULL, G_TYPE_STRV, flags);
+	row_props[ROW_PROP_ARG_PREFIX] = g_param_spec_boxed("arg-prefix", NULL, NULL, G_TYPE_STRV, flags);
 	g_object_class_install_properties(object_class, ROW_N_PROPS, row_props);
 }
 
@@ -194,6 +205,17 @@ const gchar *const *gt_macro_row_get_args(GtMacroRow *row) { return (const gchar
 const gchar *const *gt_macro_row_get_arg_min(GtMacroRow *row) { return (const gchar *const *)row->arg_min; }
 const gchar *const *gt_macro_row_get_arg_max(GtMacroRow *row) { return (const gchar *const *)row->arg_max; }
 const gchar *const *gt_macro_row_get_arg_charset(GtMacroRow *row) { return (const gchar *const *)row->arg_charset; }
+
+const gchar *const *gt_macro_row_get_arg_optional(GtMacroRow *row) { return (const gchar *const *)row->arg_optional; }
+const gchar *const *gt_macro_row_get_arg_prefix(GtMacroRow *row) { return (const gchar *const *)row->arg_prefix; }
+
+void gt_macro_row_set_optional(GtMacroRow *row, const gchar *const *optional, const gchar *const *prefix)
+{
+	g_object_freeze_notify(G_OBJECT(row));
+	replace_strv(row, ROW_PROP_ARG_OPTIONAL, optional);
+	replace_strv(row, ROW_PROP_ARG_PREFIX, prefix);
+	g_object_thaw_notify(G_OBJECT(row));
+}
 
 void gt_macro_row_set_shortcut(GtMacroRow *row, const gchar *shortcut)
 {
@@ -291,6 +313,8 @@ static void gt_macro_list_row_class_init(GtMacroListRowClass *klass)
 	list_props[LIST_PROP_LIST] = g_param_spec_string("list", NULL, NULL, "", flags);
 	list_props[LIST_PROP_DISPLAY] = g_param_spec_string("display", NULL, NULL, "", flags);
 	list_props[LIST_PROP_VALUE] = g_param_spec_string("value", NULL, NULL, "", flags);
+	row_props[ROW_PROP_ARG_OPTIONAL] = g_param_spec_boxed("arg-optional", NULL, NULL, G_TYPE_STRV, flags);
+	row_props[ROW_PROP_ARG_PREFIX] = g_param_spec_boxed("arg-prefix", NULL, NULL, G_TYPE_STRV, flags);
 	g_object_class_install_properties(object_class, LIST_N_PROPS, list_props);
 }
 
@@ -321,7 +345,8 @@ GListStore *gt_macro_rows_from_set(const GtMacroSet *set)
 		const GtMacro *m = gt_macro_set_get(set, i);
 		GtMacroRow *row = gt_macro_row_new(m->id, m->label, m->shortcut, m->action, m->tab);
 
-		g_object_set(row, "args", m->args, "arg-min", m->arg_min, "arg-max", m->arg_max, "arg-charset", m->arg_charset, NULL);
+		g_object_set(row, "args", m->args, "arg-min", m->arg_min, "arg-max", m->arg_max, "arg-charset", m->arg_charset,
+		             "arg-optional", m->arg_optional, "arg-prefix", m->arg_prefix, NULL);
 		g_list_store_append(store, row);
 		g_object_unref(row);
 	}
@@ -362,6 +387,8 @@ GtMacroEdit *gt_macro_rows_to_edits(GListModel *rows, guint *n_out)
 		edits[i].arg_min = (const gchar *const *)row->arg_min;
 		edits[i].arg_max = (const gchar *const *)row->arg_max;
 		edits[i].arg_charset = (const gchar *const *)row->arg_charset;
+		edits[i].arg_optional = (const gchar *const *)row->arg_optional;
+		edits[i].arg_prefix = (const gchar *const *)row->arg_prefix;
 		g_object_unref(row);	/* le modèle garde sa référence : les chaînes restent valides */
 	}
 	*n_out = n;
@@ -434,4 +461,164 @@ void gt_macro_rows_remove(GListStore *store, const guint *positions, guint n)
 {
 	for(guint k = n; k-- > 0;)
 		g_list_store_remove(store, positions[k]);
+}
+
+/* ---- Regroupement par clé et déplacement borné ---- */
+
+const gchar *gt_macro_row_tab_key(gpointer item)
+{
+	return gt_macro_row_get_tab(item);
+}
+
+const gchar *gt_macro_list_row_key(gpointer item)
+{
+	return gt_macro_list_row_get_list(item);
+}
+
+gboolean gt_macro_rows_group(GListStore *store, GtRowKeyFunc key)
+{
+	guint n = g_list_model_get_n_items(G_LIST_MODEL(store));
+	gpointer *items = g_new(gpointer, MAX(n, 1)), *sorted = g_new(gpointer, MAX(n, 1));
+	GPtrArray *keys = g_ptr_array_new();
+	guint m = 0;
+	gboolean changed = FALSE;
+
+	for(guint i = 0; i < n; i++)
+	{
+		items[i] = g_list_model_get_item(G_LIST_MODEL(store), i);
+		if(!g_ptr_array_find_with_equal_func(keys, key(items[i]), g_str_equal, NULL))
+			g_ptr_array_add(keys, (gpointer)key(items[i]));
+	}
+	for(guint k = 0; k < keys->len; k++)
+		for(guint i = 0; i < n; i++)
+			if(strcmp(key(items[i]), g_ptr_array_index(keys, k)) == 0)
+				sorted[m++] = items[i];
+	for(guint i = 0; i < n; i++)
+		changed |= sorted[i] != items[i];
+	if(changed)
+		g_list_store_splice(store, 0, n, sorted, n);
+	for(guint i = 0; i < n; i++)
+		g_object_unref(items[i]);
+	g_ptr_array_unref(keys);
+	g_free(sorted);
+	g_free(items);
+	return changed;
+}
+
+/* Suite des clés consécutives distinctes (pointeurs empruntés à keys) */
+static GPtrArray *group_sequence(gchar **keys, guint n)
+{
+	GPtrArray *seq = g_ptr_array_new();
+
+	for(guint i = 0; i < n; i++)
+		if(seq->len == 0 || strcmp(g_ptr_array_index(seq, seq->len - 1), keys[i]) != 0)
+			g_ptr_array_add(seq, keys[i]);
+	return seq;
+}
+
+gboolean gt_macro_rows_move_grouped(GListStore *store, guint *positions, guint n, gint delta, GtRowKeyFunc key)
+{
+	guint n_items = g_list_model_get_n_items(G_LIST_MODEL(store));
+	gchar **keys = g_new0(gchar *, n_items + 1);
+	GPtrArray *before, *after;
+	gboolean same = TRUE;
+
+	if(n == 0 || (delta != -1 && delta != 1))
+	{
+		g_free(keys);
+		return FALSE;
+	}
+	if((delta < 0 && positions[0] == 0) || (delta > 0 && positions[n - 1] + 1 >= n_items))
+	{
+		g_free(keys);
+		return FALSE;
+	}
+	for(guint i = 0; i < n_items; i++)
+	{
+		gpointer item = g_list_model_get_item(G_LIST_MODEL(store), i);
+
+		keys[i] = g_strdup(key(item));
+		g_object_unref(item);
+	}
+	before = group_sequence(keys, n_items);
+	if(delta < 0)
+		for(guint k = 0; k < n; k++)
+		{
+			gchar *t = keys[positions[k] - 1];
+
+			keys[positions[k] - 1] = keys[positions[k]];
+			keys[positions[k]] = t;
+		}
+	else
+		for(guint k = n; k-- > 0;)
+		{
+			gchar *t = keys[positions[k] + 1];
+
+			keys[positions[k] + 1] = keys[positions[k]];
+			keys[positions[k]] = t;
+		}
+	after = group_sequence(keys, n_items);
+	if(before->len != after->len)
+		same = FALSE;
+	for(guint i = 0; same && i < before->len; i++)
+		same = strcmp(g_ptr_array_index(before, i), g_ptr_array_index(after, i)) == 0;
+	g_ptr_array_unref(before);
+	g_ptr_array_unref(after);
+	g_strfreev(keys);
+	return same && gt_macro_rows_move(store, positions, n, delta);
+}
+
+/* ---- Préfixe d'un argument facultatif (spec §5.4, §7 bis) ---- */
+
+gboolean gt_macro_action_split_prefix(const GtMacroLists *lists, const gchar *action, gint k, gchar **new_action, gchar **prefix)
+{
+	gint start, end, label, anchor, lower = 0, prev_end, cut;
+	GString *pre, *rest;
+
+	if(!macro_arg_spec_bounds(lists, action, k, &start, &end, &label))
+		return FALSE;
+	if(new_action == NULL || prefix == NULL)
+		return TRUE;
+	anchor = label >= 0 ? label : start;
+	if(k > 0 && macro_arg_spec_bounds(lists, action, k - 1, NULL, &prev_end, NULL))
+		lower = prev_end + 1;
+	for(cut = anchor - 1; cut >= lower && action[cut] != ' '; cut--)
+		;
+	if(anchor > lower && action[anchor - 1] == ' ')
+		cut = anchor;	/* précédé d'un espace : rien à prendre */
+	else if(cut >= lower && cut > 0 && action[cut - 1] == '\\')
+		cut = anchor;	/* espace échappé : pas de coupe */
+	else if(cut < lower)
+		cut = k > 0 ? lower : anchor;	/* aucun espace : depuis le spécificateur précédent, rien pour le premier argument */
+	pre = g_string_new(NULL);
+	for(gint i = cut; i < anchor; i++)
+	{
+		if(action[i] == '%' && i + 1 < anchor && action[i + 1] == '%')
+			i++;
+		g_string_append_c(pre, action[i]);
+	}
+	rest = g_string_new_len(action, cut);
+	g_string_append(rest, action + anchor);
+	*prefix = g_string_free(pre, FALSE);
+	*new_action = g_string_free(rest, FALSE);
+	return TRUE;
+}
+
+gchar *gt_macro_action_join_prefix(const GtMacroLists *lists, const gchar *action, gint k, const gchar *prefix)
+{
+	gint start, label, anchor;
+	GString *out;
+
+	if(!macro_arg_spec_bounds(lists, action, k, &start, NULL, &label))
+		return NULL;
+	anchor = label >= 0 ? label : start;
+	out = g_string_new_len(action, anchor);
+	for(const gchar *p = prefix != NULL ? prefix : ""; *p != '\0'; p++)
+	{
+		if(*p == '%')
+			g_string_append_c(out, '%');
+		g_string_append_c(out, *p);
+	}
+	g_string_append(out, action + anchor);
+	return g_string_free(out, FALSE);
 }
