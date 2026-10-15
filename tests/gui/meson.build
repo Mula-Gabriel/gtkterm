@@ -94,6 +94,7 @@ gui_scenarios = [
 	'test_projet_macros',
 	'test_projet_conflit',
 	'test_projet_operations',
+	'test_macros_modele',
 	'test_macro_editor_colonnes',
 ]
 
