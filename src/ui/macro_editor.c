@@ -7,6 +7,8 @@
 #include <config.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "app.h"
 #include "dialogs.h"
@@ -32,8 +34,18 @@ typedef struct
 	GtMacroSet        *set;	/* jeu édité ; jamais déréférencé s'il n'est plus le jeu courant */
 	GListStore        *rows;	/* GtMacroRow */
 	GListStore        *list_rows;	/* GtMacroListRow */
-	GtkSelectionModel *selection;	/* GtkMultiSelection sur rows (référence aussi tenue par la vue) */
-	GtkSelectionModel *list_selection;	/* GtkMultiSelection sur list_rows */
+	GtkSelectionModel *selection;	/* GtkMultiSelection sur la vue filtrée de rows (référence aussi tenue par la vue) */
+	GtkSelectionModel *list_selection;	/* GtkMultiSelection sur la vue filtrée de list_rows */
+	GtkFilterListModel *filtered[2];	/* vue filtrée de chaque page (spec §3) : la sélection porte sur elle, jamais sur le store */
+	GtkCustomFilter   *filter[2];	/* filtre sur la clé de groupe (onglet, liste) */
+	GtkWidget         *filter_dd[2];	/* « macro-tab-filter », « lists-filter » (pointeurs faibles) */
+	GPtrArray         *filter_keys[2];	/* clé de chaque élément de la liste déroulante ; [0] = NULL pour « All » */
+	gchar             *filter_key[2];	/* clé choisie ; NULL : All */
+	gboolean           filter_rebuilding;	/* liste déroulante en reconstruction : notify::selected ignoré */
+	gboolean           regroup_pending[2];	/* regroupement demandé à la fin de l'édition d'une cellule Tab / List */
+	guint              regroup_source;	/* source inactive qui l'exécute ; 0 : aucune */
+	GtkWidget         *settings_separator;	/* « macro-settings-separator » (pointeur faible) */
+	GtkWidget         *settings_box;	/* boîte de la table des arguments et de l'aperçu (pointeur faible) */
 	GtkWidget         *message;	/* « macro-editor-error » : consigne de capture ou refus */
 	GtMacroRow        *capture_row;	/* ligne qui attend son raccourci ; NULL hors capture */
 	GtkWidget         *defaults;	/* « macro-defaults » (GtkGrid, pointeur faible) : table des arguments de la seule ligne sélectionnée */
@@ -138,13 +150,6 @@ static guint *selected_positions(GtkSelectionModel *model, guint *n_out)
 	return pos;
 }
 
-static void reselect(GtkSelectionModel *model, const guint *pos, guint n)
-{
-	gtk_selection_model_unselect_all(model);
-	for(guint k = 0; k < n; k++)
-		gtk_selection_model_select_item(model, pos[k], FALSE);
-}
-
 static GListStore *page_store(MacroEditor *editor, gint page)
 {
 	return page == PAGE_MACROS ? editor->rows : editor->list_rows;
@@ -155,18 +160,226 @@ static GtkSelectionModel *page_selection(MacroEditor *editor, gint page)
 	return page == PAGE_MACROS ? editor->selection : editor->list_selection;
 }
 
+/* Clé de groupe des lignes de la page : onglet d'une macro, nom de liste d'une entrée */
+static GtRowKeyFunc page_key(gint page)
+{
+	return page == PAGE_MACROS ? gt_macro_row_tab_key : gt_macro_list_row_key;
+}
+
+static gint compare_guint(gconstpointer a, gconstpointer b)
+{
+	guint x = *(const guint *)a, y = *(const guint *)b;
+
+	return x < y ? -1 : x > y;
+}
+
+/* Positions dans le store des lignes sélectionnées (vue filtrée), croissantes ; g_free */
+static guint *selected_store_positions(MacroEditor *editor, gint page, guint *n_out)
+{
+	GtkSelectionModel *sel = page_selection(editor, page);
+	guint n = 0, *pos = selected_positions(sel, &n);
+
+	for(guint k = 0; k < n; k++)
+	{
+		gpointer item = g_list_model_get_item(G_LIST_MODEL(sel), pos[k]);
+
+		g_list_store_find(page_store(editor, page), item, &pos[k]);
+		g_object_unref(item);
+	}
+	qsort(pos, n, sizeof *pos, compare_guint);
+	*n_out = n;
+	return pos;
+}
+
+/* Sélectionne exactement les lignes du store aux positions données, retrouvées par identité dans la vue filtrée (une ligne cachée par le
+ * filtre n'est pas sélectionnée) ; un seul selection-changed */
+static void reselect_items(MacroEditor *editor, gint page, const guint *store_pos, guint n)
+{
+	GtkSelectionModel *sel = page_selection(editor, page);
+	GListModel *store = G_LIST_MODEL(page_store(editor, page));
+	guint n_view = g_list_model_get_n_items(G_LIST_MODEL(sel));
+	GtkBitset *selected = gtk_bitset_new_empty(), *mask = gtk_bitset_new_range(0, n_view);
+
+	for(guint k = 0; k < n; k++)
+	{
+		gpointer item = g_list_model_get_item(store, store_pos[k]);
+
+		for(guint v = 0; item != NULL && v < n_view; v++)
+		{
+			gpointer shown = g_list_model_get_item(G_LIST_MODEL(sel), v);
+
+			g_object_unref(shown);	/* tenue par le store : seule l'identité compte */
+			if(shown == item)
+			{
+				gtk_bitset_add(selected, v);
+				break;
+			}
+		}
+		g_clear_object(&item);
+	}
+	gtk_selection_model_set_selection(sel, selected, mask);
+	gtk_bitset_unref(selected);
+	gtk_bitset_unref(mask);
+}
+
+/* --- Filtres (spec §3) et regroupement (§2.3) --- */
+
+static gboolean macro_matches(gpointer item, gpointer data)
+{
+	MacroEditor *editor = data;
+
+	return editor->filter_key[PAGE_MACROS] == NULL || strcmp(gt_macro_row_get_tab(item), editor->filter_key[PAGE_MACROS]) == 0;
+}
+
+static gboolean list_matches(gpointer item, gpointer data)
+{
+	MacroEditor *editor = data;
+
+	return editor->filter_key[PAGE_LISTS] == NULL || strcmp(gt_macro_list_row_get_list(item), editor->filter_key[PAGE_LISTS]) == 0;
+}
+
+/* Liste déroulante refaite : « All », puis chaque clé du store dans l'ordre des groupes (onglet vide affiché « General ») ; si la clé choisie
+ * a disparu, le filtre revient à « All » */
+static void filter_keys_rebuild(MacroEditor *editor, gint page)
+{
+	GListModel *store = G_LIST_MODEL(page_store(editor, page));
+	GtRowKeyFunc key = page_key(page);
+	GPtrArray *keys = g_ptr_array_new_with_free_func(g_free);
+	GtkStringList *strings = gtk_string_list_new(NULL);
+	guint selected = 0;
+
+	g_ptr_array_add(keys, NULL);
+	gtk_string_list_append(strings, _("All"));
+	for(guint i = 0; i < g_list_model_get_n_items(store); i++)
+	{
+		gpointer item = g_list_model_get_item(store, i);
+		const gchar *k = key(item);
+		gboolean seen = FALSE;
+
+		for(guint j = 1; j < keys->len && !seen; j++)
+			seen = g_strcmp0(g_ptr_array_index(keys, j), k) == 0;
+		if(!seen)
+		{
+			g_ptr_array_add(keys, g_strdup(k));
+			gtk_string_list_append(strings, page == PAGE_MACROS && (k == NULL || k[0] == '\0') ? _("General") : k);
+		}
+		g_object_unref(item);
+	}
+	for(guint j = 1; editor->filter_key[page] != NULL && j < keys->len && selected == 0; j++)
+		if(g_strcmp0(g_ptr_array_index(keys, j), editor->filter_key[page]) == 0)
+			selected = j;
+	if(editor->filter_keys[page] != NULL)
+		g_ptr_array_unref(editor->filter_keys[page]);
+	editor->filter_keys[page] = keys;
+	if(editor->filter_dd[page] != NULL)
+	{
+		editor->filter_rebuilding = TRUE;
+		gtk_drop_down_set_model(GTK_DROP_DOWN(editor->filter_dd[page]), G_LIST_MODEL(strings));
+		gtk_drop_down_set_selected(GTK_DROP_DOWN(editor->filter_dd[page]), selected);
+		editor->filter_rebuilding = FALSE;
+	}
+	g_object_unref(strings);
+	if(selected == 0 && editor->filter_key[page] != NULL)	/* clé disparue : retour à « All » */
+	{
+		g_clear_pointer(&editor->filter_key[page], g_free);
+		gtk_filter_changed(GTK_FILTER(editor->filter[page]), GTK_FILTER_CHANGE_DIFFERENT);
+	}
+}
+
+/* Filtre choisi par l'utilisateur (non enregistré) */
+static void on_filter_selected(GObject *dropdown, GParamSpec *pspec, gpointer data)
+{
+	MacroEditor *editor = editor_of(GTK_WIDGET(dropdown));
+	gint page = GPOINTER_TO_INT(data);
+	guint sel;
+
+	if(editor == NULL || editor->filter_rebuilding || editor->filter_keys[page] == NULL)
+		return;
+	sel = gtk_drop_down_get_selected(GTK_DROP_DOWN(dropdown));
+	g_free(editor->filter_key[page]);
+	editor->filter_key[page] = sel > 0 && sel < editor->filter_keys[page]->len ? g_strdup(g_ptr_array_index(editor->filter_keys[page], sel)) : NULL;
+	gtk_filter_changed(GTK_FILTER(editor->filter[page]), GTK_FILTER_CHANGE_DIFFERENT);
+}
+
+/* Lignes ajoutées, supprimées ou déplacées : clés du filtre à jour */
+static void on_filter_items_changed(GListModel *model, guint position, guint removed, guint added, gpointer data)
+{
+	MacroEditor *editor = data;
+
+	filter_keys_rebuild(editor, model == G_LIST_MODEL(editor->rows) ? PAGE_MACROS : PAGE_LISTS);
+}
+
+/* Regroupe les lignes de la page (§2.1) ; la sélection suit les lignes déplacées (identité d'objet) ; filtre réévalué (une clé a pu changer) */
+static void regroup(MacroEditor *editor, gint page)
+{
+	GListStore *store = page_store(editor, page);
+	guint n = 0, *pos = selected_store_positions(editor, page, &n);
+	gpointer *items = g_new(gpointer, MAX(n, 1));
+
+	editor->regroup_pending[page] = FALSE;
+	for(guint k = 0; k < n; k++)
+		items[k] = g_list_model_get_item(G_LIST_MODEL(store), pos[k]);
+	if(gt_macro_rows_group(store, page_key(page)))
+	{
+		for(guint k = 0; k < n; k++)
+			g_list_store_find(store, items[k], &pos[k]);
+		qsort(pos, n, sizeof *pos, compare_guint);
+		reselect_items(editor, page, pos, n);
+	}
+	for(guint k = 0; k < n; k++)
+		g_object_unref(items[k]);
+	g_free(items);
+	g_free(pos);
+	filter_keys_rebuild(editor, page);
+	gtk_filter_changed(GTK_FILTER(editor->filter[page]), GTK_FILTER_CHANGE_DIFFERENT);
+}
+
+/* Regroupements demandés et pas encore faits (OK ou fermeture avant la source inactive) */
+static void regroup_flush(MacroEditor *editor)
+{
+	g_clear_handle_id(&editor->regroup_source, g_source_remove);
+	for(gint page = PAGE_MACROS; page <= PAGE_LISTS; page++)
+		if(editor->regroup_pending[page])
+			regroup(editor, page);
+}
+
+static gboolean regroup_idle(gpointer data)
+{
+	MacroEditor *editor = data;
+
+	editor->regroup_source = 0;
+	regroup_flush(editor);
+	return G_SOURCE_REMOVE;
+}
+
+/* Hors de l'émission de la cellule qui finit son édition : le store n'est pas réordonné sous le widget qui notifie */
+static void regroup_later(MacroEditor *editor, gint page)
+{
+	editor->regroup_pending[page] = TRUE;
+	if(editor->regroup_source == 0)
+		editor->regroup_source = g_idle_add(regroup_idle, editor);	/* retirée par editor_free */
+}
+
 /* --- Cellules --- */
 
-/* Passer une cellule en édition sélectionne sa ligne seule et annule une capture */
+/* Passer une cellule en édition sélectionne sa ligne seule et annule une capture ; la fin de l'édition d'une cellule Tab ou List regroupe
+ * les lignes (§2.3 : à la validation, pas à chaque frappe) */
 static void on_cell_editing(GObject *label, GParamSpec *pspec, gpointer cell)
 {
 	CellSpec *spec = g_object_get_data(label, "spec");
 	MacroEditor *editor = editor_of(GTK_WIDGET(label));
 
-	if(editor == NULL || !gtk_editable_label_get_editing(GTK_EDITABLE_LABEL(label)))
+	if(editor == NULL)
 		return;
-	stop_capture(editor);
-	gtk_selection_model_select_item(spec->selection, gtk_column_view_cell_get_position(GTK_COLUMN_VIEW_CELL(cell)), TRUE);
+	if(gtk_editable_label_get_editing(GTK_EDITABLE_LABEL(label)))
+	{
+		stop_capture(editor);
+		gtk_selection_model_select_item(spec->selection, gtk_column_view_cell_get_position(GTK_COLUMN_VIEW_CELL(cell)), TRUE);
+	}
+	else if(strcmp(spec->prop, "tab") == 0)
+		regroup_later(editor, PAGE_MACROS);
+	else if(strcmp(spec->prop, "list") == 0)
+		regroup_later(editor, PAGE_LISTS);
 }
 
 static void editable_setup(GtkSignalListItemFactory *factory, GObject *cell, gpointer data)
@@ -281,27 +494,63 @@ static void add_column(GtkColumnView *view, GtkSelectionModel *selection, const 
 
 /* --- Boutons des pages --- */
 
+/* Add / Add Entry (spec §3, §7 bis) : clé du filtre, sinon celle de la dernière ligne sélectionnée (aucune : onglet vide, « NewList ») ;
+ * insérée après la dernière ligne sélectionnée si elle est de cette clé, sinon après la dernière ligne de la clé, sinon à la fin ; sélectionnée */
 static void on_add(GtkButton *button, gpointer data)
 {
 	MacroEditor *editor = editor_of(GTK_WIDGET(button));
 	gint page = GPOINTER_TO_INT(data);
+	GtRowKeyFunc keyf = page_key(page);
 	GListStore *store;
-	guint n = 0, *pos, at;
+	guint n = 0, *pos, at, n_items;
+	gchar *key;
 	gpointer row;
 
 	if(editor == NULL)
 		return;
 	store = page_store(editor, page);
-	pos = selected_positions(page_selection(editor, page), &n);
-	at = gt_macro_rows_insert_position(pos, n, g_list_model_get_n_items(G_LIST_MODEL(store)));
-	row = page == PAGE_MACROS ? (gpointer)gt_macro_row_new(0, "", "", "", "") : (gpointer)gt_macro_list_row_new("NewList", "display", "value");
+	n_items = g_list_model_get_n_items(G_LIST_MODEL(store));
+	pos = selected_store_positions(editor, page, &n);
+	at = n_items;
+	if(editor->filter_key[page] != NULL)
+		key = g_strdup(editor->filter_key[page]);
+	else if(n > 0)
+	{
+		gpointer last = g_list_model_get_item(G_LIST_MODEL(store), pos[n - 1]);
+
+		key = g_strdup(keyf(last));
+		g_object_unref(last);
+	}
+	else
+		key = g_strdup(page == PAGE_MACROS ? "" : "NewList");
+	for(guint i = 0; i < n_items; i++)	/* après la dernière ligne de la clé */
+	{
+		gpointer item = g_list_model_get_item(G_LIST_MODEL(store), i);
+
+		if(strcmp(keyf(item), key) == 0)
+			at = i + 1;
+		g_object_unref(item);
+	}
+	if(n > 0)	/* après la dernière ligne sélectionnée, si elle est de la clé */
+	{
+		gpointer last = g_list_model_get_item(G_LIST_MODEL(store), pos[n - 1]);
+
+		if(strcmp(keyf(last), key) == 0)
+			at = pos[n - 1] + 1;
+		g_object_unref(last);
+	}
+	row = page == PAGE_MACROS ? (gpointer)gt_macro_row_new(0, "", "", "", key) : (gpointer)gt_macro_list_row_new(key, "display", "value");
 	stop_capture(editor);
 	g_list_store_insert(store, at, row);
+	regroup(editor, page);
+	if(g_list_store_find(store, row, &at))
+		reselect_items(editor, page, &at, 1);
 	g_object_unref(row);
-	gtk_selection_model_select_item(page_selection(editor, page), at, TRUE);
+	g_free(key);
 	g_free(pos);
 }
 
+/* Delete : seulement les lignes sélectionnées de la vue (une ligne cachée par le filtre n'est jamais sélectionnée) */
 static void on_delete(GtkButton *button, gpointer data)
 {
 	MacroEditor *editor = editor_of(GTK_WIDGET(button));
@@ -310,19 +559,20 @@ static void on_delete(GtkButton *button, gpointer data)
 
 	if(editor == NULL)
 		return;
-	pos = selected_positions(page_selection(editor, page), &n);
+	pos = selected_store_positions(editor, page, &n);
 	stop_capture(editor);
 	gt_macro_rows_remove(page_store(editor, page), pos, n);
 	g_free(pos);
 }
 
+/* Move Up / Down : tout ou rien, jamais au-delà du bord du groupe (§2.3, §7 bis) */
 static void move_selected(MacroEditor *editor, gint page, gint delta)
 {
-	guint n = 0, *pos = selected_positions(page_selection(editor, page), &n);
+	guint n = 0, *pos = selected_store_positions(editor, page, &n);
 
 	stop_capture(editor);
-	if(gt_macro_rows_move(page_store(editor, page), pos, n, delta))
-		reselect(page_selection(editor, page), pos, n);	/* la sélection suit les lignes déplacées */
+	if(gt_macro_rows_move_grouped(page_store(editor, page), pos, n, delta, page_key(page)))
+		reselect_items(editor, page, pos, n);	/* la sélection suit les lignes déplacées */
 	g_free(pos);
 }
 
@@ -351,7 +601,7 @@ static void on_unshortcut(GtkButton *button, gpointer data)
 
 	if(editor == NULL)
 		return;
-	pos = selected_positions(editor->selection, &n);
+	pos = selected_store_positions(editor, PAGE_MACROS, &n);
 	stop_capture(editor);
 	if(n > 0)
 	{
@@ -370,7 +620,7 @@ static void on_capture(GtkButton *button, gpointer data)
 
 	if(editor == NULL)
 		return;
-	pos = selected_positions(editor->selection, &n);
+	pos = selected_store_positions(editor, PAGE_MACROS, &n);
 	stop_capture(editor);
 	if(n == 0)
 		set_message(editor, _("Select a macro first."), TRUE);
@@ -469,6 +719,7 @@ static void close_editor_window(GtkWidget *window)
 /* Lignes de l'éditeur, dans l'ordre affiché, avec leur identifiant (arguments et polling suivent l'identifiant, M16) ; listes à libérer */
 static GtMacroEdit *editor_edits(MacroEditor *editor, guint *n, GtMacroLists **lists)
 {
+	regroup_flush(editor);	/* cellule Tab / List validée juste avant OK */
 	*lists = gt_macro_list_rows_to_lists(G_LIST_MODEL(editor->list_rows));
 	return gt_macro_rows_to_edits(G_LIST_MODEL(editor->rows), n);
 }
@@ -679,6 +930,9 @@ static void on_destroy(GtkWidget *window, gpointer data)
 	g_signal_handlers_disconnect_by_func(editor->rows, on_defaults_items_changed, editor);
 	g_signal_handlers_disconnect_by_func(editor->list_rows, on_defaults_items_changed, editor);
 	g_signal_handlers_disconnect_by_func(editor->selection, on_defaults_selection_changed, editor);
+	g_signal_handlers_disconnect_by_func(editor->rows, on_filter_items_changed, editor);
+	g_signal_handlers_disconnect_by_func(editor->list_rows, on_filter_items_changed, editor);
+	g_clear_handle_id(&editor->regroup_source, g_source_remove);
 	s = g_weak_ref_get(&editor->session);
 	if(s != NULL && g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) == window)
 		g_object_set_data(G_OBJECT(s), SESSION_EDITOR_KEY, NULL);
@@ -691,12 +945,22 @@ static void editor_free(gpointer data)
 	MacroEditor *editor = data;
 
 	g_clear_object(&editor->capture_row);
+	g_clear_handle_id(&editor->regroup_source, g_source_remove);
 	defaults_unwatch(editor);
 	for(GtkWidget **const *w = (GtkWidget **const[]){ &editor->defaults, &editor->defaults_scroll, &editor->preview_box, &editor->preview,
-	                                                  &editor->preview_bytes, &editor->template_info, NULL }; *w != NULL; w++)
+	                                                  &editor->preview_bytes, &editor->template_info, &editor->filter_dd[PAGE_MACROS],
+	                                                  &editor->filter_dd[PAGE_LISTS], &editor->settings_separator, &editor->settings_box, NULL };
+	    *w != NULL; w++)
 		if(**w != NULL)
 			g_object_remove_weak_pointer(G_OBJECT(**w), (gpointer *)*w);
 	g_clear_object(&editor->selection);
+	for(gint page = PAGE_MACROS; page <= PAGE_LISTS; page++)
+	{
+		g_clear_object(&editor->filtered[page]);	/* filtres jamais réévalués après l'état : seul l'éditeur change les stores */
+		g_clear_object(&editor->filter[page]);
+		g_clear_pointer(&editor->filter_keys[page], g_ptr_array_unref);
+		g_clear_pointer(&editor->filter_key[page], g_free);
+	}
 	g_clear_object(&editor->rows);
 	g_clear_object(&editor->list_rows);
 	g_weak_ref_clear(&editor->session);
@@ -966,9 +1230,29 @@ static const gchar *preview_color(const GtPreviewRun *run, const gboolean *inval
 	}
 }
 
+/* Séparateur et boîte des réglages (marge de 12 px) cachés avec la table des arguments et l'aperçu (spec §6) */
+static void settings_visibility_update(MacroEditor *editor)
+{
+	gboolean shown = (editor->defaults_scroll != NULL && gtk_widget_get_visible(editor->defaults_scroll))
+	                 || (editor->preview_box != NULL && gtk_widget_get_visible(editor->preview_box));
+
+	if(editor->settings_separator != NULL)
+		gtk_widget_set_visible(editor->settings_separator, shown);
+	if(editor->settings_box != NULL)
+		gtk_widget_set_visible(editor->settings_box, shown);
+}
+
+static void preview_render(MacroEditor *editor);
+
+static void preview_update(MacroEditor *editor)
+{
+	preview_render(editor);
+	settings_visibility_update(editor);
+}
+
 /* Aperçu de la ligne affichée : jeu temporaire d'une macro (action, défauts, limites de la ligne, listes de la page Lists) ; masqué hors
  * ligne seule envoyable. Arguments en bleu, en rouge s'ils ne passent pas leurs limites ; caractères spéciaux en violet. */
-static void preview_update(MacroEditor *editor)
+static void preview_render(MacroEditor *editor)
 {
 	GtMacroRow *row = editor->defaults_row;
 	GtMacroSet *set;
@@ -1147,7 +1431,7 @@ static GtkWidget *charset_cell(gint k, const gchar *initial)
 static void defaults_rebuild(MacroEditor *editor)
 {
 	guint n = 0;
-	guint *pos = selected_positions(editor->selection, &n);
+	guint *pos = selected_store_positions(editor, PAGE_MACROS, &n);
 	GtMacroRow *row = n == 1 ? g_list_model_get_item(G_LIST_MODEL(editor->rows), pos[0]) : NULL;
 	macro_arg_info_t *infos = NULL;
 	GtMacroLists *lists = NULL;
@@ -1225,7 +1509,7 @@ static void defaults_rebuild(MacroEditor *editor)
 	g_clear_object(&row);
 	editor->defaults_building = FALSE;
 	defaults_commit(editor, FALSE);	/* champs vérifiés avec les limites affichées, sans rien écrire */
-	preview_update(editor);
+	preview_update(editor);	/* et visibilité du séparateur */
 }
 
 static void on_defaults_selection_changed(GtkSelectionModel *model, guint position, guint n_items, gpointer data)
@@ -1304,14 +1588,37 @@ static GtkWidget *build_preview_box(MacroEditor *editor)
 	return box;
 }
 
+/* Ligne « Tab: » / « List: » et sa liste déroulante de filtre (spec §3), au-dessus du tableau */
+static GtkWidget *build_filter_box(MacroEditor *editor, gint page)
+{
+	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+	GtkWidget *label = gtk_label_new(page == PAGE_MACROS ? _("Tab:") : _("List:"));
+	GtkWidget *dropdown = gtk_drop_down_new(NULL, NULL);
+
+	gtk_widget_set_name(dropdown, page == PAGE_MACROS ? "macro-tab-filter" : "lists-filter");
+	gtk_accessible_update_property(GTK_ACCESSIBLE(dropdown), GTK_ACCESSIBLE_PROPERTY_LABEL, page == PAGE_MACROS ? _("Tab filter") : _("List filter"), -1);
+	editor->filter_dd[page] = dropdown;
+	g_object_add_weak_pointer(G_OBJECT(dropdown), (gpointer *)&editor->filter_dd[page]);
+	filter_keys_rebuild(editor, page);	/* modèle : « All » et les clés du store */
+	g_signal_connect(dropdown, "notify::selected", G_CALLBACK(on_filter_selected), GINT_TO_POINTER(page));
+	gtk_box_append(GTK_BOX(box), label);
+	gtk_box_append(GTK_BOX(box), dropdown);
+	return box;
+}
+
+/* Page : filtre ; tableau (vue filtrée) ; boutons juste dessous ; (Macros) séparateur, marge de 12 px, table des arguments et aperçu (spec §6) */
 static GtkWidget *build_page(MacroEditor *editor, gint page)
 {
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
 	GtkWidget *scrolled = gtk_scrolled_window_new();
 	GtkWidget *row1 = button_row(), *row2 = button_row();
-	GtkSelectionModel *selection = GTK_SELECTION_MODEL(gtk_multi_selection_new(G_LIST_MODEL(g_object_ref(page_store(editor, page)))));
-	GtkWidget *view = gtk_column_view_new(selection);	/* prend la sélection */
+	GtkSelectionModel *selection;
+	GtkWidget *view;
 
+	editor->filter[page] = gtk_custom_filter_new(page == PAGE_MACROS ? macro_matches : list_matches, editor, NULL);
+	editor->filtered[page] = gtk_filter_list_model_new(G_LIST_MODEL(g_object_ref(page_store(editor, page))), GTK_FILTER(g_object_ref(editor->filter[page])));
+	selection = GTK_SELECTION_MODEL(gtk_multi_selection_new(G_LIST_MODEL(g_object_ref(editor->filtered[page]))));
+	view = gtk_column_view_new(selection);	/* prend la sélection */
 	gtk_column_view_set_reorderable(GTK_COLUMN_VIEW(view), FALSE);
 	gtk_column_view_set_show_column_separators(GTK_COLUMN_VIEW(view), TRUE);
 	if(page == PAGE_MACROS)
@@ -1345,17 +1652,34 @@ static GtkWidget *build_page(MacroEditor *editor, gint page)
 	gtk_scrolled_window_set_has_frame(GTK_SCROLLED_WINDOW(scrolled), TRUE);
 	gtk_widget_set_vexpand(scrolled, TRUE);
 	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled), view);
+	gtk_box_append(GTK_BOX(box), build_filter_box(editor, page));
 	gtk_box_append(GTK_BOX(box), scrolled);
+	gtk_box_append(GTK_BOX(box), row1);
+	gtk_box_append(GTK_BOX(box), row2);
+	/* Clés du filtre suivies après la vue filtrée : elle a déjà traité le changement quand elles sont recalculées */
+	g_signal_connect(page_store(editor, page), "items-changed", G_CALLBACK(on_filter_items_changed), editor);
 	if(page == PAGE_MACROS)
 	{
-		gtk_box_append(GTK_BOX(box), build_defaults_box(editor));	/* pointeurs faibles posés par build_defaults_box */
-		gtk_box_append(GTK_BOX(box), build_preview_box(editor));
+		GtkWidget *sep = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+		GtkWidget *settings = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+
+		gtk_widget_set_name(sep, "macro-settings-separator");
+		gtk_accessible_update_property(GTK_ACCESSIBLE(sep), GTK_ACCESSIBLE_PROPERTY_LABEL, "macro-settings-separator", -1);
+		gtk_widget_set_margin_top(sep, 4);
+		gtk_widget_set_margin_top(settings, 12);
+		gtk_box_append(GTK_BOX(settings), build_defaults_box(editor));	/* pointeurs faibles posés par build_defaults_box */
+		gtk_box_append(GTK_BOX(settings), build_preview_box(editor));
+		gtk_box_append(GTK_BOX(box), sep);
+		gtk_box_append(GTK_BOX(box), settings);
+		editor->settings_separator = sep;
+		editor->settings_box = settings;
+		g_object_add_weak_pointer(G_OBJECT(sep), (gpointer *)&editor->settings_separator);
+		g_object_add_weak_pointer(G_OBJECT(settings), (gpointer *)&editor->settings_box);
+		settings_visibility_update(editor);
 		g_signal_connect(selection, "selection-changed", G_CALLBACK(on_defaults_selection_changed), editor);
 		g_signal_connect(editor->rows, "items-changed", G_CALLBACK(on_defaults_items_changed), editor);
 		g_signal_connect(editor->list_rows, "items-changed", G_CALLBACK(on_defaults_items_changed), editor);
 	}
-	gtk_box_append(GTK_BOX(box), row1);
-	gtk_box_append(GTK_BOX(box), row2);
 	return box;
 }
 
@@ -1387,7 +1711,7 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	title = g_strdup_printf(_("Configure Macros — %s"), gt_session_get_short_name(s));
 	gtk_window_set_title(GTK_WINDOW(editor->window), title);
 	g_free(title);
-	gtk_window_set_default_size(GTK_WINDOW(editor->window), 820, 580);	/* place pour la table des arguments et l'aperçu */
+	gtk_window_set_default_size(GTK_WINDOW(editor->window), 900, 640);	/* place pour la table des arguments et l'aperçu */
 	if(parent != NULL)
 	{
 		gtk_window_set_transient_for(GTK_WINDOW(editor->window), parent);
@@ -1412,6 +1736,8 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	gtk_stack_add_titled(GTK_STACK(stack), build_page(editor, PAGE_MACROS), "macros", _("Macros"));
 	gtk_stack_add_titled(GTK_STACK(stack), build_page(editor, PAGE_LISTS), "lists", _("Lists"));
 	g_signal_connect(stack, "notify::visible-child", G_CALLBACK(on_stack_page), NULL);
+	regroup(editor, PAGE_MACROS);	/* jeu déjà regroupé à la lecture : sans effet, sauf jeu ancien resté en mémoire */
+	regroup(editor, PAGE_LISTS);
 	switcher = gtk_stack_switcher_new();
 	gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher), GTK_STACK(stack));
 	gtk_widget_set_halign(switcher, GTK_ALIGN_CENTER);

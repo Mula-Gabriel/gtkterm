@@ -809,8 +809,9 @@ def editor_select(env, index, prefix='macro-cell', col='shortcut'):
     """Sélectionne la seule ligne « index » par un vrai clic sur sa cellule non éditable « col », puis attend l'état sélectionné."""
     rows = editor_rows(env, prefix)
     env.bw.click(rows[index]['cells'][col])
-    attendu = [k == index for k in range(len(rows))]
-    ok = wait_until(lambda: [r['selected'] for r in editor_rows(env, prefix)] == attendu, 3)
+    # attendu calculé sur les lignes visibles après le clic : la table des arguments qui apparaît sous le tableau peut en cacher une en bas
+    attendu = lambda sel: len(sel) > index and sel == [k == index for k in range(len(sel))]
+    ok = wait_until(lambda: attendu([r['selected'] for r in editor_rows(env, prefix)]), 3)
     check(ok, 'ligne %d seule selectionnee : %r' % (index, [r['selected'] for r in editor_rows(env, prefix)]))
 
 
