@@ -223,6 +223,35 @@ test_apply_abandons(void)
 }
 
 /* Ajout, remplacement en place, fusion rang par rang, copie */
+/* Un %s refusé par son jeu de caractères ou sa longueur maximale (limites du modèle) est abandonné */
+static void
+test_apply_texte_limites(void)
+{
+	GtMacroSet *base = gt_macro_set_new(), *res;
+	GtMacroOverrides *o = gt_macro_overrides_new();
+	const gchar *mx[] = { "3", "", NULL }, *cs[] = { "", "printable", NULL };
+	guint id = gt_macro_set_append(base, "T", "", "%s,%s", ""), dropped = 0;
+
+	g_assert_cmpint(gt_macro_set_set_limits(base, id, NULL, mx, cs, 2), ==, 0);
+	gt_macro_overrides_set_arg(o, "T", 0, 0, "abcd");
+	gt_macro_overrides_set_arg(o, "T", 0, 1, "\xc3\xa9");
+	res = gt_macro_overrides_apply(o, base, &dropped);
+	g_assert_cmpuint(dropped, ==, 2);
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 0), ==, "");
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 1), ==, "");
+	gt_macro_set_free(res);
+	/* Dans les limites : appliquées */
+	gt_macro_overrides_set_arg(o, "T", 0, 0, "abc");
+	gt_macro_overrides_set_arg(o, "T", 0, 1, "e~");
+	res = gt_macro_overrides_apply(o, base, &dropped);
+	g_assert_cmpuint(dropped, ==, 0);
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 0), ==, "abc");
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 1), ==, "e~");
+	gt_macro_set_free(res);
+	gt_macro_overrides_free(o);
+	gt_macro_set_free(base);
+}
+
 static void
 test_set_et_copie(void)
 {
@@ -382,6 +411,48 @@ test_merge_template(void)
 	gt_macro_set_free(base);
 }
 
+/* Rang de liste : même liste → valeur du modèle reprise sans vérification ; liste renommée → valeur de l'édition */
+static void
+test_merge_template_listes(void)
+{
+	GtMacroSet *base = gt_macro_set_new(), *before, *after, *res;
+	GtMacroLists *l = gt_macro_lists_new(), *l2;
+	GtMacroEdit *rows;
+	const gchar *b_def[] = { "ZZ", NULL }, *e_def[] = { "M", NULL };
+	guint id;
+
+	gt_macro_lists_add(l, "Mode", "Auto", "A");
+	gt_macro_lists_add(l, "Mode", "Manuel", "M");
+	gt_macro_set_take_lists(base, l);
+	id = gt_macro_set_append(base, "M", "", "M%#Mode", "");
+	g_assert_true(gt_macro_set_set_args(base, id, b_def, 1));
+	before = gt_macro_set_copy(base);
+	g_assert_true(gt_macro_set_set_args(before, id_at(before, 0), e_def, 1));
+	/* Même liste, valeur inchangée : « ZZ » (hors liste) reprise du modèle */
+	after = gt_macro_set_clone(before);
+	rows = rows_of(before);
+	gt_macro_set_apply_edits(after, rows, 1, NULL);
+	res = gt_macro_overrides_merge_template(base, before, after);
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 0), ==, "ZZ");
+	gt_macro_set_free(res);
+	gt_macro_set_free(after);
+	/* Liste renommée : la valeur de l'édition va au modèle */
+	after = gt_macro_set_clone(before);
+	l2 = gt_macro_lists_copy(gt_macro_set_get_lists(before));
+	gt_macro_lists_add(l2, "Mode2", "Auto", "A");
+	gt_macro_lists_add(l2, "Mode2", "Manuel", "M");
+	rows[0].action = "M%#Mode2";
+	gt_macro_set_apply_edits(after, rows, 1, l2);
+	g_assert_cmpstr(def_at(gt_macro_set_get(after, 0), 0), ==, "M");
+	res = gt_macro_overrides_merge_template(base, before, after);
+	g_assert_cmpstr(def_at(gt_macro_set_get(res, 0), 0), ==, "M");
+	gt_macro_set_free(res);
+	gt_macro_set_free(after);
+	g_free(rows);
+	gt_macro_set_free(before);
+	gt_macro_set_free(base);
+}
+
 static gchar *
 kf_text(GKeyFile *kf)
 {
@@ -475,6 +546,8 @@ test_key_file_tolerant(void)
 		"arg_0=zero\n"
 		"arg_x=x\n"
 		"arg_2=deux\n"
+		"arg_01=zero en tete\n"
+		"arg_1025=trop loin\n"
 		"inconnue=ignoree\n"
 		"polling=true\n"
 		"[tab:0:override:5]\n"
@@ -496,6 +569,10 @@ test_key_file_tolerant(void)
 		"label=C\n"
 		"occurrence=0\n"
 		"arg_1=derniere\n"
+		"[tab:0:overrideX]\n"
+		"label=X\n"
+		"[tab:0:override]\n"
+		"label=Y\n"
 		"[tab:0:override:10]\n"
 		"label=H\n"
 		"arg_1=bad\\escape\n";
@@ -504,10 +581,14 @@ test_key_file_tolerant(void)
 	const GtMacroOverride *e;
 
 	g_assert_true(g_key_file_load_from_data(kf, texte, -1, G_KEY_FILE_NONE, NULL));
-	/* Groupe 1 sans libellé ; occurrence négative ; occurrence illisible (groupes entiers ignorés) ; arg_0 ; arg_x ; polling seul ;
-	 * période seule ; polling illisible ; période illisible ; doublon de C (le dernier gagne) ; échappement invalide */
+	/* Groupe 1 sans libellé ; occurrence négative ; occurrence illisible (groupes entiers ignorés) ; arg_0 ; arg_x ; arg_01 ; arg_1025 ;
+	 * polling seul ; période seule ; polling illisible ; période illisible ; doublon de C (le dernier gagne) ; échappement invalide.
+	 * « overrideX » et « override » (sans deux-points) ne sont pas des groupes de valeurs propres. */
 	for(guint i = 0; i < 11; i++)
 		g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*p.gtkterm: [tab:0:override:*invalid value ignored*");
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING,
+	                      "p.gtkterm: [tab:0:override:9] duplicates [tab:0:override:4]: the earlier group is ignored");
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*p.gtkterm: [tab:0:override:10] arg_1*invalid value ignored*");
 	lu = gt_macro_overrides_from_key_file(kf, "tab:0:", "p.gtkterm");
 	g_test_assert_expected_messages();
 	g_assert_cmpuint(gt_macro_overrides_count(lu), ==, 6);
@@ -543,8 +624,10 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_override/diff", test_diff);
 	g_test_add_func("/macro_override/apply-aller-retour", test_apply_aller_retour);
 	g_test_add_func("/macro_override/apply-abandons", test_apply_abandons);
+	g_test_add_func("/macro_override/apply-texte-limites", test_apply_texte_limites);
 	g_test_add_func("/macro_override/set-et-copie", test_set_et_copie);
 	g_test_add_func("/macro_override/merge-template", test_merge_template);
+	g_test_add_func("/macro_override/merge-template-listes", test_merge_template_listes);
 	g_test_add_func("/macro_override/key-file-aller-retour", test_key_file_aller_retour);
 	g_test_add_func("/macro_override/key-file-tolerant", test_key_file_tolerant);
 	return g_test_run();

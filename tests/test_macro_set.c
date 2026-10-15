@@ -827,6 +827,19 @@ test_meme_structure(void)
 	g_assert_false(gt_macro_set_same_structure(a, b));
 	g_assert_cmpint(gt_macro_set_set_limits(a, ida, mn, NULL, NULL, 1), ==, 0);
 	g_assert_true(gt_macro_set_same_structure(a, b));
+	/* Deux vecteurs entièrement vides sont égaux quelle que soit leur longueur (champ modifié directement : set_limits les rend NULL) */
+	{
+		GtMacroSet *c = gt_macro_set_clone(a), *d = gt_macro_set_clone(a);
+		GtMacro *mc = (GtMacro *)gt_macro_set_get(c, 1), *md = (GtMacro *)gt_macro_set_get(d, 1);
+
+		mc->arg_max = g_strsplit("", ",", -1);
+		md->arg_max = g_strsplit(",", ",", -1);
+		g_assert_cmpuint(g_strv_length(md->arg_max), ==, 2);
+		g_assert_true(gt_macro_set_same_structure(c, d));
+		g_assert_true(gt_macro_set_same_structure(a, d));
+		gt_macro_set_free(c);
+		gt_macro_set_free(d);
+	}
 	gt_macro_set_free(b);
 	/* Libellé, raccourci, action, onglet, nombre, ordre */
 	{

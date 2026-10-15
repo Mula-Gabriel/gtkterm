@@ -463,10 +463,14 @@ gt_macro_set_apply_edits(GtMacroSet *set, const GtMacroEdit *rows, guint n_rows,
 static gboolean
 limits_equal(gchar **a, gchar **b)
 {
-	guint na = a != NULL ? g_strv_length(a) : 0, nb = b != NULL ? g_strv_length(b) : 0;
+	gboolean a_empty = a == NULL || vector_all_empty(a), b_empty = b == NULL || vector_all_empty(b);
+	guint na, nb;
 
-	if(a == NULL || b == NULL)
-		return (a == NULL || vector_all_empty(a)) && (b == NULL || vector_all_empty(b));
+	/* Entièrement vides (ou NULL) : égaux quelle que soit leur longueur */
+	if(a_empty || b_empty)
+		return a_empty && b_empty;
+	na = g_strv_length(a);
+	nb = g_strv_length(b);
 	if(na != nb)
 		return FALSE;
 	for(guint k = 0; k < na; k++)

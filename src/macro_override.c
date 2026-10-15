@@ -413,7 +413,8 @@ read_group(GKeyFile *kf, const gchar *group, const gchar *origin)
 
 		if(!g_str_has_prefix(keys[i], "arg_"))
 			continue;
-		if(!g_ascii_string_to_unsigned(keys[i] + 4, 10, 1, MAX_ARG_KEY, &k, NULL))
+		/* « arg_01 » n'est pas la clé qu'écrirait GTKTerm : refusée comme toute clé mal formée */
+		if(keys[i][4] == '0' || !g_ascii_string_to_unsigned(keys[i] + 4, 10, 1, MAX_ARG_KEY, &k, NULL))
 		{
 			warn_invalid(origin, group, keys[i]);
 			continue;
@@ -491,7 +492,13 @@ gt_macro_overrides_from_key_file(GKeyFile *kf, const gchar *prefix, const gchar 
 			continue;
 		}
 		/* Doublon : la dernière lecture remplace la première, à sa place */
-		warn_invalid(origin, g_ptr_array_index(sources, dup), "label");
+		{
+			gchar *msg = g_strdup_printf(_("%s: [%s] duplicates [%s]: the earlier group is ignored"), origin, groups[g],
+			                             (const gchar *)g_ptr_array_index(sources, dup));
+
+			g_warning("%s", msg);
+			g_free(msg);
+		}
 		override_free(o->items->pdata[dup]);
 		o->items->pdata[dup] = e;
 		sources->pdata[dup] = groups[g];
