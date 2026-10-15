@@ -1,13 +1,13 @@
 # Arguments facultatifs (spec docs/superpowers/specs/2026-10-15-nom-projet-et-editeur-macros-design.md, §5) : panneau — un %s facultatif vide
 # n'envoie ni préfixe ni valeur ; rempli, il envoie le préfixe puis la valeur ; une liste facultative a « (none) ».
-# (la liste a trois entrées : à deux, le panneau montre deux boutons au lieu d'une liste déroulante.)
+# (la liste a deux entrées : facultative, elle reste une liste déroulante au lieu de deux boutons.)
 from gtktest import *
 
 e = Env('macros_facultatifs')
 ini = e.project_path('m.ini')
 write_macros_v2(ini, [dict(label='Co', action='connect %s%s;', args=['srv', ''], arg_optional=['', '1'], arg_prefix=['', ' -password=']),
                       dict(label='Mo', action='mode%#Mode;', arg_optional=['1'], arg_prefix=[' -m='])],
-                lists=[('Mode', [('Fast', 'fast'), ('Mid', 'mid'), ('Slow', 'slow')])])
+                lists=[('Mode', [('Fast', 'fast'), ('Slow', 'slow')])])
 macro_config(e, ini)
 e.start()
 co = macro_id(e, 'Co')

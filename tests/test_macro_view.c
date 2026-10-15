@@ -58,6 +58,9 @@ static void test_onglets(void)
 static void test_sortes(void)
 {
 	GtMacroSet *set = jeu();
+	const gchar *const facultatif[] = { "1", NULL };
+	const gchar *const prefixe[] = { "", NULL };
+	guint id_f = gt_macro_set_append(set, "F", "", "S%#Bin", "T1");
 
 	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_a)), ==, GT_MACRO_VIEW_BUTTON);
 	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_sans_libelle)), ==, GT_MACRO_VIEW_HIDDEN);
@@ -65,6 +68,9 @@ static void test_sortes(void)
 	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_sep)), ==, GT_MACRO_VIEW_SEPARATOR);
 	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_l)), ==, GT_MACRO_VIEW_TWO_VALUES);
 	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_m)), ==, GT_MACRO_VIEW_ARGS);	/* liste de trois valeurs */
+	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_f)), ==, GT_MACRO_VIEW_TWO_VALUES);
+	g_assert_true(gt_macro_set_set_optional(set, id_f, facultatif, prefixe, 1));
+	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_f)), ==, GT_MACRO_VIEW_ARGS);	/* liste facultative de deux valeurs : liste déroulante « (none) » */
 	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_n)), ==, GT_MACRO_VIEW_ARGS);
 	g_assert_cmpint(gt_macro_view_kind(set, gt_macro_set_find(set, id_p)), ==, GT_MACRO_VIEW_BUTTON);	/* « %% » n'est pas un argument */
 	g_assert_false(gt_macro_view_is_displayed(NULL));

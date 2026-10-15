@@ -55,7 +55,8 @@ GtMacroViewKind gt_macro_view_kind(const GtMacroSet *set, const GtMacro *m)
 		{
 			gint list_idx = gt_macro_lists_find(lists, infos[0].list_name);
 
-			if(list_idx >= 0 && gt_macro_lists_entry_count(lists, list_idx) == 2)
+			/* une liste facultative garde la liste déroulante : seule elle offre l'entrée « (none) » */
+			if(list_idx >= 0 && gt_macro_lists_entry_count(lists, list_idx) == 2 && !gt_macro_arg_is_optional(m, 0))
 				kind = GT_MACRO_VIEW_TWO_VALUES;
 		}
 		macro_arg_infos_free(infos, n_args);
