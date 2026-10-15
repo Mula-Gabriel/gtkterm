@@ -495,6 +495,49 @@ test_arguments_facultatifs(void)
 	g_free(dir);
 }
 
+static void
+test_nom(void)
+{
+	GtProjectData *d = gt_project_data_new(), *relu = NULL;
+	gchar *dir = g_dir_make_tmp("gtkterm-pf-XXXXXX", NULL), *path = g_build_filename(dir, "p.gtkterm", NULL);
+	gchar *snap, *err = NULL, *v;
+	GError *error = NULL;
+
+	g_ptr_array_add(d->tabs, gt_project_tab_new());
+	snap = gt_project_data_snapshot(d);
+	g_assert_null(strstr(snap, "\nname="));	/* absent sans nom */
+	g_free(snap);
+	d->name = g_strdup("Banc moteur");
+	snap = gt_project_data_snapshot(d);
+	g_assert_nonnull(strstr(snap, "name=Banc moteur"));	/* l'instantané le contient : renommer rend modifié */
+	g_free(snap);
+	g_assert_true(gt_project_data_save(d, path, NULL, &error));
+	g_assert_true(gt_project_data_load(path, &relu, NULL, &error));
+	g_assert_no_error(error);
+	g_assert_cmpstr(relu->name, ==, "Banc moteur");
+	gt_project_data_free(relu);
+	g_assert_true(g_file_set_contents(path, "[gtkterm-project]\nversion=1\nname=  \n\n[tab:0]\ntransport=serial\n", -1, NULL));
+	g_assert_true(gt_project_data_load(path, &relu, NULL, &error));
+	g_assert_null(relu->name);	/* vide après rognage : pas de nom */
+	gt_project_data_free(relu);
+	v = gt_project_name_validate("  A  ", &err);
+	g_assert_cmpstr(v, ==, "A");
+	g_free(v);
+	g_assert_null(gt_project_name_validate("   ", &err));
+	g_assert_nonnull(err);
+	g_clear_pointer(&err, g_free);
+	g_assert_null(gt_project_name_validate("a\tb", &err));
+	g_clear_pointer(&err, g_free);
+	v = gt_project_file_name_for("Banc a/b\\c");
+	g_assert_cmpstr(v, ==, "Banc a_b_c.gtkterm");
+	g_free(v);
+	gt_project_data_free(d);
+	g_remove(path);
+	g_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -511,5 +554,6 @@ main(int argc, char **argv)
 	g_test_add_func("/project_file/lie-instantane", test_lie_instantane);
 	g_test_add_func("/project_file/arguments-facultatifs", test_arguments_facultatifs);
 	g_test_add_func("/project_file/modele-relatif", test_modele_relatif);
+	g_test_add_func("/project_file/nom", test_nom);
 	return g_test_run();
 }

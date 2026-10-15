@@ -1,6 +1,8 @@
 /* Projet de la fenêtre (6c, spec §4.3) : voir project.h. */
 #include <config.h>
 
+#include <errno.h>
+#include <glib/gstdio.h>
 #include <string.h>
 
 #include <glib/gi18n.h>
@@ -14,6 +16,7 @@ struct _GtProject
 	GtSessionManager *sessions;	/* référence */
 	gboolean open;
 	gchar *path;
+	gchar *name;	/* nom stocké dans le fichier, NULL : aucun */
 	GtFileStamp stamp;
 	gboolean stamp_known;	/* FALSE : identité inconnue, pas de contrôle de conflit */
 	gchar *saved_snapshot;
@@ -27,7 +30,7 @@ struct _GtProject
 	GHashTable *watched;
 };
 
-enum { PROP_0, PROP_OPEN, PROP_PATH, PROP_MODIFIED, N_PROPS };
+enum { PROP_0, PROP_OPEN, PROP_PATH, PROP_MODIFIED, PROP_NAME, N_PROPS };
 static GParamSpec *props[N_PROPS];
 
 G_DEFINE_TYPE(GtProject, gt_project, G_TYPE_OBJECT)
@@ -51,6 +54,16 @@ set_path(GtProject *p, const gchar *path)
 	g_free(p->path);
 	p->path = g_strdup(path);
 	g_object_notify_by_pspec(G_OBJECT(p), props[PROP_PATH]);
+}
+
+static void
+set_name_internal(GtProject *p, const gchar *name)
+{
+	if(g_strcmp0(p->name, name) == 0)
+		return;
+	g_free(p->name);
+	p->name = g_strdup(name);
+	g_object_notify_by_pspec(G_OBJECT(p), props[PROP_NAME]);
 }
 
 static void
@@ -176,12 +189,61 @@ gt_project_get_name(GtProject *p)
 
 	if(!p->open)
 		return g_strdup("");
+	if(p->name != NULL)
+		return g_strdup(p->name);
 	if(p->path == NULL)
 		return g_strdup(_("Untitled project"));
 	base = g_path_get_basename(p->path);
 	if(g_str_has_suffix(base, ".gtkterm") && strlen(base) > strlen(".gtkterm"))
 		base[strlen(base) - strlen(".gtkterm")] = '\0';
 	return base;
+}
+
+const gchar *
+gt_project_get_stored_name(GtProject *p)
+{
+	return p->name;
+}
+
+void
+gt_project_set_name(GtProject *p, const gchar *name)
+{
+	gchar *copy = g_strstrip(g_strdup(name != NULL ? name : ""));
+
+	set_name_internal(p, *copy != '\0' ? copy : NULL);
+	g_free(copy);
+	queue_check(p);
+}
+
+gboolean
+gt_project_move_file(GtProject *p, const gchar *new_path, GError **error)
+{
+	if(!p->open || p->path == NULL)
+	{
+		g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, _("The project has no file"));
+		return FALSE;
+	}
+	if(g_strcmp0(new_path, p->path) == 0)
+		return TRUE;
+	if(g_file_test(new_path, G_FILE_TEST_EXISTS))
+	{
+		gchar *base = g_path_get_basename(new_path);
+
+		g_set_error(error, G_FILE_ERROR, G_FILE_ERROR_EXIST, _("A file named %s already exists."), base);
+		g_free(base);
+		return FALSE;
+	}
+	if(g_rename(p->path, new_path) != 0)
+	{
+		gint e = errno;
+
+		g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(e), _("Cannot rename the project file: %s"), g_strerror(e));
+		return FALSE;
+	}
+	set_path(p, new_path);
+	gt_file_stamp_take(new_path, &p->stamp);
+	p->stamp_known = TRUE;
+	return TRUE;
 }
 
 gboolean
@@ -197,6 +259,7 @@ gt_project_capture(GtProject *p)
 	GtSession *active = gt_session_manager_get_active(p->sessions);
 	guint n = gt_session_manager_get_n(p->sessions);
 
+	d->name = g_strdup(p->name);
 	for(guint i = 0; i < n; i++)
 	{
 		GtSession *s = gt_session_manager_get_nth(p->sessions, i);
@@ -264,6 +327,7 @@ gt_project_begin(GtProject *p, const gchar *path, const GtFileStamp *stamp, cons
 	else
 		memset(&p->stamp, 0, sizeof p->stamp);
 	p->stamp_known = stamp != NULL;
+	set_name_internal(p, saved != NULL ? saved->name : NULL);
 	for(guint i = 0; i < n; i++)
 	{
 		GtSession *s = gt_session_manager_get_nth(p->sessions, i);
@@ -298,6 +362,7 @@ gt_project_end(GtProject *p)
 	memset(&p->stamp, 0, sizeof p->stamp);
 	p->stamp_known = FALSE;
 	set_path(p, NULL);
+	set_name_internal(p, NULL);
 	set_modified(p, FALSE);
 	if(p->open)
 	{
@@ -359,6 +424,9 @@ gt_project_get_property(GObject *object, guint prop_id, GValue *value, GParamSpe
 	case PROP_MODIFIED:
 		g_value_set_boolean(value, p->modified);
 		break;
+	case PROP_NAME:
+		g_value_set_string(value, p->name);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 	}
@@ -391,6 +459,7 @@ gt_project_finalize(GObject *object)
 	GtProject *p = GT_PROJECT(object);
 
 	g_free(p->path);
+	g_free(p->name);
 	g_free(p->saved_snapshot);
 	g_hash_table_unref(p->watched);
 	G_OBJECT_CLASS(gt_project_parent_class)->finalize(object);
@@ -407,6 +476,7 @@ gt_project_class_init(GtProjectClass *klass)
 	props[PROP_OPEN] = g_param_spec_boolean("open", NULL, NULL, FALSE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 	props[PROP_PATH] = g_param_spec_string("path", NULL, NULL, NULL, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 	props[PROP_MODIFIED] = g_param_spec_boolean("modified", NULL, NULL, FALSE, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+	props[PROP_NAME] = g_param_spec_string("name", NULL, NULL, NULL, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
 	g_object_class_install_properties(oc, N_PROPS, props);
 }
 

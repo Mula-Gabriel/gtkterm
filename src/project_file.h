@@ -40,6 +40,7 @@ typedef struct
 {
 	GPtrArray *tabs;	/* GtProjectTab *, possédés */
 	guint active;		/* < tabs->len dès qu'il y a un onglet */
+	gchar *name;		/* nom du projet (clé facultative « name » de l'en-tête) ; NULL : aucun, le nom du fichier en tient lieu */
 } GtProjectData;
 
 GtProjectTab  *gt_project_tab_new(void);	/* profil par défaut, « default », page par défaut (-1, -1, TRUE, FALSE, FALSE), "topbottom", jeu vide, "", non lié */
@@ -54,5 +55,11 @@ gboolean       gt_project_data_save(const GtProjectData *d, const gchar *path, G
 gchar         *gt_project_data_to_text(const GtProjectData *d);	/* contenu exact du fichier */
 gchar         *gt_project_data_snapshot(const GtProjectData *d);	/* même sérialisation sans état de page, sans script_layout ni active,
 								 * ni base d'un onglet lié */
+
+/* Nom de projet saisi : rogné, 1 à 128 caractères, sans caractère de contrôle. Rend le nom rogné (à libérer) ou NULL et la raison traduite dans
+ * *error_out (à libérer ; peut être NULL). */
+gchar         *gt_project_name_validate(const gchar *name, gchar **error_out);
+/* Nom de base du fichier pour un nom de projet : « <nom>.gtkterm », « / », « \ » et caractères de contrôle remplacés par « _ » */
+gchar         *gt_project_file_name_for(const gchar *name);
 
 #endif

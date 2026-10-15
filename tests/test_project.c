@@ -566,6 +566,114 @@ test_action_detacher(void)
 	fix_clear(&f);
 }
 
+static void
+test_nom(void)
+{
+	Fix f;
+	GError *err = NULL;
+	guint n = 0;
+	gchar *nom;
+
+	fix_init(&f);
+	gt_project_begin(f.p, f.path, NULL, NULL);
+	g_assert_cmpint(gt_project_save(f.p, NULL, FALSE, &err), ==, GT_PROJECT_SAVED);
+	nom = gt_project_get_name(f.p);
+	g_assert_cmpstr(nom, ==, "banc");
+	g_free(nom);
+	g_signal_connect(f.p, "notify::name", G_CALLBACK(compter), &n);
+	gt_project_set_name(f.p, " Banc ");
+	g_assert_cmpstr(gt_project_get_stored_name(f.p), ==, "Banc");
+	nom = gt_project_get_name(f.p);
+	g_assert_cmpstr(nom, ==, "Banc");
+	g_free(nom);
+	g_assert_cmpuint(n, ==, 1);
+	gt_project_check_now(f.p);
+	g_assert_true(gt_project_is_modified(f.p));
+	gt_project_set_name(f.p, "");
+	g_assert_null(gt_project_get_stored_name(f.p));
+	nom = gt_project_get_name(f.p);
+	g_assert_cmpstr(nom, ==, "banc");
+	g_free(nom);
+	gt_project_set_name(f.p, "X");
+	gt_project_end(f.p);
+	g_assert_null(gt_project_get_stored_name(f.p));
+	fix_clear(&f);
+}
+
+static void
+test_deplacer(void)
+{
+	Fix f;
+	GError *err = NULL;
+	gchar *neuf;
+
+	fix_init(&f);
+	gt_project_begin(f.p, f.path, NULL, NULL);
+	g_assert_cmpint(gt_project_save(f.p, NULL, FALSE, &err), ==, GT_PROJECT_SAVED);
+	neuf = g_build_filename(f.dir, "neuf.gtkterm", NULL);
+	g_assert_true(gt_project_move_file(f.p, f.path, &err));	/* même chemin : rien */
+	g_assert_true(gt_project_move_file(f.p, neuf, &err));
+	g_assert_no_error(err);
+	g_assert_false(g_file_test(f.path, G_FILE_TEST_EXISTS));
+	g_assert_true(g_file_test(neuf, G_FILE_TEST_EXISTS));
+	g_assert_cmpstr(gt_project_get_path(f.p), ==, neuf);
+	g_assert_cmpint(gt_project_save(f.p, NULL, FALSE, &err), ==, GT_PROJECT_SAVED);
+	g_assert_cmpint(g_rename(neuf, f.path), ==, 0);
+	g_free(neuf);
+	fix_clear(&f);
+}
+
+static void
+test_deplacer_refus(void)
+{
+	Fix f;
+	GError *err = NULL;
+	gchar *autre, *avant = NULL;
+
+	fix_init(&f);
+	gt_project_begin(f.p, f.path, NULL, NULL);
+	g_assert_cmpint(gt_project_save(f.p, NULL, FALSE, &err), ==, GT_PROJECT_SAVED);
+	autre = g_build_filename(f.dir, "autre.gtkterm", NULL);
+	g_assert_true(g_file_set_contents(autre, "x", -1, NULL));
+	g_assert_false(gt_project_move_file(f.p, autre, &err));
+	g_assert_error(err, G_FILE_ERROR, G_FILE_ERROR_EXIST);
+	g_clear_error(&err);
+	g_assert_cmpstr(gt_project_get_path(f.p), ==, f.path);
+	g_assert_true(g_file_test(f.path, G_FILE_TEST_EXISTS));
+	g_assert_true(g_file_get_contents(autre, &avant, NULL, NULL));
+	g_assert_cmpstr(avant, ==, "x");
+	g_free(avant);
+	g_remove(autre);
+	g_free(autre);
+	fix_clear(&f);
+}
+
+/* Revue 1 : un ancien fichier aux onglets de macros entrelacés (T1, "", T1) est regroupé à la lecture ; ouvert, il n'est pas « modifié » */
+static void
+test_ancien_melange_non_modifie(void)
+{
+	Fix f;
+	GError *err = NULL;
+	GtProjectData *d = NULL;
+	GtFileStamp stamp;
+	GtProjectTab *t;
+	const gchar *texte = "[gtkterm-project]\nversion=1\nactive=0\n[tab:0]\ntransport=serial\n"
+		"[tab:0:macro:1]\nlabel=A\naction=a\ntab=T1\n[tab:0:macro:2]\nlabel=B\naction=b\ntab=\n[tab:0:macro:3]\nlabel=C\naction=c\ntab=T1\n";
+
+	fix_init(&f);
+	gt_session_manager_remove(f.mgr, f.b);
+	g_assert_true(g_file_set_contents(f.path, texte, -1, NULL));
+	g_assert_true(gt_project_data_load(f.path, &d, &stamp, &err));
+	t = g_ptr_array_index(d->tabs, 0);
+	gt_macros_replace_set(gt_session_get_macros(f.a), gt_macro_set_copy(t->macros));
+	g_free(t->profile_name);
+	t->profile_name = g_strdup(gt_session_get_profile_name(f.a));	/* le fichier de la fixture n'en a pas : on aligne celui de la session */
+	gt_project_begin(f.p, f.path, &stamp, d);
+	g_assert_false(gt_project_is_modified(f.p));
+	gt_project_data_free(d);
+	fix_clear(&f);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -586,6 +694,10 @@ main(int argc, char *argv[])
 	g_test_add_func("/project/capture-lie", test_capture_lie);
 	g_test_add_func("/project/lie-modifie", test_lie_modifie);
 	g_test_add_func("/project/action-detacher", test_action_detacher);
+	g_test_add_func("/project/nom", test_nom);
+	g_test_add_func("/project/deplacer", test_deplacer);
+	g_test_add_func("/project/deplacer-refus", test_deplacer_refus);
+	g_test_add_func("/project/ancien-melange-non-modifie", test_ancien_melange_non_modifie);
 	ret = g_test_run();
 	test_rmdir_recursive(racine);
 	g_free(racine);

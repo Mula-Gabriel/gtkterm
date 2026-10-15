@@ -61,6 +61,7 @@ void gt_project_data_free(GtProjectData *d)
 	if(d == NULL)
 		return;
 	g_ptr_array_unref(d->tabs);
+	g_free(d->name);
 	g_free(d);
 }
 
@@ -71,6 +72,8 @@ static GKeyFile *write_key_file(const GtProjectData *d, gboolean with_page)
 	GKeyFile *kf = g_key_file_new();
 
 	g_key_file_set_integer(kf, HEADER_GROUP, "version", GT_PROJECT_FILE_VERSION);
+	if(d->name != NULL)
+		g_key_file_set_string(kf, HEADER_GROUP, "name", d->name);
 	if(with_page)
 		g_key_file_set_integer(kf, HEADER_GROUP, "active", (gint)d->active);
 	for(guint i = 0; i < d->tabs->len; i++)
@@ -235,7 +238,7 @@ static gboolean read_tab(GKeyFile *kf, guint n, const gchar *path, GtProjectData
 
 gboolean gt_project_data_load(const gchar *path, GtProjectData **out, GtFileStamp *stamp, GError **error)
 {
-	gchar *contents = NULL, *version;
+	gchar *contents = NULL, *version, *s;
 	GKeyFile *kf;
 	GtProjectData *d;
 	GError *err = NULL;
@@ -294,9 +297,72 @@ gboolean gt_project_data_load(const gchar *path, GtProjectData **out, GtFileStam
 	}
 	gt_key_file_read_int(kf, HEADER_GROUP, "active", &active);
 	d->active = (active >= 0 && (guint)active < d->tabs->len) ? (guint)active : 0;
+	s = read_string(kf, HEADER_GROUP, "name", path);
+	if(s != NULL && *g_strstrip(s) != '\0')
+		d->name = s;
+	else
+		g_free(s);
 	g_key_file_unref(kf);
 	if(stamp != NULL)
 		*stamp = taken;
 	*out = d;
 	return TRUE;
+}
+
+gchar *gt_project_name_validate(const gchar *name, gchar **error_out)
+{
+	gchar *trimmed = g_strstrip(g_strdup(name != NULL ? name : ""));
+	const gchar *reason = NULL;
+
+	if(error_out != NULL)
+		*error_out = NULL;
+	if(!g_utf8_validate(trimmed, -1, NULL))
+		reason = _("The project name cannot contain control characters");
+	else if(*trimmed == '\0')
+		reason = _("The project name cannot be empty");
+	else if(g_utf8_strlen(trimmed, -1) > 128)
+		reason = _("The project name is too long (128 characters at most)");
+	else
+	{
+		for(const gchar *c = trimmed; *c != '\0'; c = g_utf8_next_char(c))
+		{
+			if(g_unichar_iscntrl(g_utf8_get_char(c)))
+			{
+				reason = _("The project name cannot contain control characters");
+				break;
+			}
+		}
+	}
+	if(reason != NULL)
+	{
+		if(error_out != NULL)
+			*error_out = g_strdup(reason);
+		g_free(trimmed);
+		return NULL;
+	}
+	return trimmed;
+}
+
+gchar *gt_project_file_name_for(const gchar *name)
+{
+	GString *s = g_string_new(NULL);
+	gchar *result;
+
+	for(const gchar *c = name != NULL ? name : ""; *c != '\0'; c = g_utf8_next_char(c))
+	{
+		gunichar u = g_utf8_get_char_validated(c, -1);
+
+		if(u == (gunichar)-1 || u == (gunichar)-2)
+		{
+			g_string_append_c(s, '_');
+			continue;
+		}
+		if(u == '/' || u == '\\' || g_unichar_iscntrl(u))
+			g_string_append_c(s, '_');
+		else
+			g_string_append_unichar(s, u);
+	}
+	g_string_append(s, ".gtkterm");
+	result = g_string_free(s, FALSE);
+	return result;
 }

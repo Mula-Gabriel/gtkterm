@@ -18,20 +18,25 @@ typedef enum { GT_PROJECT_SAVED, GT_PROJECT_FAILED, GT_PROJECT_CONFLICT } GtProj
 /* Rappel de l'interface : remplit tab->page (h_paned, v_paned, visibilités) et tab->script_layout pour la page de s */
 typedef void (*GtProjectPageFunc)(GtSession *s, GtProjectTab *tab, gpointer user_data);
 
-/* Propriétés : « open » (b), « path » (s, NULL : sans fichier), « modified » (b), notifiées seulement si elles changent */
+/* Propriétés : « open » (b), « path » (s, NULL : sans fichier), « modified » (b), « name » (s, nom stocké dans le fichier, NULL : aucun), notifiées seulement si elles changent */
 GtProject     *gt_project_new(GtSessionManager *sessions);	/* aucun projet ouvert */
 void           gt_project_set_page_func(GtProject *p, GtProjectPageFunc func, gpointer user_data);
 gboolean       gt_project_is_open(GtProject *p);
 const gchar   *gt_project_get_path(GtProject *p);
-gchar         *gt_project_get_name(GtProject *p);	/* nom de base sans .gtkterm, « Untitled project » sans fichier ; "" si fermé */
+gchar         *gt_project_get_name(GtProject *p);	/* nom affiché : nom stocké, sinon nom de base sans .gtkterm, sinon « Untitled project » ; "" si fermé */
+const gchar   *gt_project_get_stored_name(GtProject *p);	/* nom stocké, NULL : aucun */
+void           gt_project_set_name(GtProject *p, const gchar *name);	/* rogné, vide → NULL ; notifie « name » s'il change ; recalcul de « modified » différé */
+/* Projet ouvert avec fichier : renomme le fichier. new_path = chemin actuel : TRUE sans rien faire. Cible existante : G_FILE_ERROR_EXIST ; renommage
+ * échoué : GError ; succès : chemin et identité retenus (pas de conflit au prochain enregistrement). */
+gboolean       gt_project_move_file(GtProject *p, const gchar *new_path, GError **error);
 gboolean       gt_project_is_modified(GtProject *p);
 /* Sessions du gestionnaire dans l'ordre : profil (options et auto-reconnect recopiés, macros_file NULL), nom de profil, copie du jeu, texte du script,
  * état de page (rappel) ; active = index de la session active */
 GtProjectData *gt_project_capture(GtProject *p);
-/* Projet ouvert : chaque session (et chaque session ajoutée ensuite) passe en in-project ; instantané de référence = celui de saved (données lues
+/* Projet ouvert : chaque session (et chaque session ajoutée ensuite) passe en in-project ; nom = celui de saved (NULL sans saved), instantané de référence = celui de saved (données lues
  * du fichier), ou de la capture actuelle si saved est NULL ; path NULL : sans fichier ; stamp NULL : inconnu. Puis calcul de « modified ». */
 void           gt_project_begin(GtProject *p, const gchar *path, const GtFileStamp *stamp, const GtProjectData *saved);
-void           gt_project_end(GtProject *p);	/* plus de projet : open FALSE, path NULL, modified FALSE (les sessions restent comme elles sont) */
+void           gt_project_end(GtProject *p);	/* plus de projet : open FALSE, path NULL, name NULL, modified FALSE (les sessions restent comme elles sont) */
 /* path NULL : chemin courant (obligatoire). CONFLICT : même chemin, fichier changé sur le disque, !force ; rien n'est écrit. SAVED : chemin et
  * identité retenus, instantané = capture enregistrée, modified FALSE. FAILED : GError ; projet fermé : FAILED (« No project is open »), rien écrit ni changé
  * (appeler gt_project_begin d'abord). Identité inconnue (begin sans stamp) : aucun contrôle de conflit jusqu'au premier enregistrement réussi. */
