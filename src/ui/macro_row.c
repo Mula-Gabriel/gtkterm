@@ -313,8 +313,6 @@ static void gt_macro_list_row_class_init(GtMacroListRowClass *klass)
 	list_props[LIST_PROP_LIST] = g_param_spec_string("list", NULL, NULL, "", flags);
 	list_props[LIST_PROP_DISPLAY] = g_param_spec_string("display", NULL, NULL, "", flags);
 	list_props[LIST_PROP_VALUE] = g_param_spec_string("value", NULL, NULL, "", flags);
-	row_props[ROW_PROP_ARG_OPTIONAL] = g_param_spec_boxed("arg-optional", NULL, NULL, G_TYPE_STRV, flags);
-	row_props[ROW_PROP_ARG_PREFIX] = g_param_spec_boxed("arg-prefix", NULL, NULL, G_TYPE_STRV, flags);
 	g_object_class_install_properties(object_class, LIST_N_PROPS, list_props);
 }
 
