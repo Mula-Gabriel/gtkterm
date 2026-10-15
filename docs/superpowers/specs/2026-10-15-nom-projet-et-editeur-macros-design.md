@@ -192,6 +192,22 @@ des macros sont conservés.
   mise en page (séparateur sous les boutons).
 - Traductions dans `po/fr.po` ; CLAUDE.md et NEWS mis à jour.
 
+## 7 bis. Précisions fixées à la rédaction du plan
+
+- Le regroupement du cœur se fait **dans les fonctions de lecture** (`gt_macro_set_from_key_file()`, lecture de l'ancien format) : tout `.ini`, modèle,
+  base en cache ou jeu intégré d'un projet est regroupé dès sa lecture, sans appel dispersé dans `macros.c`.
+- Add **sans filtre** : la nouvelle macro prend l'onglet de la dernière ligne sélectionnée (aucune sélection : onglet vide, en fin de liste) ; Add Entry
+  sans filtre prend la liste de l'entrée sélectionnée (aucune : « NewList »). Ainsi un ajout ne casse jamais le regroupement.
+- Move Up/Down : tout ou rien, comme aujourd'hui ; le déplacement est refusé s'il changerait la suite des groupes (une ligne ne quitte jamais son groupe).
+- Un argument facultatif au-delà des arguments fournis (`n_args` plus petit, `args` NULL, Lua avec moins d'arguments) est omis, jamais laissé en
+  spécificateur littéral.
+- Découpage du préfixe : sans espace avant le spécificateur, on remonte jusqu'à la fin du spécificateur précédent ou au début de l'action
+  (`AT+X=%d,%d` → préfixe `,` pour l'argument 2) ; un `%%` du texte déplacé devient `%` dans le préfixe, et redevient `%%` à la réinsertion ; un
+  espace précédé d'un antislash n'est jamais un point de coupe (préfixe vide).
+- Renommer : les refus (« A file named %s already exists. », « Cannot rename the project file: %s ») s'affichent dans la fenêtre (`rename-error`),
+  qui reste ouverte.
+- Aperçu : un argument omis donne un segment `GT_MACRO_SEG_OMITTED` de longueur 0 et un run `GT_PREVIEW_OMITTED` de texte « ∅ ».
+
 ## 8. Hors périmètre
 
 Filtre enregistré entre deux ouvertures ; renommer les onglets du panneau depuis l'éditeur ; préfixe pour une autre partie que celle qui précède
