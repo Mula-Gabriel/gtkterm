@@ -1,5 +1,5 @@
 # Modèles de macros liés (spec docs/superpowers/specs/2026-10-15-modeles-macros-design.md, §3 « GUI ») : dans un projet, « Load macros file… »
-# → « Link as template » lie l'onglet au .ini (clé template de test-sessions, libellé « Template: … » de Configure Macros) ; une valeur par défaut
+# → « Link as template » lie l'onglet au .ini (clé template de test-sessions, libellé « Template: … » de Configure Macros, macro-source-label) ; une valeur par défaut
 # changée → « Keep in this project » : le modèle n'est pas réécrit, le panneau montre la valeur propre ; Save project écrit macros_template et un
 # groupe [tab:0:override:1] ; le modèle réécrit sur le disque puis le projet rouvert : flash « Macros template … updated », valeur propre et nouvelle
 # valeur du modèle visibles, projet non modifié ; « Save to template » écrit la valeur changée, jamais la valeur propre ; un nouvel onglet copie le
@@ -76,8 +76,9 @@ origine = octets()
 
 # 2. Configure Macros : libellé du modèle ; A = 10 → « Keep in this project » : modèle inchangé, panneau à 10
 open_editor(e)
-info = e.find1(name='macro-template-info')
+info = e.find1(name='macro-source-label')
 check(info.get('label') == 'Template: ' + modele, 'libelle du modele : %r' % info.get('label'))
+check(e.find(name='macro-reload'), 'onglet lie : bouton Reload visible')
 e.activate('macro-ok')	# rien de changé : l'éditeur se ferme sans question
 check(wait_until(lambda: not e.find(name='macro-editor'), 3), 'editeur ferme sans question (aucun changement)')
 check(e.alerts() == [], 'aucune question sans changement : %r' % e.alerts())
@@ -162,8 +163,9 @@ check(wait_until(lambda: 'A2' in macro_buttons(e), 5), 'panneau : A2 : %r' % mac
 check(defaut('A2') == '10' and defaut('C') == '30', 'copie : A2 = 10, C = 30 : %r' % [defaut('A2'), defaut('C')])
 check(octets() == avant, 'Detach and keep a copy : modele inchange')
 open_editor(e)
-check(wait_until(lambda: not e.find(name='macro-template-info'), 3), 'libelle du modele cache')
-check(e.find(name='macro-template-info', mapped=None), 'libelle du modele present mais cache')
+check(wait_until(lambda: e.find1(name='macro-source-label').get('label') == 'Embedded in the project', 3),
+      'onglet detache : integre au projet : %r' % e.find1(name='macro-source-label').get('label'))
+check(not e.find(name='macro-reload'), 'onglet detache : pas de bouton Reload')
 e.activate('macro-ok')
 check(wait_until(lambda: not e.find(name='macro-editor'), 3), 'editeur ferme')
 check(wait_until(lambda: e.project().get('modified') is True, 3), 'projet modifie par le detachement')

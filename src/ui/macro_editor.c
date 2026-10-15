@@ -1,6 +1,7 @@
 /* macro_editor.c — fenêtre « Configure Macros » (interface GTK 4, spec 6a §6.5) : non modale, une par session (6b, spec §3.2-12), pages
  * Macros et Lists. Les lignes sont des copies (GtMacroRow, GtMacroListRow) : rien n'est appliqué avant OK ou la fermeture par la barre de
- * titre ; Cancel jette tout. Un jeu remplacé pendant l'édition, ou la session fermée, ferme la fenêtre sans rien enregistrer. La fenêtre
+ * titre ; Cancel jette tout. Un jeu remplacé pendant l'édition, ou la session fermée, ferme la fenêtre sans rien enregistrer, sauf le
+ * Reload de l'éditeur lui-même (spec 2026-10-15 §4), qui refait les lignes depuis le fichier ou le modèle relu. La fenêtre
  * n'est pas rattachée à l'application : ses raccourcis (Ctrl+Maj+Q…) ne s'y appliquent pas, la capture reçoit toutes les touches.
  * L'état est attaché à la fenêtre ; les rappels le retrouvent par la fenêtre racine de leur widget. */
 
@@ -57,8 +58,11 @@ typedef struct
 	GtkWidget         *preview_box;	/* « macro-preview-box » (pointeurs faibles) : aperçu de la ligne envoyée */
 	GtkWidget         *preview;	/* « macro-preview » */
 	GtkWidget         *preview_bytes;	/* « macro-preview-bytes » */
-	GtkWidget         *template_info;	/* « macro-template-info » : modèle lié, caché si l'onglet n'est pas lié */
-	gboolean           asking;	/* question du modèle en cours (spec modèles §2.7) : OK sans effet, fermeture refusée */
+	GtkWidget         *source_label;	/* « macro-source-label » (pointeur faible) : modèle, fichier, intégré au projet ou aucun fichier (spec §4) */
+	GtkWidget         *reload;	/* « macro-reload » (pointeur faible) : visible pour un modèle ou un fichier, insensible pendant une question */
+	gboolean           asking;	/* question en cours (modèle, spec modèles §2.7, ou Reload) : OK et Reload sans effet, fermeture refusée */
+	gboolean           reloading;	/* Reload en cours : un jeu remplacé refait les lignes au lieu de fermer la fenêtre */
+	gboolean           reloaded;	/* lignes refaites pendant ce Reload (crochet macros_changed) */
 } MacroEditor;
 
 /* Question posée sur un onglet lié : la réponse retrouve l'éditeur par sa fenêtre (jamais le MacroEditor, libéré avec elle) et n'applique rien
@@ -69,6 +73,13 @@ typedef struct
 	guint64          generation;
 	GtMacrosEditKind kind;	/* DEFAULTS, STRUCTURE ; NONE : question de conflit du modèle */
 } TemplateQuestion;
+
+/* Question de Reload (lignes modifiées) : même modèle que TemplateQuestion */
+typedef struct
+{
+	GWeakRef window;
+	guint64  generation;
+} ReloadQuestion;
 
 /* Cellule d'une colonne : propriété de la ligne, nom du widget, sélection de la vue */
 typedef struct
@@ -97,7 +108,8 @@ static const gchar *help_text = N_(
 static void on_defaults_items_changed(GListModel *model, guint position, guint removed, guint added, gpointer data);
 static void on_defaults_selection_changed(GtkSelectionModel *model, guint position, guint n_items, gpointer data);
 static void defaults_unwatch(MacroEditor *editor);
-static void template_info_update(MacroEditor *editor, GtMacros *macros);
+static void source_update(MacroEditor *editor, GtMacros *macros);
+static void defaults_rebuild(MacroEditor *editor);
 
 /* État de l'éditeur dont w fait partie (fenêtre racine) ; NULL si la fenêtre est en destruction */
 static MacroEditor *editor_of(GtkWidget *w)
@@ -133,6 +145,14 @@ static void stop_capture(MacroEditor *editor)
 		return;
 	g_clear_object(&editor->capture_row);
 	set_message(editor, NULL, FALSE);
+}
+
+/* Question en cours ou non (modèle, Reload) : le bouton Reload suit */
+static void asking_set(MacroEditor *editor, gboolean value)
+{
+	editor->asking = value;
+	if(editor->reload != NULL)
+		gtk_widget_set_sensitive(editor->reload, !value);
 }
 
 /* Positions sélectionnées, croissantes ; g_free */
@@ -771,7 +791,7 @@ static void on_template_choice(gint choice, gpointer data)
 	gboolean close = FALSE;
 
 	if(editor != NULL)
-		editor->asking = FALSE;
+		asking_set(editor, FALSE);
 	/* Fenêtre détruite, session fermée, jeu remplacé ou changé entre-temps : rien n'est appliqué, la fenêtre (si elle vit) reste ouverte */
 	if(macros != NULL && gt_macros_get_set(macros) == editor->set && gt_macros_get_generation(macros) == q->generation && choice >= 0)
 	{
@@ -820,7 +840,7 @@ static void ask_template(MacroEditor *editor, GtMacros *macros, GtMacrosEditKind
 	g_weak_ref_init(&q->window, editor->window);
 	q->generation = gt_macros_get_generation(macros);
 	q->kind = kind;
-	editor->asking = TRUE;
+	asking_set(editor, TRUE);
 	if(kind == GT_MACROS_EDIT_NONE)
 	{
 		const gchar *const labels[] = { _("Overwrite"), _("Reload"), _("Cancel"), NULL };
@@ -887,6 +907,106 @@ static gboolean apply_edits(MacroEditor *editor)
 	return FALSE;
 }
 
+/* Store de la page rempli à nouveau avec les objets de fresh (pris) ; un seul items-changed */
+static void store_replace(GListStore *store, GListStore *fresh)
+{
+	guint n = fresh != NULL ? g_list_model_get_n_items(G_LIST_MODEL(fresh)) : 0;
+	gpointer *items = g_new(gpointer, MAX(n, 1));
+
+	for(guint i = 0; i < n; i++)
+		items[i] = g_list_model_get_item(G_LIST_MODEL(fresh), i);
+	g_list_store_splice(store, 0, g_list_model_get_n_items(G_LIST_MODEL(store)), items, n);
+	for(guint i = 0; i < n; i++)
+		g_object_unref(items[i]);
+	g_free(items);
+	g_clear_object(&fresh);
+}
+
+/* Lignes refaites depuis set (Reload, spec §4) : macros et listes regroupées, filtres gardés si leur clé existe encore, table des arguments,
+ * aperçu et ligne du fichier ; set devient le jeu édité */
+static void editor_reload_rows(MacroEditor *editor, GtMacroSet *set)
+{
+	GtMacros *macros = editor_macros(editor);
+
+	stop_capture(editor);
+	g_clear_handle_id(&editor->regroup_source, g_source_remove);	/* regroupements des anciennes lignes : refaits ci-dessous */
+	editor->set = set;
+	store_replace(editor->rows, gt_macro_rows_from_set(set));
+	store_replace(editor->list_rows, gt_macro_list_rows_from_lists(set != NULL ? gt_macro_set_get_lists(set) : NULL));
+	regroup(editor, PAGE_MACROS);
+	regroup(editor, PAGE_LISTS);
+	defaults_rebuild(editor);
+	source_update(editor, macros);
+	editor->reloaded = TRUE;
+}
+
+/* Relit le modèle (onglet lié) ou le fichier courant ; l'éditeur reste ouvert sur les lignes relues ; échec : rien ne change */
+static void do_reload(MacroEditor *editor, GtMacros *macros)
+{
+	gboolean ok;
+
+	stop_capture(editor);
+	set_message(editor, NULL, FALSE);
+	editor->reloading = TRUE;
+	editor->reloaded = FALSE;
+	ok = gt_macros_get_template(macros) != NULL ? gt_macros_reload_template(macros) : gt_macros_reload(macros);
+	editor->reloading = FALSE;
+	if(ok && !editor->reloaded)	/* sans crochet macros_changed (ne devrait pas arriver) : lignes refaites quand même */
+		editor_reload_rows(editor, gt_macros_get_set(macros));
+	if(!ok)
+		set_message(editor, _("Cannot reload the macros file."), TRUE);	/* le détail est déjà passé par le crochet message */
+}
+
+/* Réponse à « Discard your changes and reload the macros file? » : Reload (0) seulement si la fenêtre vit et que rien n'a changé entre-temps */
+static void on_reload_choice(gint choice, gpointer data)
+{
+	ReloadQuestion *q = data;
+	GtkWidget *window = g_weak_ref_get(&q->window);
+	MacroEditor *editor = window != NULL ? g_object_get_data(G_OBJECT(window), EDITOR_KEY) : NULL;
+	GtMacros *macros = editor != NULL ? editor_macros(editor) : NULL;
+
+	if(editor != NULL)
+		asking_set(editor, FALSE);
+	if(macros != NULL && choice == 0 && gt_macros_get_set(macros) == editor->set && gt_macros_get_generation(macros) == q->generation)
+		do_reload(editor, macros);
+	g_clear_object(&window);
+	g_weak_ref_clear(&q->window);
+	g_free(q);
+}
+
+/* Reload (spec §4) : question si les lignes diffèrent du jeu courant (même test que l'OK), sinon relecture tout de suite */
+static void on_reload(GtkButton *button, gpointer data)
+{
+	MacroEditor *editor = editor_of(GTK_WIDGET(button));
+	GtMacros *macros = editor != NULL ? editor_macros(editor) : NULL;
+	GtMacroEdit *edits;
+	GtMacroLists *lists;
+	GtMacrosEditKind kind;
+	guint n = 0;
+
+	if(macros == NULL || editor->asking || gt_macros_get_set(macros) != editor->set)
+		return;
+	stop_capture(editor);
+	edits = editor_edits(editor, &n, &lists);
+	kind = gt_macros_classify_edits(macros, edits, n, lists);
+	g_free(edits);
+	gt_macro_lists_free(lists);
+	if(kind == GT_MACROS_EDIT_NONE)
+		do_reload(editor, macros);
+	else
+	{
+		ReloadQuestion *q = g_new0(ReloadQuestion, 1);
+		const gchar *const labels[] = { _("Reload"), _("Cancel"), NULL };
+		const gchar *path = gt_macros_get_template(macros) != NULL ? gt_macros_get_template(macros) : gt_macros_get_path(macros);
+
+		g_weak_ref_init(&q->window, editor->window);
+		q->generation = gt_macros_get_generation(macros);
+		asking_set(editor, TRUE);
+		/* Cancel par défaut, Reload destructeur : Entrée ne jette jamais les modifications */
+		gt_ui_choose(GTK_WINDOW(editor->window), _("Discard your changes and reload the macros file?"), path, labels, 1, 0, on_reload_choice, q);
+	}
+}
+
 static void on_ok(GtkButton *button, gpointer data)
 {
 	MacroEditor *editor = editor_of(GTK_WIDGET(button));
@@ -933,6 +1053,10 @@ static void on_destroy(GtkWidget *window, gpointer data)
 	g_signal_handlers_disconnect_by_func(editor->rows, on_filter_items_changed, editor);
 	g_signal_handlers_disconnect_by_func(editor->list_rows, on_filter_items_changed, editor);
 	g_clear_handle_id(&editor->regroup_source, g_source_remove);
+	/* Les filtres tiennent editor sans notification de destruction et survivent peut-être à l'état (vue en cours de destruction) */
+	for(gint page = PAGE_MACROS; page <= PAGE_LISTS; page++)
+		if(editor->filter[page] != NULL)
+			gtk_custom_filter_set_filter_func(editor->filter[page], NULL, NULL, NULL);
 	s = g_weak_ref_get(&editor->session);
 	if(s != NULL && g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) == window)
 		g_object_set_data(G_OBJECT(s), SESSION_EDITOR_KEY, NULL);
@@ -948,7 +1072,7 @@ static void editor_free(gpointer data)
 	g_clear_handle_id(&editor->regroup_source, g_source_remove);
 	defaults_unwatch(editor);
 	for(GtkWidget **const *w = (GtkWidget **const[]){ &editor->defaults, &editor->defaults_scroll, &editor->preview_box, &editor->preview,
-	                                                  &editor->preview_bytes, &editor->template_info, &editor->filter_dd[PAGE_MACROS],
+	                                                  &editor->preview_bytes, &editor->source_label, &editor->reload, &editor->filter_dd[PAGE_MACROS],
 	                                                  &editor->filter_dd[PAGE_LISTS], &editor->settings_separator, &editor->settings_box, NULL };
 	    *w != NULL; w++)
 		if(**w != NULL)
@@ -967,13 +1091,13 @@ static void editor_free(gpointer data)
 	g_free(editor);
 }
 
-/* Réglage enregistrable changé (signal « edited » : détachement par le menu…) : libellé du modèle à jour */
+/* Réglage enregistrable changé (signal « edited » : détachement par le menu, entrée dans un projet…) : ligne du fichier à jour */
 static void on_session_edited(GtSession *s, gpointer window)
 {
 	MacroEditor *editor = g_object_get_data(G_OBJECT(window), EDITOR_KEY);
 
 	if(editor != NULL && !gt_session_is_shut_down(s))
-		template_info_update(editor, gt_session_get_macros(s));
+		source_update(editor, gt_session_get_macros(s));
 }
 
 /* Session fermée pendant l'édition (signal « closed ») : fenêtre fermée sans rien appliquer (spec §3.2-12) */
@@ -984,21 +1108,62 @@ static void on_session_closed(GtSession *s, gpointer window)
 
 /* --- Construction --- */
 
-/* Libellé « Template: … » (spec modèles §2.10) : chemin complet du modèle lié, caché si l'onglet n'est pas lié */
-static void template_info_update(MacroEditor *editor, GtMacros *macros)
+/* Ligne du fichier visé (spec §4) : « Template: <chemin> » (lié), « Embedded in the project », « File: <chemin> » ou « No macros file » ;
+ * Reload visible pour un modèle ou un fichier hors projet */
+static void source_update(MacroEditor *editor, GtMacros *macros)
 {
-	const gchar *path = macros != NULL ? gt_macros_get_template(macros) : NULL;
+	GtSession *s = g_weak_ref_get(&editor->session);
+	const gchar *tpl = macros != NULL ? gt_macros_get_template(macros) : NULL;
+	const gchar *path = macros != NULL ? gt_macros_get_path(macros) : NULL;
+	gboolean in_project = s != NULL && gt_session_get_in_project(s);
+	gchar *text;
 
-	if(editor->template_info == NULL)
-		return;
-	if(path != NULL)
+	if(editor->source_label == NULL)
 	{
-		gchar *text = g_strdup_printf(_("Template: %s"), path);
-
-		gtk_label_set_text(GTK_LABEL(editor->template_info), text);
-		g_free(text);
+		g_clear_object(&s);
+		return;
 	}
-	gtk_widget_set_visible(editor->template_info, path != NULL);
+	if(tpl != NULL)
+		text = g_strdup_printf(_("Template: %s"), tpl);
+	else if(in_project)
+		text = g_strdup(_("Embedded in the project"));
+	else if(path != NULL)
+		text = g_strdup_printf(_("File: %s"), path);
+	else
+		text = g_strdup(_("No macros file"));
+	gtk_label_set_text(GTK_LABEL(editor->source_label), text);
+	if(editor->reload != NULL)
+		gtk_widget_set_visible(editor->reload, tpl != NULL || (!in_project && path != NULL));
+	g_free(text);
+	g_clear_object(&s);
+}
+
+/* Boîte « macro-source » : libellé du fichier visé et bouton Reload */
+static GtkWidget *build_source_box(MacroEditor *editor)
+{
+	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+	GtkWidget *label = gtk_label_new(NULL);
+	GtkWidget *reload = gtk_button_new_with_label(_("Reload"));
+
+	gtk_widget_set_name(box, "macro-source");
+	gtk_widget_set_name(label, "macro-source-label");
+	gtk_accessible_update_property(GTK_ACCESSIBLE(label), GTK_ACCESSIBLE_PROPERTY_LABEL, _("Macros file"), -1);
+	gtk_label_set_wrap(GTK_LABEL(label), TRUE);
+	gtk_label_set_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
+	gtk_label_set_selectable(GTK_LABEL(label), TRUE);
+	gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+	gtk_widget_set_hexpand(label, TRUE);
+	gtk_widget_set_name(reload, "macro-reload");
+	gtk_accessible_update_property(GTK_ACCESSIBLE(reload), GTK_ACCESSIBLE_PROPERTY_LABEL, _("Reload"), -1);
+	gtk_widget_set_valign(reload, GTK_ALIGN_CENTER);
+	g_signal_connect(reload, "clicked", G_CALLBACK(on_reload), NULL);
+	gtk_box_append(GTK_BOX(box), label);
+	gtk_box_append(GTK_BOX(box), reload);
+	editor->source_label = label;
+	editor->reload = reload;
+	g_object_add_weak_pointer(G_OBJECT(label), (gpointer *)&editor->source_label);
+	g_object_add_weak_pointer(G_OBJECT(reload), (gpointer *)&editor->reload);
+	return box;
 }
 
 static GtkWidget *add_button(GtkWidget *box, const gchar *mnemonic, const gchar *name, GCallback callback, gint page)
@@ -1342,8 +1507,6 @@ static void preview_render(MacroEditor *editor)
 	gt_macro_set_free(set);
 }
 
-static void defaults_rebuild(MacroEditor *editor);
-
 /* Ligne affichée modifiée : action → table refaite ; défauts ou limites → aperçu */
 static void on_defaults_row_notify(GObject *row, GParamSpec *pspec, gpointer data)
 {
@@ -1685,7 +1848,7 @@ static GtkWidget *build_page(MacroEditor *editor, gint page)
 
 void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 {
-	GtkWidget *vbox, *stack, *switcher, *bottom, *open;
+	GtkWidget *vbox, *stack, *switcher, *bottom, *open, *source;
 	GtkEventController *keys;
 	MacroEditor *editor;
 	gchar *title;
@@ -1746,20 +1909,13 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	gtk_label_set_wrap(GTK_LABEL(editor->message), TRUE);
 	gtk_label_set_xalign(GTK_LABEL(editor->message), 0.0);
 	gtk_widget_set_visible(editor->message, FALSE);
-	editor->template_info = gtk_label_new(NULL);
-	g_object_add_weak_pointer(G_OBJECT(editor->template_info), (gpointer *)&editor->template_info);
-	gtk_widget_set_name(editor->template_info, "macro-template-info");
-	gtk_accessible_update_property(GTK_ACCESSIBLE(editor->template_info), GTK_ACCESSIBLE_PROPERTY_LABEL, _("Macros template"), -1);
-	gtk_label_set_wrap(GTK_LABEL(editor->template_info), TRUE);
-	gtk_label_set_wrap_mode(GTK_LABEL(editor->template_info), PANGO_WRAP_WORD_CHAR);
-	gtk_label_set_selectable(GTK_LABEL(editor->template_info), TRUE);
-	gtk_label_set_xalign(GTK_LABEL(editor->template_info), 0.0);
-	template_info_update(editor, gt_session_get_macros(s));
+	source = build_source_box(editor);
+	source_update(editor, gt_session_get_macros(s));
 	bottom = button_row();
 	add_button(bottom, _("Help"), "macro-help", G_CALLBACK(on_help), 0);
 	add_button(bottom, _("Cancel"), "macro-cancel", G_CALLBACK(on_cancel), 0);
 	add_button(bottom, _("OK"), "macro-ok", G_CALLBACK(on_ok), 0);
-	gtk_box_append(GTK_BOX(vbox), editor->template_info);
+	gtk_box_append(GTK_BOX(vbox), source);
 	gtk_box_append(GTK_BOX(vbox), switcher);
 	gtk_box_append(GTK_BOX(vbox), stack);
 	gtk_box_append(GTK_BOX(vbox), editor->message);
@@ -1770,16 +1926,19 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 }
 
 /* Comparaison de pointeurs sûre : gt_macros_replace_set crée le nouveau jeu avant de libérer l'ancien et appelle ce crochet à chaque
- * remplacement ; editor->set n'est jamais déréférencé une fois différent du jeu courant. */
+ * remplacement ; editor->set n'est jamais déréférencé une fois différent du jeu courant. Pendant un Reload de cet éditeur, les lignes sont
+ * refaites depuis le jeu relu (remplacé ou modifié en place) et la fenêtre reste ouverte. */
 void gt_macro_editor_macros_changed(GtSession *s)
 {
 	GtkWidget *window = s != NULL ? g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) : NULL;
 	MacroEditor *editor = window != NULL ? g_object_get_data(G_OBJECT(window), EDITOR_KEY) : NULL;
 
-	if(editor != NULL && gt_macros_get_set(gt_session_get_macros(s)) != editor->set)
+	if(editor != NULL && editor->reloading)
+		editor_reload_rows(editor, gt_macros_get_set(gt_session_get_macros(s)));
+	else if(editor != NULL && gt_macros_get_set(gt_session_get_macros(s)) != editor->set)
 		gtk_window_destroy(GTK_WINDOW(window));	/* sans close-request : rien n'est appliqué ni enregistré */
 	else if(editor != NULL)
-		template_info_update(editor, gt_session_get_macros(s));	/* lien détaché ou rafraîchi */
+		source_update(editor, gt_session_get_macros(s));	/* lien détaché ou rafraîchi */
 }
 
 void gt_macro_editor_close(GtSession *s)

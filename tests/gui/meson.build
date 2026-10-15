@@ -99,6 +99,7 @@ gui_scenarios = [
 	'test_macros_modele',
 	'test_macro_editor_colonnes',
 	'test_macro_editor_filtre',
+	'test_macro_editor_recharger',
 ]
 
 foreach s : gui_scenarios
