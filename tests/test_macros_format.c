@@ -245,16 +245,17 @@ typedef struct
 {
 	const gchar *action;
 	gint nombre;
-	const gchar *infos;	/* « type:liste:libellé » séparés par « | », « - » si absent */
+	const gchar *infos;	/* « type:liste:libellé:spécificateur » séparés par « | », « - » si absent */
 } cas_arguments_t;
 
 static const cas_arguments_t cas_arguments[] =
 {
-	{ "%#Mode %d", 2, "l:Mode:-|d:-:-" },
+	{ "%#Mode %d", 2, "l:Mode:-:%#Mode|d:-:-:%d" },
 	{ "%%d", 0, "" },
 	{ "%&", 0, "" },
-	{ "[Speed] %d", 1, "d:-:Speed" },
-	{ "%d %s %f", 3, "d:-:-|s:-:-|f:-:-" },
+	{ "[Speed] %d", 1, "d:-:Speed:%d" },
+	{ "%d %s %f", 3, "d:-:-:%d|s:-:-:%s|f:-:-:%f" },
+	{ "V%.1f;%-5s%hhu%#x", 4, "f:-:-:%.1f|s:-:-:%-5s|hhu:-:-:%hhu|x:-:-:%#x" },
 	{ "plain", 0, "" },
 };
 
@@ -267,7 +268,7 @@ test_arguments(gconstpointer data)
 	GString *texte = g_string_new(NULL);
 
 	for(gint i = 0; i < n; i++)
-		g_string_append_printf(texte, "%s%s:%s:%s", i ? "|" : "", infos[i].type, infos[i].list_name ? infos[i].list_name : "-", infos[i].label ? infos[i].label : "-");
+		g_string_append_printf(texte, "%s%s:%s:%s:%s", i ? "|" : "", infos[i].type, infos[i].list_name ? infos[i].list_name : "-", infos[i].label ? infos[i].label : "-", infos[i].spec);
 	g_assert_cmpint(macro_count_format_args(listes, c->action), ==, c->nombre);
 	g_assert_cmpint(n, ==, c->nombre);
 	g_assert_cmpstr(texte->str, ==, c->infos);

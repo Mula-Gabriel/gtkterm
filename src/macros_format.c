@@ -406,6 +406,7 @@ macro_get_arg_infos (const GtMacroLists *lists, const gchar *action, gint *count
           {
             infos[idx].type = g_strdup ("l");
             infos[idx].list_name = list_name;
+            infos[idx].spec = g_strndup (&action[i], end - i + 1);
             idx++;
             i = end;
             continue;
@@ -418,6 +419,7 @@ macro_get_arg_infos (const GtMacroLists *lists, const gchar *action, gint *count
         {
           infos[idx].type = t;
           infos[idx].list_name = NULL;
+          infos[idx].spec = g_strndup (&action[i], end - i + 1);
           idx++;
           i = end;
         }
@@ -436,6 +438,7 @@ macro_arg_infos_free (macro_arg_info_t *infos, gint count)
       g_free (infos[i].list_name);
       g_free (infos[i].label);
       g_free (infos[i].type);
+      g_free (infos[i].spec);
     }
   g_free (infos);
 }

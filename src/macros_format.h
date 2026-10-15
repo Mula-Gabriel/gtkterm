@@ -20,6 +20,7 @@ typedef struct
   gchar *type;
   gchar *list_name;
   gchar *label;
+  gchar *spec;       /* spécificateur tel qu'écrit dans l'action, sans libellé : « %.1f », « %#Mode » */
 } macro_arg_info_t;
 
 macro_arg_info_t *macro_get_arg_infos    (const GtMacroLists *lists, const gchar *action, gint *count_out);
