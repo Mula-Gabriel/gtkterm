@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-14 23:11+0200\n"
+"POT-Creation-Date: 2026-10-15 02:19+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,6 +16,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
 #: src/app_config.c:213
 #, c-format
@@ -263,23 +264,137 @@ msgstr ""
 msgid "device removed"
 msgstr ""
 
+#: src/macro_arg.c:245 src/macro_arg.c:268
+msgid "text"
+msgstr ""
+
+#: src/macro_arg.c:247
+msgid "list"
+msgstr ""
+
+#: src/macro_arg.c:255
+msgid "integer"
+msgstr ""
+
+#: src/macro_arg.c:257
+msgid "unsigned"
+msgstr ""
+
+#: src/macro_arg.c:260
+msgid "hexadecimal"
+msgstr ""
+
+#: src/macro_arg.c:262
+msgid "octal"
+msgstr ""
+
+#: src/macro_arg.c:264
+msgid "decimal"
+msgstr ""
+
+#: src/macro_arg.c:266
+msgid "character"
+msgstr ""
+
+#. nan, inf : refusés dès qu'une limite existe
+#: src/macro_arg.c:403 src/macro_arg.c:466 src/macro_arg.c:479
+#, c-format
+msgid "not a valid %s"
+msgstr ""
+
+#: src/macro_arg.c:435
+#, c-format
+msgid "character \"%s\" not allowed"
+msgstr ""
+
+#: src/macro_arg.c:448
+#, c-format
+msgid "%u bytes, at least %s"
+msgstr ""
+
+#: src/macro_arg.c:450
+#, c-format
+msgid "%u bytes, at most %s"
+msgstr ""
+
+#: src/macro_arg.c:481
+#, c-format
+msgid "below minimum %s"
+msgstr ""
+
+#: src/macro_arg.c:483
+#, c-format
+msgid "above maximum %s"
+msgstr ""
+
+#: src/macro_arg.c:497
+#, c-format
+msgid "list %s"
+msgstr ""
+
+#: src/macro_arg.c:506
+#, c-format
+msgid ", %s – %s"
+msgstr ""
+
+#: src/macro_arg.c:508
+#, c-format
+msgid ", ≥ %s"
+msgstr ""
+
+#: src/macro_arg.c:510
+#, c-format
+msgid ", ≤ %s"
+msgstr ""
+
+#: src/macro_arg.c:512
+msgid " bytes"
+msgstr ""
+
+#: src/macro_arg.c:524
+msgid ", printable ASCII"
+msgstr ""
+
+#: src/macro_arg.c:527
+msgid ", ASCII"
+msgstr ""
+
+#: src/macro_arg.c:530
+msgid ", 8 bits (Latin-1)"
+msgstr ""
+
+#: src/macro_arg.c:533
+#, c-format
+msgid ", characters %s"
+msgstr ""
+
+#: src/macro_arg.c:542
+#, c-format
+msgid " (default %s)"
+msgstr ""
+
 #: src/macro_file.c:62
 #, c-format
 msgid "%s: [%s] %s: invalid escape, value kept as written"
 msgstr ""
 
-#: src/macro_file.c:176
+#: src/macro_file.c:170
+#, c-format
+msgid "%s: [%s] invalid argument limits replaced by none"
+msgstr ""
+
+#: src/macro_file.c:205
 #, c-format
 msgid "Unsupported macros file version (written by a newer GTKTerm?)"
 msgstr ""
 
 #. Des groupes, aucun de connu : fichier étranger refusé, jamais lu comme un jeu vide qui l'écraserait ensuite
-#: src/macro_file.c:323
+#: src/macro_file.c:352
 #, c-format
 msgid "%s is not a GTKTerm macros file"
 msgstr ""
 
-#: src/macro_file.c:380
+#: src/macro_file.c:409
 #, c-format
 msgid ""
 "%s was not overwritten: it is not in the current macros format and its "
@@ -287,7 +402,12 @@ msgid ""
 "save again."
 msgstr ""
 
-#: src/macros.c:156
+#: src/macros.c:171
+#, c-format
+msgid "Macro \"%s\" not sent: argument %d: %s"
+msgstr ""
+
+#: src/macros.c:185
 #, c-format
 msgid "Macro \"%s\" sent!"
 msgstr ""
@@ -296,26 +416,26 @@ msgstr ""
 #. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
 #. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
 #. et l'utilisateur sait que ses macros n'ont pas été lues.
-#: src/macros.c:379 src/macros.c:394
+#: src/macros.c:487 src/macros.c:502
 #, c-format
 msgid "Cannot load macros file: %s"
 msgstr ""
 
-#: src/macros.c:431
+#: src/macros.c:539
 msgid "This tab has no macros file: its macros are saved with the project."
 msgstr ""
 
-#: src/macros.c:439
+#: src/macros.c:547
 #, c-format
 msgid "%s changed on disk: not overwritten"
 msgstr ""
 
-#: src/macros.c:453
+#: src/macros.c:561
 #, c-format
 msgid "%s already exists: not overwritten"
 msgstr ""
 
-#: src/macros.c:466
+#: src/macros.c:574
 #, c-format
 msgid "Cannot save macros file: %s"
 msgstr ""
@@ -477,17 +597,17 @@ msgstr ""
 msgid "Cannot resolve %s: %s\n"
 msgstr ""
 
-#: src/script_engine.c:1641
+#: src/script_engine.c:1664
 #, c-format
 msgid "Script exited with status %lld"
 msgstr ""
 
-#: src/script_engine.c:1649
+#: src/script_engine.c:1672
 #, c-format
 msgid "Lua error: %s"
 msgstr ""
 
-#: src/script_engine.c:1763
+#: src/script_engine.c:1786
 msgid "Script already running."
 msgstr ""
 
@@ -663,7 +783,7 @@ msgstr ""
 msgid "Reload"
 msgstr ""
 
-#: src/ui/app.c:877 src/ui/app.c:908 src/ui/macro_editor.c:842
+#: src/ui/app.c:877 src/ui/app.c:908 src/ui/macro_editor.c:1229
 #: src/ui/macros_save.c:55
 msgid "Cancel"
 msgstr ""
@@ -778,19 +898,20 @@ msgstr ""
 msgid "%d byte(s) sent!"
 msgstr ""
 
-#: src/ui/macro_editor.c:53
+#: src/ui/macro_editor.c:60
 msgid ""
 "Action: the data sent on the port. Plain text, plus the escapes \\r "
 "(carriage return), \\n (line feed), \\t (tab), \\a, \\b, \\f, \\v, \\\\ "
 "(backslash) and \\xHH (one byte in hexadecimal, e.g. \\x0D).\n"
 "\n"
 "Arguments: each specifier gets a field in the macro panel; the value typed "
-"there is used for sending but never saved; set default values below the "
-"table. %d %i (integer), %u %o %x %X (unsigned), %f %e %g %a (decimal "
-"number), %c (character), %s (text), with optional flags, width, precision "
-"and length (e.g. %02X, %.3f, %ld); %% sends a percent sign. %#Name picks a "
-"value from the list \"Name\" of the Lists page; a macro whose only argument "
-"is a list of exactly two values shows two buttons.\n"
+"there is used for sending but never saved; set default values, limits and "
+"character sets in the table of arguments below the list. %d %i (integer), %u "
+"%o %x %X (unsigned), %f %e %g %a (decimal number), %c (character), %s "
+"(text), with optional flags, width, precision and length (e.g. %02X, %.3f, "
+"%ld); %% sends a percent sign. %#Name picks a value from the list \"Name\" "
+"of the Lists page; a macro whose only argument is a list of exactly two "
+"values shows two buttons.\n"
 "\n"
 "Separators: the action %& draws a line in the panel, [Title] %& a line with "
 "a title.\n"
@@ -811,164 +932,223 @@ msgid ""
 "same; \"SPEED %d\\r\" asks for a number."
 msgstr ""
 
-#: src/ui/macro_editor.c:188 src/ui/macro_panel.c:268 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:195 src/ui/macro_panel.c:308 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr ""
 
-#: src/ui/macro_editor.c:357
+#: src/ui/macro_editor.c:364
 msgid "Select a macro first."
 msgstr ""
 
-#: src/ui/macro_editor.c:363
+#: src/ui/macro_editor.c:370
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr ""
 
-#: src/ui/macro_editor.c:387
+#: src/ui/macro_editor.c:394
 msgid "(no label)"
 msgstr ""
 
-#: src/ui/macro_editor.c:393
+#: src/ui/macro_editor.c:400
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
 "Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:395
+#: src/ui/macro_editor.c:402
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
 "cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:419
+#: src/ui/macro_editor.c:426
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
 msgstr ""
 
-#: src/ui/macro_editor.c:715
-msgid "Default values:"
+#: src/ui/macro_editor.c:844
+#, c-format
+msgid "%u byte"
+msgid_plural "%u bytes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/macro_editor.c:922
+msgid "UTF-8"
 msgstr ""
 
-#: src/ui/macro_editor.c:718
-msgid "Default values"
+#: src/ui/macro_editor.c:922
+msgid "Printable ASCII"
 msgstr ""
 
-#: src/ui/macro_editor.c:739
+#: src/ui/macro_editor.c:922 src/ui/menus.ui:87
+msgid "ASCII"
+msgstr ""
+
+#: src/ui/macro_editor.c:922
+msgid "8 bits (Latin-1)"
+msgstr ""
+
+#: src/ui/macro_editor.c:922
+msgid "Custom class"
+msgstr ""
+
+#: src/ui/macro_editor.c:959
+msgid "#"
+msgstr ""
+
+#: src/ui/macro_editor.c:959
+msgid "Format"
+msgstr ""
+
+#: src/ui/macro_editor.c:959
+msgid "Type"
+msgstr ""
+
+#: src/ui/macro_editor.c:959
+msgid "Default"
+msgstr ""
+
+#: src/ui/macro_editor.c:959
+msgid "Min"
+msgstr ""
+
+#: src/ui/macro_editor.c:959
+msgid "Max"
+msgstr ""
+
+#: src/ui/macro_editor.c:959
+msgid "Charset"
+msgstr ""
+
+#: src/ui/macro_editor.c:1004
+msgid "text (bytes)"
+msgstr ""
+
+#: src/ui/macro_editor.c:1062
+msgid "Arguments"
+msgstr ""
+
+#: src/ui/macro_editor.c:1082
+msgid "Line sent (default values):"
+msgstr ""
+
+#: src/ui/macro_editor.c:1126
 msgid "Label"
 msgstr ""
 
-#: src/ui/macro_editor.c:740
+#: src/ui/macro_editor.c:1127
 msgid "Shortcut"
 msgstr ""
 
-#: src/ui/macro_editor.c:741
+#: src/ui/macro_editor.c:1128
 msgid "Action"
 msgstr ""
 
-#: src/ui/macro_editor.c:742
+#: src/ui/macro_editor.c:1129
 msgid "Tab"
 msgstr ""
 
-#: src/ui/macro_editor.c:743
+#: src/ui/macro_editor.c:1130
 msgid "_Add"
 msgstr ""
 
-#: src/ui/macro_editor.c:744 src/ui/profile_dialogs.c:344
+#: src/ui/macro_editor.c:1131 src/ui/profile_dialogs.c:344
 msgid "_Delete"
 msgstr ""
 
-#: src/ui/macro_editor.c:745
+#: src/ui/macro_editor.c:1132
 msgid "_Capture Shortcut"
 msgstr ""
 
-#: src/ui/macro_editor.c:746
+#: src/ui/macro_editor.c:1133
 msgid "Delete Shortcut"
 msgstr ""
 
-#: src/ui/macro_editor.c:747 src/ui/macro_editor.c:759
+#: src/ui/macro_editor.c:1134 src/ui/macro_editor.c:1146
 msgid "Move _Up"
 msgstr ""
 
-#: src/ui/macro_editor.c:748 src/ui/macro_editor.c:760
+#: src/ui/macro_editor.c:1135 src/ui/macro_editor.c:1147
 msgid "Move _Down"
 msgstr ""
 
-#: src/ui/macro_editor.c:754
+#: src/ui/macro_editor.c:1141
 msgid "List"
 msgstr ""
 
-#: src/ui/macro_editor.c:755
+#: src/ui/macro_editor.c:1142
 msgid "Display"
 msgstr ""
 
-#: src/ui/macro_editor.c:756
+#: src/ui/macro_editor.c:1143
 msgid "Value"
 msgstr ""
 
-#: src/ui/macro_editor.c:757
+#: src/ui/macro_editor.c:1144
 msgid "_Add Entry"
 msgstr ""
 
-#: src/ui/macro_editor.c:758
+#: src/ui/macro_editor.c:1145
 msgid "_Delete Entry"
 msgstr ""
 
 #. Titre au nom court de l'onglet (fixé à l'ouverture)
-#: src/ui/macro_editor.c:805
+#: src/ui/macro_editor.c:1192
 #, c-format
 msgid "Configure Macros — %s"
 msgstr ""
 
-#: src/ui/macro_editor.c:829 src/ui/menus.ui:229
+#: src/ui/macro_editor.c:1216 src/ui/menus.ui:229
 msgid "Macros"
 msgstr ""
 
-#: src/ui/macro_editor.c:830
+#: src/ui/macro_editor.c:1217
 msgid "Lists"
 msgstr ""
 
-#: src/ui/macro_editor.c:841 src/ui/menus.ui:267
+#: src/ui/macro_editor.c:1228 src/ui/menus.ui:267
 msgid "Help"
 msgstr ""
 
-#: src/ui/macro_editor.c:843
+#: src/ui/macro_editor.c:1230
 msgid "OK"
 msgstr ""
 
-#: src/ui/macro_panel.c:80
+#: src/ui/macro_panel.c:81
 msgid "General"
 msgstr ""
 
-#: src/ui/macro_panel.c:268
+#: src/ui/macro_panel.c:308
 #, c-format
 msgid ""
 "Shortcut: %s\n"
 "Action: %s"
 msgstr ""
 
-#: src/ui/macro_panel.c:510
+#: src/ui/macro_panel.c:550
 msgid ""
 "No macros defined\n"
 "with labels"
 msgstr ""
 
-#: src/ui/macro_panel.c:566
+#: src/ui/macro_panel.c:606
 msgid "Period must be a whole number of milliseconds from 1 to 86400000."
 msgstr ""
 
-#: src/ui/macro_panel.c:744
+#: src/ui/macro_panel.c:784
 msgid "Period (ms)"
 msgstr ""
 
-#: src/ui/macro_panel.c:752
+#: src/ui/macro_panel.c:792
 msgid "Polling Mode"
 msgstr ""
 
-#: src/ui/macro_panel.c:771 src/ui/macro_panel.c:773
+#: src/ui/macro_panel.c:811 src/ui/macro_panel.c:813
 msgid "Reset arguments"
 msgstr ""
 
@@ -1047,10 +1227,6 @@ msgstr ""
 
 #: src/ui/menus.ui:84
 msgid "View"
-msgstr ""
-
-#: src/ui/menus.ui:87
-msgid "ASCII"
 msgstr ""
 
 #: src/ui/menus.ui:92
