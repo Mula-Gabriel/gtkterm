@@ -39,7 +39,7 @@ Dependencies: `gtk4` ≥ 4.14, `vte-2.91-gtk4` ≥ 0.76, `gtksourceview-5` ≥ 5
 **Layers (sub-projects 2 to 6b):** three layers; a layer never includes a header of the one below it.
 1. **Core** (`gtkterm_core`, GLib/GObject/GIO only, unit-tested): transport (`transport.c`, `serial_termios.c`, `baud.c`, `baudrates.c`), history and rendering
    (`history.c`, `rx_transform.c`, `view_render.c`), `device_match.c`, configuration (`config_file.c`, `profile.c`, `config_store.c`), macros model
-   (`macro_set.c`, `macros_format.c`, `macros_list.c`, `macro_file.c`, `macro_poller.c`), Lua ports (`rx_queue.c`, `script_port.c`), and the sub-project 6a
+   (`macro_set.c`, `macros_format.c`, `macros_list.c`, `macro_file.c`, `macro_poller.c`, `macro_arg.c`, `macro_preview.c`), Lua ports (`rx_queue.c`, `script_port.c`), and the sub-project 6a
    modules: `term_options.c` (`GtTermOptions`), `hex_input.c`, `capture.c`, `file_sender.c` (`GtFileSender`), `rx_logger.c` (`GtRxLogger`), `update_check.c`, `update_versions.c`, `update_fetch.c`,
    `app_ui.c` (`GtAppUi`), `serial_ports.c` (serial device discovery), `port_form.c` (Port dialog validation), `macro_view.c` (macro panel display rules),
    `action_relay.c` (`GtActionRelay`, 6b), `port_activity.c` (`GtPortActivity`: activity state of a port, see below), and the sub-project 6c modules: `profile_keyfile.c` (`GtProfile` ↔ named GKeyFile group, shared by `.gtktermrc`, the macro `.ini` and the
@@ -124,7 +124,7 @@ activity indicator `status-activity` shown only with a single tab: `gt_status_ba
 `search_bar.c`, `hex_send_bar.c` (parsing by `hex_input.c`), `dialogs.c` (`gt_ui_message`, `gt_ui_confirm`, `gt_ui_choose`, `gt_ui_open_file`, `gt_ui_save_file`),
 `port_dialog.c`, `terminal_dialog.c` + `terminal_dialog.ui`, `profile_dialogs.c`, `file_actions.c` + `file_send_window.c`, `macro_shortcuts.c`, `macro_panel.c`,
 `macro_editor.c` (with `macro_row.c`, GLib/GIO rows, and `macro_accel.c`, key logic; both unit-tested without a display), `macro_arg_widget.c` (one argument field, shared by the macro panel and the
-editor's « Default values » area: entry for `%s`/numeric, `GtkDropDown` for `%#List`, `error` class on an invalid entry), `macros_save.c` (`gt_ui_macros_save()`: macros file save with the
+editor's argument table: entry for `%s`/numeric, `GtkDropDown` for `%#List`, checked with the argument's limits, `error` class and the reason in the tooltip on an invalid entry), `macros_save.c` (`gt_ui_macros_save()`: macros file save with the
 Overwrite / Reload / Cancel question), `script_panel.c`, `update_window.c`, `about.c`, `test_hooks.c`.
 **Script panel shown at run time** (`session_view.c`): when it becomes visible at the bottom, it gets at least max(a third of the page height, 150 px) if the vertical separator was never
 set or leaves it less than 150 px (`SCRIPT_PANEL_MIN_HEIGHT`); a saved or dragged position that leaves it 150 px or more is kept as is.
@@ -226,11 +226,20 @@ a `gtkterm.*` function: work on the Lua thread, run any GTK/transport/link side 
 across it, register it through the guarded wrappers (`api_guard`), and make any blocking wait check `stop_requested` at least every 20 ms.** Example scripts
 live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
 
-**Macros subsystem (sub-projects 4, 6a and 6b):**
+**Macros subsystem (sub-projects 4, 6a, 6b and macro arguments, spec `docs/superpowers/specs/2026-10-14-arguments-macros-design.md`):**
 - `macro_set.c` (core) — `GtMacroSet`: ordered macros with a **stable in-memory id** (never reused), label/shortcut/action/tab, stored arguments, polling mode +
   period (1 ms – 24 h), its own named lists (`GtMacroLists`, `macros_list.c`); `gt_macro_expand()` is the only expansion (format then escapes; `n_args < 0` =
   stored arguments); `gt_macro_set_apply_edits()` applies the edit window rows by id, so arguments and polling follow the macro, never the position. `GtMacro.args` are the **default values** of the
-  arguments (saved with the macro); `gt_macro_set_copy()` copies a set.
+  arguments (saved with the macro); `gt_macro_set_copy()` copies a set. **Limits:** `GtMacro.arg_min`, `arg_max`, `arg_charset`, vectors parallel to the
+  arguments like `args` (`""` = no constraint, dropped with `args` when the argument count changes, each limit re-validated for the argument of the same rank);
+  numbers: min/max values; `%s`: min/max length in **bytes sent** and a charset; `%c` and lists: none (`gt_macro_set_set_limits()`). `gt_macro_expand_segments()`
+  gives the same bytes as `gt_macro_expand()` plus segments (text, argument N, escape) for the preview; `gt_macro_check_args()` checks arguments before a send.
+- `macro_arg.c` (core) — one argument's rules: charsets (`""` UTF-8, `printable` 0x20–0x7E, `ascii`, `latin1` sent as **one byte per character**,
+  `class:<chars and ranges a-b, \ escapes>`; `gt_macro_charset_parse`), `gt_macro_arg_limit_valid` / `_limits_valid` (a limit is a valid value of the type;
+  min ≤ max), `gt_macro_arg_encode`, `gt_macro_arg_check` (type, then limits; an empty number counts as 0; verdict + translated reason « above maximum 100 »),
+  `gt_macro_arg_describe` (« integer, 0 – 100 (default 50) »), `gt_macro_arg_type_name`.
+- `macro_preview.c` (core) — preview of the line sent: `gt_macro_preview_runs()` (runs of text, argument, special: control characters named `CR`, `LF`…,
+  else `\xHH`) and `gt_macro_preview_hex()` (uppercase hex, truncated with « … »).
 - `macros_format.c` (core) — printf-style arguments (`%d`, `%s`, `%#ListName`, length modifiers); the lists are passed in (`%#x` is a list only if list `x`
   exists).
 - `macro_file.c` (core) — the standalone `.ini`: v2 format (`[gtkterm-macros] version=2`, `[macro:N]`, `[list:N]`, values escaped by GKeyFile); old
@@ -239,7 +248,8 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   content, the save is refused and nothing is overwritten. A file with groups but none of `[gtkterm-macros]`/`[macros]`/`[lists]` is refused on load
   (`G_KEY_FILE_ERROR_GROUP_NOT_FOUND`); an empty file gives an empty set. A non-interactive load failure (profile) still makes that file the current path
   (empty set, warning shown once the window is up), so later saves never fall back to the default file. The set ↔ GKeyFile functions take a group prefix (`gt_macro_set_to_key_file` /
-  `gt_macro_set_from_key_file`; empty prefix = the `.ini`, `tab:N:` = a project tab). An invalid escape in `args`, `displays` or `values` keeps the raw value with a warning; an empty list is read
+  `gt_macro_set_from_key_file`; empty prefix = the `.ini`, `tab:N:` = a project tab). Keys `arg_min`, `arg_max`, `arg_charset` (lists, written only when one value is not empty; version stays 2, an older GTKTerm ignores them; an invalid
+  limit is dropped with a warning naming file, group and key). An invalid escape in `args`, `displays` or `values` keeps the raw value with a warning; an empty list is read
   back; the refusal when a different `<file>.avant-migration` exists says how to cure it (rename or delete it).
 - `macro_poller.c` (core) — polling scheduler: one GLib timeout per running macro, sends through a callback (`gt_macros_send`), state callback to the
   panel. The running state is never saved.
@@ -247,8 +257,12 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   so a polling keeps sending on its tab's port whatever tab is shown and stops when its tab closes); `gt_macros_send(m, id, args, n)` is the **only** send
   path for panel click, shortcut and polling (it flashes « Macro "%s" sent! » through `status_flash(owner)`), `gt_macros_send_quiet()` the same for Lua
   without the message; UI effects through the `GtAppUi` hooks with the owner session (`macros_changed`, `macro_polling_changed`, `message`). **Arguments (6c):** the panel no longer saves what the user
-  types or picks. `GtMacros` keeps **usage values** (id → arguments, initialised from the defaults, never saved; `gt_macros_set_usage_arg`, `gt_macros_reset_usage` (id 0: all), `gt_macros_has_usage`,
-  `gt_macros_get_args`); every send (click, shortcut, polling, Lua `send_macro`) uses the usage values if any, else `GtMacro.args`; replacing or loading a set clears them. **Embedded mode**
+  types or picks. `GtMacros` keeps **usage values** (id → raw arguments, born empty, never saved; `gt_macros_set_usage_arg`, `gt_macros_reset_usage` (id 0: all), `gt_macros_has_usage`,
+  `gt_macros_get_usage` (raw, read by the panel)); **an empty field means the default value**: `gt_macros_get_args` resolves each argument (non-empty usage
+  value, else default, else `""`; NULL without defaults nor usable usage values, so `V%d` sends `V%d`) and every send (click, shortcut, polling, Lua
+  `send_macro`) uses it; replacing or loading a set clears them. **Refused send:** `gt_macros_check_args` checks the resolved (or Lua) arguments first; an
+  invalid one sends nothing, flashes « Macro "%s" not sent: argument %d: %s » (3 s, not repeated for the same macro within 3 s; polling goes on), Lua
+  gets `false, "invalid argument"`. **Embedded mode**
   (`gt_macros_set_embedded`, a project tab): no file, no write; Configure Macros and polling change the set in memory (`gt_macros_set_edited_func` → the session's `edited`). **Identity guard:** a
   `GtMacros` with a file keeps a `GtFileStamp` (taken before the read); `gt_macros_save_file(m, path, interactive, force)` returns `GT_MACROS_CONFLICT` when the file changed on disk since the last
   read or write, or, without a current file nor a path, when the default file exists and is not empty (never read by this tab: a silent write would lose it) (non-interactive: warning, nothing
@@ -258,15 +272,21 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   the shown tab's macros answer; the shortcut of a sendable macro consumes the key (M43), otherwise the key goes on to the terminal.
 - `src/ui/macro_panel.c` — the button panel, a view of the set and the poller: tabs are grouped toggle buttons in a `GtkFlowBox` + a `GtkStack` of pages;
   right click on a button → polling popover (mode, period applied on Enter and on close; invalid period = `error` style + message in the popover); right click
-  on the tab bar → per-tab check boxes (hidden tabs are not saved; hiding one stops its pollings); argument fields (`macro_arg_widget.c`) write usage values to `GtMacros`, never a file; a
-  button's right-click menu has « Reset arguments »; rebuilding never touches
+  on the tab bar → per-tab check boxes (hidden tabs are not saved; hiding one stops its pollings); argument fields (`macro_arg_widget.c`) write usage values to `GtMacros`, never a file; an empty
+  field shows the default as placeholder and sends it, a field out of limits is red, its tooltip describes the argument (and the reason); a
+  button's right-click menu has « Reset arguments » (empties the fields); rebuilding never touches
   polling.
 - `src/ui/macro_editor.c` — « Configure Macros », non-modal, one instance per session (title « Configure Macros — <short name> »), not attached to the
   application (application accelerators do not apply there, so the capture can see Ctrl+Shift+Q): `GtkColumnView` over a `GListStore` of rows carrying the stable id (no header
   sorting: the order is the user's), Lists page alike; Capture Shortcut refuses a shortcut already taken by a macro or by an application action; OK (or closing
   by the title bar) = `gt_macros_apply_edits()` (`gt_macro_set_apply_edits()` on the current set; a macro whose default values change loses its
-  usage values); the window closes without saving if the set is replaced meanwhile. Under the table, a « Default values » area shows one field per format
-  argument of the selected macro (rebuilt when the action or a list changes; none for a macro without argument); OK applies them with the row. The columns have a fixed starting width, never narrower
+  usage values); the window closes without saving if the set is replaced meanwhile. Under the table, the **argument table** `macro-defaults` (a `GtkGrid`, hidden for a macro without argument)
+  shows one row per format argument of the selected macro by rank (rebuilt when the action or a list changes): `#`, `Format` (`%.1f`, `%#Mode`), `Type`,
+  `Default` (`macro-default-<k>`), `Min`/`Max` (`macro-min-<k>`, `macro-max-<k>`, none for `%c` and lists), `Charset` (`%s` only: `GtkDropDown`
+  `macro-charset-<k>` UTF-8 / Printable ASCII / ASCII / 8 bits (Latin-1) / Custom class, class entry `macro-class-<k>` shown for Custom class); a vector
+  (defaults, min, max, charsets) is kept only when all its fields are valid, a default only if it passes its limits; OK applies them with the row. Below,
+  `macro-preview-box`: « Line sent (default values): », `macro-preview` (Pango markup: arguments blue, red when invalid, specials purple) and
+  `macro-preview-bytes` (« 50 35 30 3B · 4 bytes »), for a single selected sendable row. Default size 820 × 580. The columns have a fixed starting width, never narrower
   than their title (`natural_w` in the test dump), and only the last one takes the remaining room.
 
 Macros and lists live in that standalone `.ini`, separate from the port config; each free tab can use a different file; the last-used path is remembered in the
@@ -356,14 +376,14 @@ prefix, fake `pkexec` counting authorizations) and `publier_version`, `test_upda
 `settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`). Release: `tools/publier-version.sh vX.Y.Z` (clean tree, `meson.build`
 version, `NEWS` section; annotated tag, no push).
 
-**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 67 scenarios drive
+**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 68 scenarios drive
 GTKTerm through three bricks: (1) **D-Bus actions** — `org.gtk.Actions` (`Activate`, `SetState`, `Describe`) on the private session bus; start-up is detected
 when the name `eu.mulagabriel.gtkterm.test.p<PID>` appears; (2) the **test hook** (`src/ui/test_hooks.c`, compiled unless `-Dtest_hooks=false`, active only
 when `GTKTERM_TEST_HOOKS=1`, which also switches the application id to `eu.mulagabriel.gtkterm.test.p<PID>` without `NON_UNIQUE`): actions `app.test-dump`
 (every widget of the visible windows and popovers: type, accessible role, label, widget name, CSS classes `css`, flags, geometry), `app.test-terminal-text`,
 `app.test-terminal-props` (both on the active tab), `app.test-activate(s)`, `app.test-set-text((ss))`, `app.test-sessions` (state `aa{sv}`, one dict per tab in
 order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`, `activity` (state nick), `unread`), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name`); the dump also gives
-`natural_w` (natural width measured by `gtk_widget_measure`, for mapped widgets); (3) a **fake broadway browser** (`tests/gui/broadway.py`, `gtk4-broadwayd`'s protocol) for real gestures:
+`natural_w` (natural width measured by `gtk_widget_measure`, for mapped widgets), and when not empty `placeholder` (`GtkEntry`), `tooltip` and `markup` (a `GtkLabel` using Pango markup); (3) a **fake broadway browser** (`tests/gui/broadway.py`, `gtk4-broadwayd`'s protocol) for real gestures:
 typing in the terminal, shortcuts, menus by clicks, file choosers by Ctrl+L, context menus (a click waits for the widget's geometry to be stable), tab
 drags (`drag_in_surface`). Widgets a test must reach carry a stable `gtk_widget_set_name()` and an accessible name: name them when adding UI; `find`/`find1`
 skip unmapped widgets by default, so a stable name designates the shown tab's widget. Tabs in `gtktest.py`: `Env.new_pty()` (extra `Pty`: `port`, `read`,

@@ -245,16 +245,17 @@ typedef struct
 {
 	const gchar *action;
 	gint nombre;
-	const gchar *infos;	/* « type:liste:libellé » séparés par « | », « - » si absent */
+	const gchar *infos;	/* « type:liste:libellé:spécificateur » séparés par « | », « - » si absent */
 } cas_arguments_t;
 
 static const cas_arguments_t cas_arguments[] =
 {
-	{ "%#Mode %d", 2, "l:Mode:-|d:-:-" },
+	{ "%#Mode %d", 2, "l:Mode:-:%#Mode|d:-:-:%d" },
 	{ "%%d", 0, "" },
 	{ "%&", 0, "" },
-	{ "[Speed] %d", 1, "d:-:Speed" },
-	{ "%d %s %f", 3, "d:-:-|s:-:-|f:-:-" },
+	{ "[Speed] %d", 1, "d:-:Speed:%d" },
+	{ "%d %s %f", 3, "d:-:-:%d|s:-:-:%s|f:-:-:%f" },
+	{ "V%.1f;%-5s%hhu%#x", 4, "f:-:-:%.1f|s:-:-:%-5s|hhu:-:-:%hhu|x:-:-:%#x" },
 	{ "plain", 0, "" },
 };
 
@@ -267,7 +268,7 @@ test_arguments(gconstpointer data)
 	GString *texte = g_string_new(NULL);
 
 	for(gint i = 0; i < n; i++)
-		g_string_append_printf(texte, "%s%s:%s:%s", i ? "|" : "", infos[i].type, infos[i].list_name ? infos[i].list_name : "-", infos[i].label ? infos[i].label : "-");
+		g_string_append_printf(texte, "%s%s:%s:%s:%s", i ? "|" : "", infos[i].type, infos[i].list_name ? infos[i].list_name : "-", infos[i].label ? infos[i].label : "-", infos[i].spec);
 	g_assert_cmpint(macro_count_format_args(listes, c->action), ==, c->nombre);
 	g_assert_cmpint(n, ==, c->nombre);
 	g_assert_cmpstr(texte->str, ==, c->infos);
@@ -318,6 +319,81 @@ test_listes_en_parametre(void)
 	gt_macro_lists_free(avec_x);
 }
 
+
+/* ---- Variantes tracées (usage du cœur) -------------------------------- */
+
+/* Plages des arguments dans le texte mis en forme, après le doublement des antislashs ; libellé retiré ; argument manquant non tracé. */
+static void
+test_format_trace(void)
+{
+	GArray *plages = g_array_new(FALSE, FALSE, sizeof(GtMacroRange));
+	const gchar *args[] = { "5", "a\\b" };
+	gchar *texte = format_action_traced(listes, "[v] %d:%5s|%d", args, 2, NULL, plages);
+
+	g_assert_cmpstr(texte, ==, "5:  a\\\\b|%d");
+	g_assert_cmpuint(plages->len, ==, 2);
+	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).start, ==, 0);
+	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).len, ==, 1);
+	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 1).start, ==, 2);
+	g_assert_cmpuint(g_array_index(plages, GtMacroRange, 1).len, ==, 6);
+	g_free(texte);
+
+	/* Liste et %% */
+	g_array_set_size(plages, 0);
+	{
+		const gchar *a2[] = { "S" };
+
+		texte = format_action_traced(listes, "%%%#Mode", a2, 1, NULL, plages);
+		g_assert_cmpstr(texte, ==, "%S");
+		g_assert_cmpuint(plages->len, ==, 1);
+		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).start, ==, 1);
+		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).len, ==, 1);
+		g_free(texte);
+	}
+
+	/* Jeu latin1 : la valeur d'un %s est convertie en ISO-8859-1 avant printf ; l'antislash reste doublé */
+	g_array_set_size(plages, 0);
+	{
+		const gchar *a3[] = { "\xc3\xa9\\", "\xc3\xa9" };
+		const gchar *jeux[] = { "latin1", "latin1" };
+
+		texte = format_action_traced(listes, "%s%d", a3, 2, jeux, plages);
+		g_assert_cmpstr(texte, ==, "\xe9\\\\0");
+		g_assert_cmpuint(g_array_index(plages, GtMacroRange, 0).len, ==, 3);
+		g_free(texte);
+	}
+	/* Caractère hors Latin-1 : valeur gardée telle quelle */
+	{
+		const gchar *a4[] = { "\xe2\x82\xac" };
+		const gchar *jeux[] = { "latin1" };
+
+		texte = format_action_traced(listes, "%s", a4, 1, jeux, NULL);
+		g_assert_cmpstr(texte, ==, "\xe2\x82\xac");
+		g_free(texte);
+	}
+	g_array_unref(plages);
+}
+
+/* Origine de chaque octet produit par l'interprétation des échappements. */
+static void
+test_parse_trace(void)
+{
+	GArray *origines = g_array_new(FALSE, FALSE, sizeof(GtMacroRange));
+	GByteArray *octets = parse_macro_string_traced("A\\x41\\r\\", origines);
+	const guint debut[] = { 0, 1, 5, 7 };
+	const guint longueur[] = { 1, 4, 2, 1 };
+
+	g_assert_cmpuint(octets->len, ==, 4);
+	g_assert_cmpuint(origines->len, ==, 4);
+	for(guint i = 0; i < 4; i++)
+	{
+		g_assert_cmpuint(g_array_index(origines, GtMacroRange, i).start, ==, debut[i]);
+		g_assert_cmpuint(g_array_index(origines, GtMacroRange, i).len, ==, longueur[i]);
+	}
+	g_byte_array_free(octets, TRUE);
+	g_array_unref(origines);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -338,6 +414,8 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_format/types-flottants", test_types_flottants);
 	g_test_add_func("/macros_format/flottants-sous-locale-fr", test_flottants_sous_locale_fr);
 	g_test_add_func("/macros_format/listes-en-parametre", test_listes_en_parametre);
+	g_test_add_func("/macros_format/format-trace", test_format_trace);
+	g_test_add_func("/macros_format/parse-trace", test_parse_trace);
 
 	resultat = g_test_run();
 	gt_macro_lists_free(listes);

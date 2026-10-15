@@ -27,9 +27,16 @@ struct _GtMacroRow
 	gchar  *action;
 	gchar  *tab;
 	gchar **args;	/* valeurs par défaut ; NULL : aucune */
+	gchar **arg_min;	/* limites (macro_arg.h) ; NULL : aucune */
+	gchar **arg_max;
+	gchar **arg_charset;
 };
 
-enum { ROW_PROP_0, ROW_PROP_ID, ROW_PROP_LABEL, ROW_PROP_SHORTCUT, ROW_PROP_ACTION, ROW_PROP_TAB, ROW_PROP_ARGS, ROW_N_PROPS };
+enum
+{
+	ROW_PROP_0, ROW_PROP_ID, ROW_PROP_LABEL, ROW_PROP_SHORTCUT, ROW_PROP_ACTION, ROW_PROP_TAB, ROW_PROP_ARGS, ROW_PROP_ARG_MIN, ROW_PROP_ARG_MAX,
+	ROW_PROP_ARG_CHARSET, ROW_N_PROPS
+};
 static GParamSpec *row_props[ROW_N_PROPS];
 
 G_DEFINE_FINAL_TYPE(GtMacroRow, gt_macro_row, G_TYPE_OBJECT)
@@ -51,6 +58,36 @@ static gchar **row_field(GtMacroRow *row, guint prop_id)
 	}
 }
 
+/* Vecteur de la propriété (args, arg-min, arg-max, arg-charset), NULL pour les autres */
+static gchar ***row_strv_field(GtMacroRow *row, guint prop_id)
+{
+	switch(prop_id)
+	{
+	case ROW_PROP_ARGS:
+		return &row->args;
+	case ROW_PROP_ARG_MIN:
+		return &row->arg_min;
+	case ROW_PROP_ARG_MAX:
+		return &row->arg_max;
+	case ROW_PROP_ARG_CHARSET:
+		return &row->arg_charset;
+	default:
+		return NULL;
+	}
+}
+
+/* Remplace *field par une copie de value (NULL permis) et notifie prop_id, seulement si la valeur change */
+static void replace_strv(GtMacroRow *row, guint prop_id, const gchar *const *value)
+{
+	gchar ***field = row_strv_field(row, prop_id);
+
+	if((*field == NULL) == (value == NULL) && (value == NULL || g_strv_equal((const gchar *const *)*field, value)))
+		return;
+	g_strfreev(*field);
+	*field = value != NULL ? g_strdupv((gchar **)value) : NULL;
+	g_object_notify_by_pspec(G_OBJECT(row), row_props[prop_id]);
+}
+
 static void gt_macro_row_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
 {
 	GtMacroRow *row = GT_MACRO_ROW(object);
@@ -61,15 +98,9 @@ static void gt_macro_row_set_property(GObject *object, guint prop_id, const GVal
 		row->id = g_value_get_uint(value);
 		return;
 	}
-	if(prop_id == ROW_PROP_ARGS)
+	if(row_strv_field(row, prop_id) != NULL)
 	{
-		const gchar *const *args = g_value_get_boxed(value);
-
-		if((row->args == NULL) == (args == NULL) && (args == NULL || g_strv_equal((const gchar *const *)row->args, args)))
-			return;
-		g_strfreev(row->args);
-		row->args = args != NULL ? g_strdupv((gchar **)args) : NULL;
-		g_object_notify_by_pspec(object, pspec);
+		replace_strv(row, prop_id, g_value_get_boxed(value));
 		return;
 	}
 	field = row_field(row, prop_id);
@@ -92,9 +123,9 @@ static void gt_macro_row_get_property(GObject *object, guint prop_id, GValue *va
 		g_value_set_uint(value, row->id);
 		return;
 	}
-	if(prop_id == ROW_PROP_ARGS)
+	if(row_strv_field(row, prop_id) != NULL)
 	{
-		g_value_set_boxed(value, row->args);
+		g_value_set_boxed(value, *row_strv_field(row, prop_id));
 		return;
 	}
 	field = row_field(row, prop_id);
@@ -115,6 +146,9 @@ static void gt_macro_row_finalize(GObject *object)
 	g_free(row->action);
 	g_free(row->tab);
 	g_strfreev(row->args);
+	g_strfreev(row->arg_min);
+	g_strfreev(row->arg_max);
+	g_strfreev(row->arg_charset);
 	G_OBJECT_CLASS(gt_macro_row_parent_class)->finalize(object);
 }
 
@@ -132,6 +166,9 @@ static void gt_macro_row_class_init(GtMacroRowClass *klass)
 	row_props[ROW_PROP_ACTION] = g_param_spec_string("action", NULL, NULL, "", flags);
 	row_props[ROW_PROP_TAB] = g_param_spec_string("tab", NULL, NULL, "", flags);
 	row_props[ROW_PROP_ARGS] = g_param_spec_boxed("args", NULL, NULL, G_TYPE_STRV, flags);
+	row_props[ROW_PROP_ARG_MIN] = g_param_spec_boxed("arg-min", NULL, NULL, G_TYPE_STRV, flags);
+	row_props[ROW_PROP_ARG_MAX] = g_param_spec_boxed("arg-max", NULL, NULL, G_TYPE_STRV, flags);
+	row_props[ROW_PROP_ARG_CHARSET] = g_param_spec_boxed("arg-charset", NULL, NULL, G_TYPE_STRV, flags);
 	g_object_class_install_properties(object_class, ROW_N_PROPS, row_props);
 }
 
@@ -154,6 +191,9 @@ const gchar *gt_macro_row_get_shortcut(GtMacroRow *row) { return row->shortcut; 
 const gchar *gt_macro_row_get_action(GtMacroRow *row) { return row->action; }
 const gchar *gt_macro_row_get_tab(GtMacroRow *row) { return row->tab; }
 const gchar *const *gt_macro_row_get_args(GtMacroRow *row) { return (const gchar *const *)row->args; }
+const gchar *const *gt_macro_row_get_arg_min(GtMacroRow *row) { return (const gchar *const *)row->arg_min; }
+const gchar *const *gt_macro_row_get_arg_max(GtMacroRow *row) { return (const gchar *const *)row->arg_max; }
+const gchar *const *gt_macro_row_get_arg_charset(GtMacroRow *row) { return (const gchar *const *)row->arg_charset; }
 
 void gt_macro_row_set_shortcut(GtMacroRow *row, const gchar *shortcut)
 {
@@ -163,11 +203,16 @@ void gt_macro_row_set_shortcut(GtMacroRow *row, const gchar *shortcut)
 
 void gt_macro_row_set_args(GtMacroRow *row, const gchar *const *args)
 {
-	if((row->args == NULL) == (args == NULL) && (args == NULL || g_strv_equal((const gchar *const *)row->args, args)))
-		return;
-	g_strfreev(row->args);
-	row->args = args != NULL ? g_strdupv((gchar **)args) : NULL;
-	g_object_notify_by_pspec(G_OBJECT(row), row_props[ROW_PROP_ARGS]);
+	replace_strv(row, ROW_PROP_ARGS, args);
+}
+
+void gt_macro_row_set_limits(GtMacroRow *row, const gchar *const *min, const gchar *const *max, const gchar *const *charset)
+{
+	g_object_freeze_notify(G_OBJECT(row));
+	replace_strv(row, ROW_PROP_ARG_MIN, min);
+	replace_strv(row, ROW_PROP_ARG_MAX, max);
+	replace_strv(row, ROW_PROP_ARG_CHARSET, charset);
+	g_object_thaw_notify(G_OBJECT(row));
 }
 
 /* ---- GtMacroListRow ---- */
@@ -276,7 +321,7 @@ GListStore *gt_macro_rows_from_set(const GtMacroSet *set)
 		const GtMacro *m = gt_macro_set_get(set, i);
 		GtMacroRow *row = gt_macro_row_new(m->id, m->label, m->shortcut, m->action, m->tab);
 
-		g_object_set(row, "args", m->args, NULL);
+		g_object_set(row, "args", m->args, "arg-min", m->arg_min, "arg-max", m->arg_max, "arg-charset", m->arg_charset, NULL);
 		g_list_store_append(store, row);
 		g_object_unref(row);
 	}
@@ -314,6 +359,9 @@ GtMacroEdit *gt_macro_rows_to_edits(GListModel *rows, guint *n_out)
 		edits[i].action = row->action;
 		edits[i].tab = row->tab;
 		edits[i].args = (const gchar *const *)row->args;
+		edits[i].arg_min = (const gchar *const *)row->arg_min;
+		edits[i].arg_max = (const gchar *const *)row->arg_max;
+		edits[i].arg_charset = (const gchar *const *)row->arg_charset;
 		g_object_unref(row);	/* le modèle garde sa référence : les chaînes restent valides */
 	}
 	*n_out = n;

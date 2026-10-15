@@ -8,7 +8,9 @@
  *   css (as), visible, mapped, sensitive, focus, selected (b), active (b, widgets à propriété « active » booléenne), modal (b, fenêtres),
  *   x, y, w, h (i, en coordonnées de la surface du natif, si mappé), natural_w (i, si mappé : largeur naturelle mesurée par gtk_widget_measure, indépendante de
  *   l'allocation), surface_w, surface_h (i, natifs), popup_x, popup_y (i, popovers),
- *   frame (i, natifs : compteur d'images de l'horloge de la surface ; une géométrie lue avant l'image suivante peut être périmée). */
+ *   frame (i, natifs : compteur d'images de l'horloge de la surface ; une géométrie lue avant l'image suivante peut être périmée),
+ *   placeholder (s, GtkEntry : texte indicatif, si non vide), tooltip (s, bulle d'aide, si non vide),
+ *   markup (s, GtkLabel à balisage Pango : texte balisé, si non vide). */
 #include <string.h>
 #include <vte/vte.h>
 
@@ -107,6 +109,7 @@ static void dump_widget(GtkWidget *w, GtkNative *nat, gint nat_idx, gint *n_nati
 	GParamSpec *active;
 	graphene_rect_t r;
 	gchar *label;
+	const gchar *tooltip;
 	gchar **css;
 
 	if(GTK_IS_NATIVE(w) && GTK_NATIVE(w) != nat)
@@ -133,6 +136,23 @@ static void dump_widget(GtkWidget *w, GtkNative *nat, gint nat_idx, gint *n_nati
 		g_variant_builder_add(&d, "{sv}", "title", g_variant_new_string(title != NULL ? title : ""));
 		add_bool(&d, "modal", gtk_window_get_modal(GTK_WINDOW(w)));
 	}
+	if(GTK_IS_ENTRY(w))
+	{
+		const gchar *placeholder = gtk_entry_get_placeholder_text(GTK_ENTRY(w));
+
+		if(placeholder != NULL && placeholder[0] != '\0')
+			g_variant_builder_add(&d, "{sv}", "placeholder", g_variant_new_string(placeholder));
+	}
+	if(GTK_IS_LABEL(w) && gtk_label_get_use_markup(GTK_LABEL(w)))
+	{
+		const gchar *markup = gtk_label_get_label(GTK_LABEL(w));
+
+		if(markup != NULL && markup[0] != '\0')
+			g_variant_builder_add(&d, "{sv}", "markup", g_variant_new_string(markup));
+	}
+	tooltip = gtk_widget_get_tooltip_text(w);
+	if(tooltip != NULL && tooltip[0] != '\0')
+		g_variant_builder_add(&d, "{sv}", "tooltip", g_variant_new_string(tooltip));
 	css = gtk_widget_get_css_classes(w);
 	g_variant_builder_add(&d, "{sv}", "css", g_variant_new_strv((const gchar * const *)css, -1));
 	g_strfreev(css);

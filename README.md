@@ -167,8 +167,14 @@ Toggle it with **View › Macro panel** and fill it in **Macros › Configure ma
 | `ATE%#OnOff\r` with a two-entry list | two buttons, « Echo On » and « Echo Off » |
 | `[Network]%&` | a section separator titled « Network » (`%&` alone: a plain line) |
 
-- **Arguments**: what you type in the panel is used for sending but never saved; each macro keeps **default values**, set under the table of the
-  Configure macros window. Right-click a button › **Reset arguments** goes back to them.
+- **Arguments**: what you type in the panel is used for sending but never saved. An empty field sends the argument's **default value**, shown greyed
+  in it; right-click a button › **Reset arguments** empties the fields. Hover a field to see what it accepts (« integer, 0 – 100 (default 50) »).
+- **Argument table**: selecting a macro in Configure macros shows one row per argument: its specifier, type, default value and optional limits:
+  minimum and maximum for numbers; for `%s`, a length in **bytes sent** and a character set: UTF-8 (any), Printable ASCII, ASCII,
+  8 bits (Latin-1, **sent as one byte per character**) or a custom class such as `A-Z0-9_-`. Below it, the **line sent** with the default values:
+  arguments in blue (red when invalid), escapes and control characters in purple (`CR`, `LF`, `\xHH`…), then the bytes in hexadecimal.
+- **Out of limits**: a field that breaks its limits turns red and the macro is **not sent** (click, shortcut, polling or Lua `send_macro`, which
+  returns `false, "invalid argument"`); the status bar says which argument and why.
 - **Polling**: right-click a button › **Polling Mode** and a period in milliseconds. The button gets a ⏱ prefix; a click starts or stops the periodic
   sending, and the button blinks while it runs.
 - **Tabs**: macros with no tab name go to **General**; right-click the tab bar to show or hide each group.

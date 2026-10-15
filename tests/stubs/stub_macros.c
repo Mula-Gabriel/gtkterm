@@ -1,6 +1,6 @@
 /* Bouchon de l'état des macros (macros.c) pour test_script_engine : une instance par moteur, jeu fourni par le test, fil appelant
  * mémorisé, appels notés dans le journal du bouchon (« macros_send_quiet »). Seules fonctions de macros appelées par le moteur :
- * gt_macros_get_set et gt_macros_send_quiet. */
+ * gt_macros_get_set, gt_macros_check_args et gt_macros_send_quiet. */
 
 #include "link.h"
 #include "stub_macros.h"
@@ -75,4 +75,18 @@ gt_macros_send_quiet(GtMacros *m, guint id, const gchar *const *args, gint n_arg
 		written = gt_link_send(stub_link_default(), data, len, GT_SEND_MACRO);
 	g_bytes_unref(bytes);
 	return len == 0 || (written >= 0 && (gsize)written == len);
+}
+
+/* Même contrat que macros.c, sans valeurs d'usage : n_args < 0 → valeurs par défaut de la macro */
+gint
+gt_macros_check_args(GtMacros *m, guint id, const gchar *const *args, gint n_args, gchar **reason)
+{
+	const GtMacro *macro = gt_macro_set_find(gt_macros_get_set(m), id);
+	gint index = -1;
+
+	if(reason != NULL)
+		*reason = NULL;
+	if(macro == NULL || gt_macro_check_args(m->set, macro, args, n_args, &index, reason))
+		return -1;
+	return index;
 }

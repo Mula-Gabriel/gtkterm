@@ -8,6 +8,7 @@ src/cmdline.c
 src/config_store.c
 src/file_sender.c
 src/link.c
+src/macro_arg.c
 src/macro_file.c
 src/macros.c
 src/port_form.c

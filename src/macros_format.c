@@ -18,6 +18,7 @@
 
 #include "macros_format.h"
 #include "macros_list.h"
+#include "macro_arg.h"
 
 /* ─── Escape sequence parsing ─────────────────────────────────────── */
 
@@ -70,7 +71,7 @@ parse_standard_escape (gchar escape_char, gint *index)
 }
 
 GByteArray *
-parse_macro_string (const gchar *string)
+parse_macro_string_traced (const gchar *string, GArray *origins)
 {
   guchar byte;
   GByteArray *buffer = g_byte_array_new ();
@@ -78,6 +79,8 @@ parse_macro_string (const gchar *string)
 
   for (gint i = 0; i < length; i++)
     {
+      gint start = i;
+
       if (string[i] == '\\' && string[i + 1] != '\0')
         {
           if (string[i + 1] == 'x' || string[i + 1] == 'X')
@@ -91,9 +94,21 @@ parse_macro_string (const gchar *string)
         }
 
       g_byte_array_append (buffer, &byte, 1);
+      /* Origine de l'octet : caractères start..i consommés par la séquence. */
+      if (origins)
+        {
+          GtMacroRange origin = { (guint) start, (guint) (i - start + 1) };
+          g_array_append_val (origins, origin);
+        }
     }
 
   return buffer;
+}
+
+GByteArray *
+parse_macro_string (const gchar *string)
+{
+  return parse_macro_string_traced (string, NULL);
 }
 
 /* ─── Printf-format specifier parsing ──────────────────────────────── */
@@ -391,6 +406,7 @@ macro_get_arg_infos (const GtMacroLists *lists, const gchar *action, gint *count
           {
             infos[idx].type = g_strdup ("l");
             infos[idx].list_name = list_name;
+            infos[idx].spec = g_strndup (&action[i], end - i + 1);
             idx++;
             i = end;
             continue;
@@ -403,6 +419,7 @@ macro_get_arg_infos (const GtMacroLists *lists, const gchar *action, gint *count
         {
           infos[idx].type = t;
           infos[idx].list_name = NULL;
+          infos[idx].spec = g_strndup (&action[i], end - i + 1);
           idx++;
           i = end;
         }
@@ -421,6 +438,7 @@ macro_arg_infos_free (macro_arg_info_t *infos, gint count)
       g_free (infos[i].list_name);
       g_free (infos[i].label);
       g_free (infos[i].type);
+      g_free (infos[i].spec);
     }
   g_free (infos);
 }
@@ -551,9 +569,36 @@ escape_arg_backslashes (const gchar *s)
   return g_string_free (out, FALSE);
 }
 
+/* Note la plage [start, result->len[ de l'argument qui vient d'être ajouté. */
+static void
+note_range (GArray *arg_ranges, gsize start, gsize end)
+{
+  if (arg_ranges)
+    {
+      GtMacroRange range = { (guint) start, (guint) (end - start) };
+      g_array_append_val (arg_ranges, range);
+    }
+}
+
+/* Le retrait d'un libellé tronque le texte rendu : les plages déjà notées sont ramenées dans le texte restant. */
+static void
+clamp_ranges (GArray *arg_ranges, gsize text_len)
+{
+  if (!arg_ranges)
+    return;
+  for (guint k = 0; k < arg_ranges->len; k++)
+    {
+      GtMacroRange *range = &g_array_index (arg_ranges, GtMacroRange, k);
+      if (range->start > text_len)
+        range->start = (guint) text_len;
+      if (range->start + range->len > text_len)
+        range->len = (guint) (text_len - range->start);
+    }
+}
+
 gchar *
-format_action_with_args (const GtMacroLists *lists, const gchar *action, const gchar **args,
-                         gint n_args)
+format_action_traced (const GtMacroLists *lists, const gchar *action, const gchar **args,
+                      gint n_args, const gchar *const *charsets, GArray *arg_ranges)
 {
   GString *result = g_string_new ("");
   gint arg_idx = 0;
@@ -568,7 +613,10 @@ format_action_with_args (const GtMacroLists *lists, const gchar *action, const g
       {
         gint label_start = try_parse_label (action, i, NULL);
         if (label_start >= 0)
-          g_string_truncate (result, result->len - expanded_length (action, label_start, i));
+          {
+            g_string_truncate (result, result->len - expanded_length (action, label_start, i));
+            clamp_ranges (arg_ranges, result->len);
+          }
       }
 
       {
@@ -578,9 +626,11 @@ format_action_with_args (const GtMacroLists *lists, const gchar *action, const g
           {
             if (arg_idx < n_args)
               {
+                gsize start = result->len;
                 gchar *escaped = escape_arg_backslashes (args[arg_idx]);
                 g_string_append (result, escaped);
                 g_free (escaped);
+                note_range (arg_ranges, start, result->len);
               }
             else
               g_string_append_len (result, &action[i], list_end - i + 1);
@@ -599,13 +649,27 @@ format_action_with_args (const GtMacroLists *lists, const gchar *action, const g
 
       if (arg_idx < n_args)
         {
+          gsize start = result->len;
           gchar *spec = g_strndup (&action[i], spec_end - i + 1);
+          const gchar *value = args[arg_idx];
+          gchar *encoded = NULL;
+
+          /* Jeu latin1 d'un %s : un octet par caractère, converti avant la mise en forme (largeur et précision en octets envoyés). */
+          if (charsets && value && g_strcmp0 (charsets[arg_idx], "latin1") == 0 &&
+              fmt_type[strlen (fmt_type) - 1] == 's')
+            {
+              encoded = gt_macro_arg_encode (charsets[arg_idx], value, NULL);
+              if (encoded)
+                value = encoded;
+            }
           /* Mise en forme d'abord (largeur, précision), protection des antislashs ensuite (M19). */
-          gchar *formatted = apply_spec (spec, fmt_type, args[arg_idx]);
+          gchar *formatted = apply_spec (spec, fmt_type, value);
           gchar *escaped = escape_arg_backslashes (formatted);
           g_string_append (result, escaped);
+          note_range (arg_ranges, start, result->len);
           g_free (escaped);
           g_free (formatted);
+          g_free (encoded);
           g_free (spec);
           arg_idx++;
         }
@@ -617,4 +681,11 @@ format_action_with_args (const GtMacroLists *lists, const gchar *action, const g
       i = spec_end;
     }
   return g_string_free (result, FALSE);
+}
+
+gchar *
+format_action_with_args (const GtMacroLists *lists, const gchar *action, const gchar **args,
+                         gint n_args)
+{
+  return format_action_traced (lists, action, args, n_args, NULL, NULL);
 }

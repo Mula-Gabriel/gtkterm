@@ -33,6 +33,18 @@ lire(const gchar *path)
 }
 
 static void
+comparer_vecteur(gchar **a, gchar **b)
+{
+	g_assert_cmpint(a == NULL, ==, b == NULL);
+	if(a != NULL)
+	{
+		g_assert_cmpuint(g_strv_length(a), ==, g_strv_length(b));
+		for(guint k = 0; a[k] != NULL; k++)
+			g_assert_cmpstr(a[k], ==, b[k]);
+	}
+}
+
+static void
 comparer_macro(const GtMacro *a, const GtMacro *b)
 {
 	g_assert_cmpstr(a->label, ==, b->label);
@@ -48,6 +60,9 @@ comparer_macro(const GtMacro *a, const GtMacro *b)
 		for(guint k = 0; a->args[k] != NULL; k++)
 			g_assert_cmpstr(a->args[k], ==, b->args[k]);
 	}
+	comparer_vecteur(a->arg_min, b->arg_min);
+	comparer_vecteur(a->arg_max, b->arg_max);
+	comparer_vecteur(a->arg_charset, b->arg_charset);
 }
 
 static void
@@ -95,6 +110,79 @@ test_aller_retour(void)
 	g_assert_cmpstr(gt_macro_lists_entry_value(l2, 1, 0), ==, "x\\y");
 	g_assert_cmpstr(gt_macro_lists_entry_value(l2, 0, 1), ==, "1");
 	gt_macro_set_free(relu);
+	gt_macro_set_free(set);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+static void
+test_limites_aller_retour(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macro-file-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	GtMacroSet *set = gt_macro_set_new(), *relu;
+	const gchar *const mn[] = { "0", "" , NULL };
+	const gchar *const mx[] = { "100", "8", NULL };
+	const gchar *const cs[] = { "", "class:A-Z;0-9\\-", NULL };
+	GError *error = NULL;
+	guint id;
+	gchar *texte;
+
+	id = gt_macro_set_append(set, "L", "", "L%d %s", "");
+	g_assert_cmpint(gt_macro_set_set_limits(set, id, mn, mx, cs, 2), ==, 0);
+	gt_macro_set_append(set, "Sans", "", "S%d", "");
+	g_assert_true(gt_macro_file_save(set, path, &error));
+	g_assert_no_error(error);
+	texte = lire(path);
+	g_assert_nonnull(strstr(texte, "arg_min="));
+	g_assert_nonnull(strstr(texte, "arg_max="));
+	g_assert_nonnull(strstr(texte, "arg_charset="));
+	/* Le second groupe n'écrit aucune de ces clés */
+	g_assert_null(strstr(strstr(texte, "[macro:2]"), "arg_"));
+	g_free(texte);
+
+	relu = charger(path);
+	g_assert_cmpuint(gt_macro_set_count(relu), ==, 2);
+	comparer_macro(gt_macro_set_get(set, 0), gt_macro_set_get(relu, 0));
+	comparer_macro(gt_macro_set_get(set, 1), gt_macro_set_get(relu, 1));
+	g_assert_cmpstr(gt_macro_set_get(relu, 0)->arg_charset[1], ==, "class:A-Z;0-9\\-");
+	g_assert_null(gt_macro_set_get(relu, 1)->arg_min);
+	gt_macro_set_free(relu);
+	gt_macro_set_free(set);
+	test_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
+static void
+test_limites_absentes_ou_invalides(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-macro-file-XXXXXX", NULL);
+	gchar *path = test_write_file(dir, "m.ini",
+	                              "[gtkterm-macros]\nversion=2\n\n[macro:1]\nlabel=A\naction=A%d\nargs=5;\n\n"
+	                              "[macro:2]\nlabel=B\naction=B%d %s\narg_min=abc;1;\narg_max=10;5;\narg_charset=;ascii;\n\n"
+	                              "[macro:3]\nlabel=C\naction=C%d\narg_min=1;2;\n");
+	GtMacroSet *set;
+	const GtMacro *m;
+
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*invalid argument limits replaced by none*");
+	g_test_expect_message(NULL, G_LOG_LEVEL_WARNING, "*invalid argument limits replaced by none*");
+	set = charger(path);
+	g_test_assert_expected_messages();
+	g_assert_cmpuint(gt_macro_set_count(set), ==, 3);
+	m = gt_macro_set_get(set, 0);
+	g_assert_null(m->arg_min);
+	g_assert_null(m->arg_max);
+	g_assert_null(m->arg_charset);
+	m = gt_macro_set_get(set, 1);
+	g_assert_cmpstr(m->arg_min[0], ==, "");
+	g_assert_cmpstr(m->arg_min[1], ==, "1");
+	g_assert_cmpstr(m->arg_max[0], ==, "10");
+	g_assert_cmpstr(m->arg_max[1], ==, "5");
+	g_assert_cmpstr(m->arg_charset[1], ==, "ascii");
+	m = gt_macro_set_get(set, 2);		/* mauvaise longueur : tout refusé */
+	g_assert_null(m->arg_min);
 	gt_macro_set_free(set);
 	test_rmdir(dir);
 	g_free(path);
@@ -798,6 +886,8 @@ main(int argc, char **argv)
 {
 	g_test_init(&argc, &argv, NULL);
 	g_test_add_func("/macro_file/aller-retour", test_aller_retour);
+	g_test_add_func("/macro_file/limites-aller-retour", test_limites_aller_retour);
+	g_test_add_func("/macro_file/limites-absentes-ou-invalides", test_limites_absentes_ou_invalides);
 	g_test_add_func("/macro_file/ordre-conserve", test_ordre_conserve);
 	g_test_add_func("/macro_file/version-refusee", test_version_refusee);
 	g_test_add_func("/macro_file/cles-manquantes-ou-invalides", test_cles_manquantes_ou_invalides);
