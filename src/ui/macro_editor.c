@@ -85,6 +85,7 @@ static const gchar *help_text = N_(
 static void on_defaults_items_changed(GListModel *model, guint position, guint removed, guint added, gpointer data);
 static void on_defaults_selection_changed(GtkSelectionModel *model, guint position, guint n_items, gpointer data);
 static void defaults_unwatch(MacroEditor *editor);
+static void template_info_update(MacroEditor *editor, GtMacros *macros);
 
 /* État de l'éditeur dont w fait partie (fenêtre racine) ; NULL si la fenêtre est en destruction */
 static MacroEditor *editor_of(GtkWidget *w)
@@ -700,6 +701,15 @@ static void editor_free(gpointer data)
 	g_clear_object(&editor->list_rows);
 	g_weak_ref_clear(&editor->session);
 	g_free(editor);
+}
+
+/* Réglage enregistrable changé (signal « edited » : détachement par le menu…) : libellé du modèle à jour */
+static void on_session_edited(GtSession *s, gpointer window)
+{
+	MacroEditor *editor = g_object_get_data(G_OBJECT(window), EDITOR_KEY);
+
+	if(editor != NULL && !gt_session_is_shut_down(s))
+		template_info_update(editor, gt_session_get_macros(s));
 }
 
 /* Session fermée pendant l'édition (signal « closed ») : fenêtre fermée sans rien appliquer (spec §3.2-12) */
@@ -1386,6 +1396,7 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	g_signal_connect(editor->window, "close-request", G_CALLBACK(on_close_request), NULL);
 	g_signal_connect(editor->window, "destroy", G_CALLBACK(on_destroy), NULL);
 	g_signal_connect_object(s, "closed", G_CALLBACK(on_session_closed), editor->window, 0);
+	g_signal_connect_object(s, "edited", G_CALLBACK(on_session_edited), editor->window, 0);
 	keys = gtk_event_controller_key_new();
 	gtk_event_controller_set_propagation_phase(keys, GTK_PHASE_CAPTURE);
 	g_signal_connect(keys, "key-pressed", G_CALLBACK(on_key_pressed), NULL);
@@ -1443,6 +1454,14 @@ void gt_macro_editor_macros_changed(GtSession *s)
 		gtk_window_destroy(GTK_WINDOW(window));	/* sans close-request : rien n'est appliqué ni enregistré */
 	else if(editor != NULL)
 		template_info_update(editor, gt_session_get_macros(s));	/* lien détaché ou rafraîchi */
+}
+
+void gt_macro_editor_close(GtSession *s)
+{
+	GtkWidget *window = s != NULL ? g_object_get_data(G_OBJECT(s), SESSION_EDITOR_KEY) : NULL;
+
+	if(window != NULL)
+		close_editor_window(window);
 }
 
 /* app.macros : éditeur de la session active au moment de l'activation */

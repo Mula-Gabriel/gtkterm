@@ -133,8 +133,9 @@ void gt_app_refresh_template_siblings(GtSession *s)
 		GtSession *other = gt_session_manager_get_nth(gt_app.sessions, i);
 		GtMacros *om = other != s && !gt_session_is_shut_down(other) ? gt_session_get_macros(other) : NULL;
 
-		if(om != NULL && g_strcmp0(gt_macros_get_template(om), path) == 0)
-			gt_macros_refresh_template(om, FALSE);
+		/* Rafraîchi : les lignes de son éditeur ouvert réappliqueraient les anciennes valeurs, il se ferme sans rien appliquer */
+		if(om != NULL && g_strcmp0(gt_macros_get_template(om), path) == 0 && gt_macros_refresh_template(om, FALSE))
+			gt_macro_editor_close(other);
 	}
 }
 

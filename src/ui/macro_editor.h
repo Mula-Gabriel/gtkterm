@@ -13,4 +13,7 @@ void gt_macro_editor_install_action(GtkApplication *app);	/* action app.macros :
 void gt_macro_editor_open(GtkWindow *parent, GtSession *s);
 void gt_macro_editor_macros_changed(GtSession *s);	/* crochet macros_changed : jeu de s remplacé pendant l'édition → fermeture sans enregistrer */
 
+/* Fenêtre d'édition de s fermée sans rien appliquer (sans close-request) : modèle relu en dehors d'elle (onglet frère, spec modèles §2.8) */
+void gt_macro_editor_close(GtSession *s);
+
 #endif
