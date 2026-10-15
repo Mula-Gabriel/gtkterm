@@ -31,6 +31,8 @@ macro_free(gpointer data)
 	g_strfreev(m->arg_min);
 	g_strfreev(m->arg_max);
 	g_strfreev(m->arg_charset);
+	g_strfreev(m->arg_optional);
+	g_strfreev(m->arg_prefix);
 	g_free(m);
 }
 
@@ -140,6 +142,28 @@ drop_if_length(gchar ***v, gint n)
 		g_clear_pointer(v, g_strfreev);
 }
 
+/* Ajuste un vecteur à n éléments (tronqué, ou complété par "") ; NULL reste NULL ; entièrement vide → NULL */
+static void
+fit_length(gchar ***v, gint n)
+{
+	guint len;
+
+	if(*v == NULL)
+		return;
+	len = g_strv_length(*v);
+	if(len != (guint)n)
+	{
+		gchar **fitted = g_new0(gchar *, n + 1);
+
+		for(gint k = 0; k < n; k++)
+			fitted[k] = g_strdup((guint)k < len ? (*v)[k] : "");
+		g_strfreev(*v);
+		*v = fitted;
+	}
+	if(n == 0 || vector_all_empty(*v))
+		g_clear_pointer(v, g_strfreev);
+}
+
 /* Les arguments enregistrés et leurs limites ne restent que s'ils correspondent encore au nombre de spécificateurs ;
  * chaque limite est revalidée pour le type courant de son argument (sans avertissement) */
 static void
@@ -149,7 +173,7 @@ check_args(const GtMacroSet *set, GtMacro *m)
 	macro_arg_info_t *infos;
 	gchar ***vecs[3] = { &m->arg_min, &m->arg_max, &m->arg_charset };
 
-	if(m->args == NULL && m->arg_min == NULL && m->arg_max == NULL && m->arg_charset == NULL)
+	if(m->args == NULL && m->arg_min == NULL && m->arg_max == NULL && m->arg_charset == NULL && m->arg_optional == NULL && m->arg_prefix == NULL)
 		return;
 	infos = macro_get_arg_infos(set->lists, m->action, &n);
 	drop_if_length(&m->args, n);
@@ -159,6 +183,16 @@ check_args(const GtMacroSet *set, GtMacro *m)
 	for(gint v = 0; v < 3; v++)
 		if(*vecs[v] != NULL && vector_all_empty(*vecs[v]))
 			g_clear_pointer(vecs[v], g_strfreev);
+	/* Facultatif et préfixe suivent le nombre d'arguments rang par rang ; toute valeur de facultatif autre que "1" devient "" */
+	fit_length(&m->arg_optional, n);
+	fit_length(&m->arg_prefix, n);
+	for(gint k = 0; m->arg_optional != NULL && k < n; k++)
+		if(strcmp(m->arg_optional[k], "1") != 0 && m->arg_optional[k][0] != '\0')
+		{
+			g_free(m->arg_optional[k]);
+			m->arg_optional[k] = g_strdup("");
+		}
+	fit_length(&m->arg_optional, n);
 	macro_arg_infos_free(infos, n);
 }
 
@@ -380,6 +414,53 @@ gt_macro_set_set_limits(GtMacroSet *set, guint id, const gchar *const *min, cons
 }
 
 gboolean
+gt_macro_set_set_optional(GtMacroSet *set, guint id, const gchar *const *optional, const gchar *const *prefix, gint n_args)
+{
+	GtMacro *m = find_mutable(set, id);
+	gboolean ok = TRUE;
+	gchar **o, **p;
+
+	if(m == NULL || n_args != macro_count_format_args(set->lists, m->action))
+		return FALSE;
+	o = copy_vector(optional, n_args, &ok);
+	p = ok ? copy_vector(prefix, n_args, &ok) : NULL;
+	if(!ok)
+	{
+		g_strfreev(o);
+		g_strfreev(p);
+		return FALSE;
+	}
+	for(gint k = 0; o != NULL && k < n_args; k++)
+		if(strcmp(o[k], "1") != 0)
+		{
+			g_free(o[k]);
+			o[k] = g_strdup("");
+		}
+	g_strfreev(m->arg_optional);
+	g_strfreev(m->arg_prefix);
+	m->arg_optional = o;
+	m->arg_prefix = p;
+	fit_length(&m->arg_optional, n_args);
+	fit_length(&m->arg_prefix, n_args);
+	return TRUE;
+}
+
+gboolean
+gt_macro_arg_is_optional(const GtMacro *macro, gint k)
+{
+	return macro != NULL && macro->arg_optional != NULL && k >= 0 && (guint)k < g_strv_length(macro->arg_optional)
+	       && strcmp(macro->arg_optional[k], "1") == 0;
+}
+
+const gchar *
+gt_macro_arg_prefix(const GtMacro *macro, gint k)
+{
+	if(macro == NULL || macro->arg_prefix == NULL || k < 0 || (guint)k >= g_strv_length(macro->arg_prefix))
+		return "";
+	return macro->arg_prefix[k];
+}
+
+gboolean
 gt_macro_set_set_polling(GtMacroSet *set, guint id, gboolean polling, guint period_ms)
 {
 	GtMacro *m = find_mutable(set, id);
@@ -412,6 +493,9 @@ gt_macro_set_copy(const GtMacroSet *set)
 			gt_macro_set_set_limits(copy, id, (const gchar *const *)m->arg_min, (const gchar *const *)m->arg_max,
 			                        (const gchar *const *)m->arg_charset, n);
 		}
+		if(m->arg_optional != NULL || m->arg_prefix != NULL)
+			gt_macro_set_set_optional(copy, id, (const gchar *const *)m->arg_optional, (const gchar *const *)m->arg_prefix,
+			                          (gint)g_strv_length(m->arg_optional != NULL ? m->arg_optional : m->arg_prefix));
 		gt_macro_set_set_polling(copy, id, m->polling, m->polling_period_ms);
 	}
 	return copy;
@@ -462,6 +546,12 @@ gt_macro_set_apply_edits(GtMacroSet *set, const GtMacroEdit *rows, guint n_rows,
 			m->arg_max = g_strdupv((gchar **)rows[i].arg_max);
 		if(rows[i].arg_charset != NULL && rows[i].arg_charset[0] != NULL)
 			m->arg_charset = g_strdupv((gchar **)rows[i].arg_charset);
+		g_clear_pointer(&m->arg_optional, g_strfreev);
+		g_clear_pointer(&m->arg_prefix, g_strfreev);
+		if(rows[i].arg_optional != NULL && rows[i].arg_optional[0] != NULL)
+			m->arg_optional = g_strdupv((gchar **)rows[i].arg_optional);
+		if(rows[i].arg_prefix != NULL && rows[i].arg_prefix[0] != NULL)
+			m->arg_prefix = g_strdupv((gchar **)rows[i].arg_prefix);
 		g_ptr_array_add(fresh, m);
 	}
 	set->macros = fresh;
@@ -522,7 +612,8 @@ gt_macro_set_same_structure(const GtMacroSet *a, const GtMacroSet *b)
 
 		if(strcmp(ma->label, mb->label) != 0 || strcmp(ma->shortcut, mb->shortcut) != 0 || strcmp(ma->action, mb->action) != 0
 		   || strcmp(ma->tab, mb->tab) != 0 || !limits_equal(ma->arg_min, mb->arg_min) || !limits_equal(ma->arg_max, mb->arg_max)
-		   || !limits_equal(ma->arg_charset, mb->arg_charset))
+		   || !limits_equal(ma->arg_charset, mb->arg_charset) || !limits_equal(ma->arg_optional, mb->arg_optional)
+		   || !limits_equal(ma->arg_prefix, mb->arg_prefix))
 			return FALSE;
 	}
 	return lists_equal(gt_macro_set_get_lists(a), gt_macro_set_get_lists(b));
@@ -550,6 +641,8 @@ gt_macro_set_clone(const GtMacroSet *set)
 		c->arg_min = g_strdupv(m->arg_min);
 		c->arg_max = g_strdupv(m->arg_max);
 		c->arg_charset = g_strdupv(m->arg_charset);
+		c->arg_optional = g_strdupv(m->arg_optional);
+		c->arg_prefix = g_strdupv(m->arg_prefix);
 		c->polling = m->polling;
 		c->polling_period_ms = m->polling_period_ms;
 		g_ptr_array_add(clone->macros, c);
@@ -743,6 +836,8 @@ gt_macro_check_args(const GtMacroSet *set, const GtMacro *macro, const gchar *co
 	infos = macro_get_arg_infos(gt_macro_set_get_lists(set), macro->action, &count);
 	for(gint k = 0; k < MIN(n, count) && ok; k++)
 	{
+		if(gt_macro_arg_is_optional(macro, k) && (use[k] == NULL || use[k][0] == '\0'))
+			continue;
 		if(infos[k].list_name != NULL)
 			continue;
 		if(gt_macro_arg_check(infos[k].type, use[k] != NULL ? use[k] : "", limit_at(macro->arg_min, k), limit_at(macro->arg_max, k),

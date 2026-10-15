@@ -23,6 +23,9 @@ typedef struct
 	gchar  **arg_min;		/* limites des arguments (macro_arg.h) : NULL, ou exactement autant d'éléments que args ("" = aucune) ; */
 	gchar  **arg_max;		/* jamais un vecteur entièrement vide (il devient NULL) ; longueur en octets pour %s, valeur pour les nombres */
 	gchar  **arg_charset;	/* jeu de caractères d'un %s ("", "printable", "ascii", "latin1", "class:…") */
+	gchar  **arg_optional;	/* argument facultatif ("1") ou non ("") ; NULL, ou exactement macro_count_format_args() éléments, jamais entièrement vide.
+				 * Contrairement aux limites, quand le nombre d'arguments change le vecteur est tronqué ou complété par "" (pas effacé) */
+	gchar  **arg_prefix;	/* texte brut émis avant l'argument s'il est renseigné (« % » littéral, échappements \r… traités à l'envoi) ; même règle de longueur */
 	gboolean polling;		/* mode polling activé (persistant) ; la marche n'est jamais persistée */
 	guint    polling_period_ms;	/* toujours dans [GT_MACRO_PERIOD_MIN_MS, GT_MACRO_PERIOD_MAX_MS] */
 } GtMacro;
@@ -41,6 +44,8 @@ typedef struct
 	const gchar *const *arg_min;	/* limites ; NULL : aucune (les initialiseurs positionnels existants restent valides) */
 	const gchar *const *arg_max;
 	const gchar *const *arg_charset;
+	const gchar *const *arg_optional;	/* en fin de structure : les initialiseurs positionnels existants restent valides ; longueur ajustée par jeu */
+	const gchar *const *arg_prefix;
 } GtMacroEdit;
 
 GtMacroSet         *gt_macro_set_new          (void);
@@ -63,8 +68,11 @@ gint                gt_macro_set_set_limits   (GtMacroSet *set, guint id, const 
 gboolean            gt_macro_set_set_polling  (GtMacroSet *set, guint id, gboolean polling, guint period_ms);
 GtMacroSet         *gt_macro_set_copy         (const GtMacroSet *set);	/* copie profonde ; nouveaux identifiants */
 void                gt_macro_set_apply_edits  (GtMacroSet *set, const GtMacroEdit *rows, guint n_rows, GtMacroLists *lists);
+gboolean            gt_macro_set_set_optional (GtMacroSet *set, guint id, const gchar *const *optional, const gchar *const *prefix, gint n_args);
+gboolean            gt_macro_arg_is_optional  (const GtMacro *macro, gint k);
+const gchar        *gt_macro_arg_prefix       (const GtMacro *macro, gint k);
 /* Même structure (§2.2 de la spec des modèles) : même nombre de macros et, rang par rang, mêmes libellé, raccourci, action, onglet et
- * limites (NULL ≡ vecteur entièrement vide), mêmes listes (noms, entrées et ordre) ; identifiants, valeurs par défaut et polling ignorés. */
+ * limites, Optional et Prefix (NULL ≡ vecteur entièrement vide), mêmes listes (noms, entrées et ordre) ; identifiants, valeurs par défaut et polling ignorés. */
 gboolean            gt_macro_set_same_structure(const GtMacroSet *a, const GtMacroSet *b);
 /* Copie profonde gardant les identifiants : simulations seulement, jamais installée à côté de l'original. */
 GtMacroSet         *gt_macro_set_clone        (const GtMacroSet *set);

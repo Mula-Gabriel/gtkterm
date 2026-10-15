@@ -992,6 +992,72 @@ test_regroupe_onglets(void)
 	gt_macro_set_free(set);
 }
 
+static void test_facultatif_modele(void)
+{
+	GtMacroSet *set = gt_macro_set_new(), *copie, *clone;
+	guint id = gt_macro_set_append(set, "co", "", "connect %s -password=%s", "");
+	const gchar *opt[] = { "", "oui", NULL }, *pre[] = { "", " -password=", NULL }, *trop[] = { "1", NULL };
+	const GtMacro *m;
+	GtMacroEdit row = { 0 };
+
+	g_assert_false(gt_macro_set_set_optional(set, id, trop, NULL, 1));	/* mauvaise longueur */
+	g_assert_true(gt_macro_set_set_optional(set, id, opt, pre, 2));
+	m = gt_macro_set_find(set, id);
+	g_assert_null(m->arg_optional);	/* « oui » n'est pas « 1 » : vecteur entièrement vide → NULL */
+	opt[1] = "1";
+	g_assert_true(gt_macro_set_set_optional(set, id, opt, pre, 2));
+	m = gt_macro_set_find(set, id);
+	g_assert_true(gt_macro_arg_is_optional(m, 1));
+	g_assert_false(gt_macro_arg_is_optional(m, 0));
+	g_assert_false(gt_macro_arg_is_optional(m, 7));
+	g_assert_cmpstr(gt_macro_arg_prefix(m, 1), ==, " -password=");
+	g_assert_cmpstr(gt_macro_arg_prefix(m, 0), ==, "");
+	/* Copie et clone gardent les vecteurs */
+	copie = gt_macro_set_copy(set);
+	clone = gt_macro_set_clone(set);
+	g_assert_cmpstr(gt_macro_arg_prefix(gt_macro_set_get(copie, 0), 1), ==, " -password=");
+	g_assert_true(gt_macro_arg_is_optional(gt_macro_set_get(clone, 0), 1));
+	g_assert_true(gt_macro_set_same_structure(set, copie));
+	/* Action raccourcie à un argument : vecteurs tronqués, pas effacés ; rallongée : complétés */
+	row.id = id;
+	row.label = "co";
+	row.shortcut = "";
+	row.action = "connect%s";
+	row.tab = "";
+	row.arg_optional = (const gchar *const[]){ "1", "1", NULL };
+	row.arg_prefix = (const gchar *const[]){ " -u=", " -p=", NULL };
+	gt_macro_set_apply_edits(copie, &row, 1, NULL);
+	m = gt_macro_set_get(copie, 0);
+	g_assert_cmpuint(g_strv_length(m->arg_prefix), ==, 1);
+	g_assert_cmpstr(m->arg_prefix[0], ==, " -u=");
+	row.action = "c%s%s%s";
+	gt_macro_set_apply_edits(copie, &row, 1, NULL);
+	m = gt_macro_set_get(copie, 0);
+	g_assert_cmpuint(g_strv_length(m->arg_prefix), ==, 3);
+	g_assert_cmpstr(m->arg_prefix[2], ==, "");
+	g_assert_cmpstr(m->arg_optional[2], ==, "");
+	/* Structure : changer Optional ou Prefix la change */
+	pre[1] = " -pw=";
+	g_assert_true(gt_macro_set_set_optional(clone, gt_macro_set_get(clone, 0)->id, opt, pre, 2));
+	g_assert_false(gt_macro_set_same_structure(set, clone));
+	gt_macro_set_free(copie);
+	gt_macro_set_free(clone);
+	gt_macro_set_free(set);
+}
+
+static void test_facultatif_verification(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	guint id = gt_macro_set_append(set, "v", "", "V%d", "");
+	const gchar *opt[] = { "1", NULL }, *min[] = { "5", NULL }, *vide[] = { "", NULL }, *trois[] = { "3", NULL };
+
+	gt_macro_set_set_limits(set, id, min, NULL, NULL, 1);
+	gt_macro_set_set_optional(set, id, opt, NULL, 1);
+	g_assert_true(gt_macro_check_args(set, gt_macro_set_find(set, id), vide, 1, NULL, NULL));	/* omis : ni type ni limites */
+	g_assert_false(gt_macro_check_args(set, gt_macro_set_find(set, id), trois, 1, NULL, NULL));	/* rempli : limites */
+	gt_macro_set_free(set);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1019,5 +1085,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/same_structure", test_meme_structure);
 	g_test_add_func("/macro_set/clone_keeps_ids", test_clone_garde_ids);
 	g_test_add_func("/macro_set/regroupe-onglets", test_regroupe_onglets);
+	g_test_add_func("/macro_set/facultatif-modele", test_facultatif_modele);
+	g_test_add_func("/macro_set/facultatif-verification", test_facultatif_verification);
 	return g_test_run();
 }
