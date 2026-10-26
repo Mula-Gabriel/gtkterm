@@ -81,9 +81,6 @@ gboolean gt_profile_validate(GtProfile *p, GPtrArray *warnings)
 {
 	guint before = warnings->len;
 
-	if(find_standard_baudrate(p->baudrate) == B0)
-		g_ptr_array_add(warnings, g_strdup_printf(_("Baud rate %u may not be supported by all hardware"), p->baudrate));
-
 	if(p->stopbits != 1 && p->stopbits != 2)
 	{
 		g_ptr_array_add(warnings, g_strdup_printf(_("Invalid number of stop-bits: %d\nFalling back to default number of stop-bits number: %d\n"),

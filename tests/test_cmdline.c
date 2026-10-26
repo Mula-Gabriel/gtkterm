@@ -312,7 +312,7 @@ test_retour_au_serie(void)
 	g_object_unref(s);
 }
 
-/* Profil -c inconnu : message, démarrage sur « default » ; débit non standard : avertissement de la validation, valeur gardée */
+/* Profil -c inconnu : message, démarrage sur « default » ; débit non standard : gardé sans avertissement (c'est l'ouverture qui refuse un débit impossible) */
 static void
 test_profil_inconnu_et_validation(void)
 {
@@ -323,7 +323,7 @@ test_profil_inconnu_et_validation(void)
 	s = demarrer("[profile:default]\nport=/dev/null\nspeed=9600\n");
 	read_command_line(s, (int)g_strv_length(av), av, &cmd);
 	g_assert_false(cmd.exit_now);
-	g_assert_cmpint(nb_messages, ==, 2);
+	g_assert_cmpint(nb_messages, ==, 1);
 	g_assert_cmpuint(gt_session_get_profile(s)->baudrate, ==, 12345);
 	g_assert_cmpstr(gt_session_get_profile_name(s), ==, "default");
 	gt_cmdline_clear(&cmd);

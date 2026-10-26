@@ -118,10 +118,9 @@ test_validation_debit_non_standard(void)
 
 	gt_profile_init_defaults(&p);
 	p.baudrate = 123457;
-	g_assert_false(gt_profile_validate(&p, avert));
-	g_assert_cmpuint(avert->len, ==, 1);
-	g_assert_nonnull(strstr(g_ptr_array_index(avert, 0), "123457"));
-	g_assert_cmpuint(p.baudrate, ==, 123457);	/* signalé, pas corrigé */
+	g_assert_true(gt_profile_validate(&p, avert));	/* aucune alerte : c'est l'ouverture du port qui refuse un débit impossible */
+	g_assert_cmpuint(avert->len, ==, 0);
+	g_assert_cmpuint(p.baudrate, ==, 123457);
 	gt_profile_clear(&p);
 	g_ptr_array_unref(avert);
 }

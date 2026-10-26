@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 1.3.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-15 14:31+0200\n"
+"POT-Creation-Date: 2026-10-26 14:12+0100\n"
 "PO-Revision-Date: 2026-10-10 12:00+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -452,12 +452,12 @@ msgstr ""
 "%s existe déjà avec un contenu différent. Renommez ou supprimez %s, puis "
 "enregistrez de nouveau."
 
-#: src/macro_override.c:359
+#: src/macro_override.c:361
 #, c-format
 msgid "%s: [%s] %s: invalid value ignored"
 msgstr "%s : [%s] %s : valeur invalide ignorée"
 
-#: src/macro_override.c:496
+#: src/macro_override.c:498
 #, c-format
 msgid "%s: [%s] duplicates [%s]: the earlier group is ignored"
 msgstr "%s : [%s] reprend [%s] : le groupe précédent est ignoré"
@@ -476,7 +476,7 @@ msgstr "Macro « %s » envoyée !"
 #. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
 #. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
 #. et l'utilisateur sait que ses macros n'ont pas été lues.
-#: src/macros.c:518 src/macros.c:533 src/macros.c:721 src/macros.c:907
+#: src/macros.c:518 src/macros.c:533 src/macros.c:730 src/macros.c:916
 #, c-format
 msgid "Cannot load macros file: %s"
 msgstr "Impossible de charger le fichier de macros : %s"
@@ -502,18 +502,23 @@ msgstr "%s existe déjà : non écrasé"
 msgid "Cannot save macros file: %s"
 msgstr "Impossible d'enregistrer le fichier de macros : %s"
 
+#: src/macros.c:645 src/ui/macro_editor.c:961
+#, c-format
+msgid "The macros file %s no longer exists."
+msgstr "Le fichier de macros %s n'existe plus."
+
 #. Le jeu effectif reste : les valeurs propres deviennent les valeurs de la copie
-#: src/macros.c:794
+#: src/macros.c:803
 #, c-format
 msgid "Detached from macros template %s"
 msgstr "Détaché du modèle de macros %s"
 
-#: src/macros.c:861
+#: src/macros.c:870
 #, c-format
 msgid "Cannot save macros template: %s"
 msgstr "Impossible d'enregistrer le modèle de macros : %s"
 
-#: src/macros.c:872
+#: src/macros.c:881
 #, c-format
 msgid "Macros template %s saved"
 msgstr "Modèle de macros %s enregistré"
@@ -554,12 +559,7 @@ msgstr ""
 msgid "Activity delays must be between 0 and %d s."
 msgstr "Les délais d'activité doivent être compris entre 0 et %d s."
 
-#: src/profile.c:85
-#, c-format
-msgid "Baud rate %u may not be supported by all hardware"
-msgstr "Le débit %u peut ne pas être pris en charge par tous les matériels"
-
-#: src/profile.c:89
+#: src/profile.c:86
 #, c-format
 msgid ""
 "Invalid number of stop-bits: %d\n"
@@ -568,7 +568,7 @@ msgstr ""
 "Nombre de bits de stop impossible: %d\n"
 "Retour au nombre de bits de stop par défaut: %d\n"
 
-#: src/profile.c:96
+#: src/profile.c:93
 #, c-format
 msgid ""
 "Invalid number of bits: %d\n"
@@ -577,7 +577,7 @@ msgstr ""
 "Nombre de bits impossible: %d\n"
 "Retour au nombre de bits par défaut: %d\n"
 
-#: src/profile.c:102
+#: src/profile.c:99
 #, c-format
 msgid ""
 "Invalid delay: %d ms\n"
@@ -586,7 +586,7 @@ msgstr ""
 "Délai impossible: %d ms\n"
 "Retour au délai par défaut: %d ms\n"
 
-#: src/profile.c:108
+#: src/profile.c:105
 #, c-format
 msgid ""
 "Invalid idle delay: %d s\n"
@@ -595,7 +595,7 @@ msgstr ""
 "Délai de repos impossible: %d s\n"
 "Retour au délai de repos par défaut: %d s\n"
 
-#: src/profile.c:114
+#: src/profile.c:111
 #, c-format
 msgid ""
 "Invalid no data delay: %d s\n"
@@ -604,23 +604,23 @@ msgstr ""
 "Délai sans données impossible: %d s\n"
 "Retour au délai sans données par défaut: %d s\n"
 
-#: src/profile.c:156 src/profile.c:180
+#: src/profile.c:153 src/profile.c:177
 msgid ""
 "The configuration name cannot contain \"[\", \"]\" or control characters."
 msgstr ""
 "Le nom de la configuration ne peut contenir ni « [ », ni « ] », ni caractère "
 "de contrôle."
 
-#: src/profile.c:162
+#: src/profile.c:159
 msgid "The configuration name cannot be empty."
 msgstr "Le nom de la configuration ne peut pas être vide."
 
-#: src/profile.c:168
+#: src/profile.c:165
 #, c-format
 msgid "The configuration name is too long (%d characters at most)."
 msgstr "Le nom de la configuration est trop long (%d caractères au plus)."
 
-#: src/profile.c:188
+#: src/profile.c:185
 #, c-format
 msgid "\"%s\" is a reserved name."
 msgstr "« %s » est un nom réservé."
@@ -924,20 +924,20 @@ msgstr "Remplacer"
 msgid "Save project"
 msgstr "Enregistrer le projet"
 
-#: src/ui/app.c:945 src/ui/macro_editor.c:848 src/ui/macros_save.c:55
+#: src/ui/app.c:945 src/ui/macro_editor.c:851 src/ui/macros_save.c:55
 #: src/ui/profile_dialogs.c:209
 msgid "Overwrite"
 msgstr "Écraser"
 
-#: src/ui/app.c:945 src/ui/macro_editor.c:848 src/ui/macro_editor.c:1018
-#: src/ui/macro_editor.c:1165 src/ui/macro_editor.c:1176
+#: src/ui/app.c:945 src/ui/macro_editor.c:851 src/ui/macro_editor.c:1021
+#: src/ui/macro_editor.c:1168 src/ui/macro_editor.c:1179
 #: src/ui/macros_save.c:55
 msgid "Reload"
 msgstr "Recharger"
 
-#: src/ui/app.c:945 src/ui/app.c:976 src/ui/macro_editor.c:848
-#: src/ui/macro_editor.c:860 src/ui/macro_editor.c:868
-#: src/ui/macro_editor.c:1018 src/ui/macro_editor.c:2114
+#: src/ui/app.c:945 src/ui/app.c:976 src/ui/macro_editor.c:851
+#: src/ui/macro_editor.c:863 src/ui/macro_editor.c:871
+#: src/ui/macro_editor.c:1021 src/ui/macro_editor.c:2135
 #: src/ui/macros_save.c:55 src/ui/profile_dialogs.c:443
 msgid "Cancel"
 msgstr "Annuler"
@@ -998,12 +998,12 @@ msgid "Error"
 msgstr "Erreur"
 
 #: src/ui/dialogs.c:169 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:344
-#: src/ui/project_rename.c:159
+#: src/ui/project_rename.c:169
 msgid "_OK"
 msgstr "_OK"
 
 #: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
-#: src/ui/profile_dialogs.c:341 src/ui/project_rename.c:156
+#: src/ui/profile_dialogs.c:341 src/ui/project_rename.c:166
 #: src/ui/script_panel.c:805
 msgid "_Cancel"
 msgstr "_Annuler"
@@ -1133,33 +1133,33 @@ msgstr ""
 "Exemples : « Hello\\n » envoie Hello et un saut de ligne ; « Hello\\x0A » "
 "fait de même ; « SPEED %d\\r » demande un nombre."
 
-#: src/ui/macro_editor.c:274
+#: src/ui/macro_editor.c:277
 msgid "All"
 msgstr "Tous"
 
-#: src/ui/macro_editor.c:286 src/ui/macro_panel.c:81
+#: src/ui/macro_editor.c:289 src/ui/macro_panel.c:81
 msgid "General"
 msgstr "Général"
 
-#: src/ui/macro_editor.c:442 src/ui/macro_panel.c:310 src/ui/port_dialog.c:24
+#: src/ui/macro_editor.c:445 src/ui/macro_panel.c:310 src/ui/port_dialog.c:24
 #: src/ui/port_dialog.c:30
 msgid "None"
 msgstr "Aucun"
 
-#: src/ui/macro_editor.c:648
+#: src/ui/macro_editor.c:651
 msgid "Select a macro first."
 msgstr "Sélectionnez d'abord une macro."
 
-#: src/ui/macro_editor.c:654
+#: src/ui/macro_editor.c:657
 #, c-format
 msgid "Press the new shortcut for \"%s\" (Escape cancels)."
 msgstr "Appuyez sur le nouveau raccourci de « %s » (Échap annule)."
 
-#: src/ui/macro_editor.c:678
+#: src/ui/macro_editor.c:681
 msgid "(no label)"
 msgstr "(sans libellé)"
 
-#: src/ui/macro_editor.c:684
+#: src/ui/macro_editor.c:687
 #, c-format
 msgid ""
 "%s is already used by the application command \"%s\". Press other keys, or "
@@ -1168,7 +1168,7 @@ msgstr ""
 "%s est déjà utilisé par la commande d'application « %s ». Appuyez sur "
 "d'autres touches, ou sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:686
+#: src/ui/macro_editor.c:689
 #, c-format
 msgid ""
 "%s is already used by the macro \"%s\". Press other keys, or Escape to "
@@ -1177,7 +1177,7 @@ msgstr ""
 "%s est déjà utilisé par la macro « %s ». Appuyez sur d'autres touches, ou "
 "sur Échap pour annuler."
 
-#: src/ui/macro_editor.c:710
+#: src/ui/macro_editor.c:713
 msgid ""
 "A shortcut needs Ctrl, Alt or Super, unless it is a function key (F1 to "
 "F35). Press other keys, or Escape to cancel."
@@ -1186,24 +1186,24 @@ msgstr ""
 "fonction (F1 à F35). Appuyez sur d'autres touches, ou sur Échap pour annuler."
 
 #. Cancel par défaut, Overwrite destructeur : Entrée n'écrase jamais le travail d'un autre
-#: src/ui/macro_editor.c:851
+#: src/ui/macro_editor.c:854
 msgid "The macros template changed on disk."
 msgstr "Le modèle de macros a changé sur le disque."
 
-#: src/ui/macro_editor.c:856
+#: src/ui/macro_editor.c:859
 #, c-format
 msgid "These macros come from the template %s"
 msgstr "Ces macros viennent du modèle %s"
 
-#: src/ui/macro_editor.c:860
+#: src/ui/macro_editor.c:863
 msgid "Keep in this project"
 msgstr "Garder dans ce projet"
 
-#: src/ui/macro_editor.c:860 src/ui/macro_editor.c:868
+#: src/ui/macro_editor.c:863 src/ui/macro_editor.c:871
 msgid "Save to template"
 msgstr "Enregistrer dans le modèle"
 
-#: src/ui/macro_editor.c:863
+#: src/ui/macro_editor.c:866
 msgid ""
 "Keep the new default values in this project only, or save them to the "
 "template, for every project that uses it?"
@@ -1211,11 +1211,11 @@ msgstr ""
 "Garder les nouvelles valeurs par défaut dans ce projet seulement, ou les "
 "enregistrer dans le modèle, pour tous les projets qui l'utilisent ?"
 
-#: src/ui/macro_editor.c:868
+#: src/ui/macro_editor.c:871
 msgid "Detach and keep a copy"
 msgstr "Détacher et garder une copie"
 
-#: src/ui/macro_editor.c:871
+#: src/ui/macro_editor.c:874
 msgid ""
 "These changes can only be saved to the template (every project that uses "
 "it), or the tab can be detached from the template and keep its own copy."
@@ -1224,222 +1224,217 @@ msgstr ""
 "projets qui l'utilisent), ou l'onglet peut être détaché du modèle et garder "
 "sa propre copie."
 
-#: src/ui/macro_editor.c:958
-#, c-format
-msgid "The macros file %s no longer exists."
-msgstr "Le fichier de macros %s n'existe plus."
-
-#: src/ui/macro_editor.c:972
+#: src/ui/macro_editor.c:975
 #, c-format
 msgid "Cannot reload the macros file %s."
 msgstr "Impossible de recharger le fichier de macros %s."
 
 #. Cancel par défaut, Reload destructeur : Entrée ne jette jamais les modifications
-#: src/ui/macro_editor.c:1025
+#: src/ui/macro_editor.c:1028
 msgid "Discard your changes and reload the macros file?"
 msgstr "Abandonner vos modifications et recharger le fichier de macros ?"
 
-#: src/ui/macro_editor.c:1146
+#: src/ui/macro_editor.c:1149
 #, c-format
 msgid "Template: %s"
 msgstr "Modèle : %s"
 
-#: src/ui/macro_editor.c:1148
+#: src/ui/macro_editor.c:1151
 msgid "Embedded in the project"
 msgstr "Intégré au projet"
 
-#: src/ui/macro_editor.c:1150
+#: src/ui/macro_editor.c:1153
 #, c-format
 msgid "File: %s"
 msgstr "Fichier : %s"
 
-#: src/ui/macro_editor.c:1152
+#: src/ui/macro_editor.c:1155
 msgid "No macros file"
 msgstr "Aucun fichier de macros"
 
-#: src/ui/macro_editor.c:1169
+#: src/ui/macro_editor.c:1172
 msgid "Macros file"
 msgstr "Fichier de macros"
 
-#: src/ui/macro_editor.c:1528
+#: src/ui/macro_editor.c:1531
 #, c-format
 msgid "%u byte"
 msgid_plural "%u bytes"
 msgstr[0] "%u octet"
 msgstr[1] "%u octets"
 
-#: src/ui/macro_editor.c:1565
+#: src/ui/macro_editor.c:1568
 #, c-format
 msgid "Prefix of argument %d removed"
 msgstr "Préfixe de l'argument %d retiré"
 
-#: src/ui/macro_editor.c:1633
+#: src/ui/macro_editor.c:1636
 msgid "UTF-8"
 msgstr "UTF-8"
 
-#: src/ui/macro_editor.c:1633
+#: src/ui/macro_editor.c:1636
 msgid "Printable ASCII"
 msgstr "ASCII imprimable"
 
-#: src/ui/macro_editor.c:1633 src/ui/menus.ui:91
+#: src/ui/macro_editor.c:1636 src/ui/menus.ui:91
 msgid "ASCII"
 msgstr "ASCII"
 
-#: src/ui/macro_editor.c:1633
+#: src/ui/macro_editor.c:1636
 msgid "8 bits (Latin-1)"
 msgstr "8 bits (Latin-1)"
 
-#: src/ui/macro_editor.c:1633
+#: src/ui/macro_editor.c:1636
 msgid "Custom class"
 msgstr "Classe personnalisée"
 
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "#"
 msgstr "#"
 
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "Format"
 msgstr "Format"
 
 #
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "Type"
 msgstr "Type"
 
 #
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "Default"
 msgstr "Défaut"
 
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "Min"
 msgstr "Min"
 
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "Max"
 msgstr "Max"
 
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "Charset"
 msgstr "Jeu de caractères"
 
-#: src/ui/macro_editor.c:1792
+#: src/ui/macro_editor.c:1806
 msgid "Optional"
 msgstr "Facultatif"
 
-#: src/ui/macro_editor.c:1793
+#: src/ui/macro_editor.c:1807
 msgid "Prefix"
 msgstr "Préfixe"
 
-#: src/ui/macro_editor.c:1841
+#: src/ui/macro_editor.c:1859
 msgid "text (bytes)"
 msgstr "texte (octets)"
 
 #
-#: src/ui/macro_editor.c:1902
+#: src/ui/macro_editor.c:1923
 msgid "Arguments"
 msgstr "Arguments"
 
 #
-#: src/ui/macro_editor.c:1922
+#: src/ui/macro_editor.c:1943
 msgid "Line sent (default values):"
 msgstr "Ligne envoyée (valeurs par défaut) :"
 
-#: src/ui/macro_editor.c:1956
+#: src/ui/macro_editor.c:1977
 msgid "Tab:"
 msgstr "Onglet :"
 
-#: src/ui/macro_editor.c:1956
+#: src/ui/macro_editor.c:1977
 msgid "List:"
 msgstr "Liste :"
 
-#: src/ui/macro_editor.c:1960
+#: src/ui/macro_editor.c:1981
 msgid "Tab filter"
 msgstr "Filtre d'onglet"
 
-#: src/ui/macro_editor.c:1960
+#: src/ui/macro_editor.c:1981
 msgid "List filter"
 msgstr "Filtre de liste"
 
-#: src/ui/macro_editor.c:1989
+#: src/ui/macro_editor.c:2010
 msgid "Label"
 msgstr "Libellé"
 
-#: src/ui/macro_editor.c:1990
+#: src/ui/macro_editor.c:2011
 msgid "Shortcut"
 msgstr "Raccourci"
 
-#: src/ui/macro_editor.c:1991
+#: src/ui/macro_editor.c:2012
 msgid "Action"
 msgstr "Action"
 
-#: src/ui/macro_editor.c:1992
+#: src/ui/macro_editor.c:2013
 msgid "Tab"
 msgstr "Onglet"
 
-#: src/ui/macro_editor.c:1993
+#: src/ui/macro_editor.c:2014
 msgid "_Add"
 msgstr "_Ajouter"
 
-#: src/ui/macro_editor.c:1994 src/ui/profile_dialogs.c:344
+#: src/ui/macro_editor.c:2015 src/ui/profile_dialogs.c:344
 msgid "_Delete"
 msgstr "_Supprimer"
 
-#: src/ui/macro_editor.c:1995
+#: src/ui/macro_editor.c:2016
 msgid "_Capture Shortcut"
 msgstr "_Capturer le raccourci"
 
-#: src/ui/macro_editor.c:1996
+#: src/ui/macro_editor.c:2017
 msgid "Delete Shortcut"
 msgstr "Supprimer le raccourci"
 
-#: src/ui/macro_editor.c:1997 src/ui/macro_editor.c:2009
+#: src/ui/macro_editor.c:2018 src/ui/macro_editor.c:2030
 msgid "Move _Up"
 msgstr "_Monter"
 
-#: src/ui/macro_editor.c:1998 src/ui/macro_editor.c:2010
+#: src/ui/macro_editor.c:2019 src/ui/macro_editor.c:2031
 msgid "Move _Down"
 msgstr "_Descendre"
 
-#: src/ui/macro_editor.c:2004
+#: src/ui/macro_editor.c:2025
 msgid "List"
 msgstr "Liste"
 
-#: src/ui/macro_editor.c:2005
+#: src/ui/macro_editor.c:2026
 msgid "Display"
 msgstr "Affichage"
 
-#: src/ui/macro_editor.c:2006
+#: src/ui/macro_editor.c:2027
 msgid "Value"
 msgstr "Valeur"
 
-#: src/ui/macro_editor.c:2007
+#: src/ui/macro_editor.c:2028
 msgid "_Add Entry"
 msgstr "_Ajouter une entrée"
 
-#: src/ui/macro_editor.c:2008
+#: src/ui/macro_editor.c:2029
 msgid "_Delete Entry"
 msgstr "_Supprimer l'entrée"
 
 #. Titre au nom court de l'onglet (fixé à l'ouverture)
-#: src/ui/macro_editor.c:2072
+#: src/ui/macro_editor.c:2093
 #, c-format
 msgid "Configure Macros — %s"
 msgstr "Configurer les macros — %s"
 
-#: src/ui/macro_editor.c:2097 src/ui/menus.ui:233
+#: src/ui/macro_editor.c:2118 src/ui/menus.ui:233
 msgid "Macros"
 msgstr "Macros"
 
-#: src/ui/macro_editor.c:2098
+#: src/ui/macro_editor.c:2119
 msgid "Lists"
 msgstr "Listes"
 
-#: src/ui/macro_editor.c:2113 src/ui/menus.ui:275
+#: src/ui/macro_editor.c:2134 src/ui/menus.ui:275
 msgid "Help"
 msgstr "Aide"
 
-#: src/ui/macro_editor.c:2115
+#: src/ui/macro_editor.c:2136
 msgid "OK"
 msgstr "OK"
 
@@ -1910,19 +1905,19 @@ msgstr "Charger un fichier de macros"
 msgid "Save macros file"
 msgstr "Enregistrer le fichier de macros"
 
-#: src/ui/project_rename.c:109
+#: src/ui/project_rename.c:118
 msgid "Rename project"
 msgstr "Renommer le projet"
 
-#: src/ui/project_rename.c:125
+#: src/ui/project_rename.c:135
 msgid "Project _name:"
 msgstr "_Nom du projet :"
 
-#: src/ui/project_rename.c:128
+#: src/ui/project_rename.c:138
 msgid "Project name"
 msgstr "Nom du projet"
 
-#: src/ui/project_rename.c:139
+#: src/ui/project_rename.c:149
 msgid "_Also rename the file"
 msgstr "Renommer _aussi le fichier"
 
@@ -2257,6 +2252,10 @@ msgstr "Aucune URL de source de mise à jour."
 #, c-format
 msgid "Invalid update source URL: %s"
 msgstr "URL de source de mise à jour invalide : %s"
+
+#, c-format
+#~ msgid "Baud rate %u may not be supported by all hardware"
+#~ msgstr "Le débit %u peut ne pas être pris en charge par tous les matériels"
 
 #~ msgid "Macros template"
 #~ msgstr "Modèle de macros"
