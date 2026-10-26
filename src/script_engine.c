@@ -843,7 +843,8 @@ static gboolean main_try_send_cb(gpointer user_data)
     }
     GtkTermLink *link = d->e->main_link;
     errno = 0;
-    d->written = gt_link_send(link, d->data, d->len, GT_SEND_LUA);
+    /* Une écriture (jamais la file d'émission) : -1 / EAGAIN tant que la file n'est pas vide, send_all réessaie, l'ordre est gardé */
+    d->written = gt_link_try_send(link, d->data, d->len, GT_SEND_LUA);
     /* errno est propre au thread : relevé ici, avant tout autre appel (le thread Lua ne le verrait jamais) */
     d->err = d->written < 0 ? errno : 0;
     d->link_state = gt_link_get_state(link);
@@ -1353,6 +1354,7 @@ typedef struct {
     gboolean     found;
     gboolean     ok;
     gboolean     invalid;   /* argument refusé (limites de la macro) : rien n'est envoyé */
+    const char  *reason;    /* !ok : raison stable (chaîne statique ou de g_strerror) */
 } MainMacroData;
 
 /* Résolution et envoi sur le thread principal, par l'envoi de macro de l'application sans message (macros_send_quiet : pas de
@@ -1380,7 +1382,22 @@ static gboolean main_send_macro_cb(gpointer user_data)
         d->invalid = TRUE;
         return G_SOURCE_REMOVE;
     }
+    errno = 0;
     d->ok = gt_macros_send_quiet(d->e->macros, m->id, (const gchar *const *)d->args, d->n_args > 0 ? d->n_args : -1);
+    if (!d->ok) {
+        /* errno de gt_link_send, relevé avant tout autre appel ; gt_link_send accepte tout ou rien (file d'émission) */
+        gint err = errno;
+        GtLinkState st = gt_link_get_state(d->e->main_link);
+
+        if (link_state_lost(st))
+            d->reason = "link lost";
+        else if (st != GT_LINK_OPEN)
+            d->reason = "not connected";
+        else if (err == ENOBUFS)
+            d->reason = "send queue full";
+        else
+            d->reason = err != 0 ? g_strerror(err) : "send failed";
+    }
     return G_SOURCE_REMOVE;
 }
 
@@ -1388,7 +1405,7 @@ static gboolean main_send_macro_cb(gpointer user_data)
 static int l_send_macro(lua_State *L)
 {
     GtScriptEngine *e = engine_of(L);
-    MainMacroData d = { e, -1, NULL, 0, NULL, FALSE, FALSE, FALSE };
+    MainMacroData d = { e, -1, NULL, 0, NULL, FALSE, FALSE, FALSE, NULL };
 
     if (lua_type(L, 1) == LUA_TNUMBER) {
         /* luaL_checkinteger refuse 1.5 ; hors 0..G_MAXINT : jamais tronqué en int, simplement introuvable (M4) */
@@ -1436,7 +1453,12 @@ static int l_send_macro(lua_State *L)
         lua_pushstring(L, "invalid argument");
         return 2;
     }
-    lua_pushboolean(L, d.ok);
+    if (!d.ok) {
+        lua_pushboolean(L, 0);
+        lua_pushstring(L, d.reason != NULL ? d.reason : "send failed");
+        return 2;
+    }
+    lua_pushboolean(L, 1);
     return 1;
 }
 

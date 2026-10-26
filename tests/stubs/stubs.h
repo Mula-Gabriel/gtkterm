@@ -21,5 +21,7 @@ GtSendOrigin stub_last_origin(void);
 void         stub_inject_rx(const gchar *data, guint len);
 void         stub_link_set_write_fails(gboolean fails);
 void         stub_link_set_state(gint state);	/* GtLinkState rendu par gt_link_get_state ; GT_LINK_OPEN après stub_reset */
+void         stub_link_set_refuse(gint err);	/* gt_link_send : -1 et errno = err (ENOBUFS : file pleine) ; 0 après stub_reset */
+void         stub_link_set_queued(gsize queued);	/* rendu par gt_link_get_queued ; 0 après stub_reset */
 
 #endif

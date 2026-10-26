@@ -143,7 +143,7 @@ GtkWidget *gt_session_view_new(GtkApplication *app, GtSession *s, const GtWindow
 	sv->search_box = slot_box();
 	gtk_box_append(GTK_BOX(view), sv->search_box);
 
-	sv->terminal_view = gt_terminal_view_new(link, gt_session_get_options(s));
+	sv->terminal_view = gt_terminal_view_new(link, gt_session_get_options(s), s);
 	sv->h_paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
 	gtk_paned_set_start_child(GTK_PANED(sv->h_paned), sv->terminal_view);
 	gtk_paned_set_resize_start_child(GTK_PANED(sv->h_paned), TRUE);

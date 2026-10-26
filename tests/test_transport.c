@@ -4,6 +4,7 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <pty.h>
 #include <stdarg.h>
@@ -40,6 +41,9 @@ __wrap_getaddrinfo(const char *noeud, const char *service, const struct addrinfo
 static int modem_fd = -1;
 static int modem_etat = 0;
 static int changements_rts = 0;
+static int appels_bis = 0;	/* TIOCMBIS sur modem_fd */
+static int appels_bic = 0;	/* TIOCMBIC sur modem_fd */
+static gint64 instant_bic = 0;	/* heure monotone du dernier TIOCMBIC */
 
 int
 __wrap_ioctl(int fd, unsigned long requete, ...)
@@ -60,9 +64,16 @@ __wrap_ioctl(int fd, unsigned long requete, ...)
 		else if(requete == TIOCMSET)
 			modem_etat = *(int *)arg;
 		else if(requete == TIOCMBIS)
+		{
 			modem_etat |= *(int *)arg;
+			appels_bis++;
+		}
 		else
+		{
 			modem_etat &= ~*(int *)arg;
+			appels_bic++;
+			instant_bic = g_get_monotonic_time();
+		}
 		if((ancien ^ modem_etat) & TIOCM_RTS)
 			changements_rts++;
 		return 0;
@@ -77,6 +88,10 @@ typedef struct
 	GByteArray *octets;
 	GArray *evenements;	/* TransportEvent */
 	gchar *detail;
+	GByteArray *ecrits;	/* on_sent : octets réellement écrits */
+	GByteArray *etiquettes;	/* on_sent : étiquette de chaque octet écrit (GPOINTER_TO_INT) */
+	guint appels_ecrits;
+	gint64 dernier_ecrit;	/* heure monotone du dernier on_sent */
 } Recepteur;
 
 static void
@@ -85,6 +100,10 @@ recepteur_init(Recepteur *r)
 	r->octets = g_byte_array_new();
 	r->evenements = g_array_new(FALSE, FALSE, sizeof(TransportEvent));
 	r->detail = NULL;
+	r->ecrits = g_byte_array_new();
+	r->etiquettes = g_byte_array_new();
+	r->appels_ecrits = 0;
+	r->dernier_ecrit = 0;
 }
 
 static void
@@ -93,6 +112,8 @@ recepteur_liberer(Recepteur *r)
 	g_byte_array_unref(r->octets);
 	g_array_unref(r->evenements);
 	g_free(r->detail);
+	g_byte_array_unref(r->ecrits);
+	g_byte_array_unref(r->etiquettes);
 }
 
 static void
@@ -111,7 +132,22 @@ sur_evenement(TransportEvent ev, const gchar *detail, gpointer user_data)
 	r->detail = g_strdup(detail);
 }
 
-static const TransportCallbacks rappels = { sur_donnees, sur_evenement };
+static void
+sur_ecrits(const guint8 *data, gsize len, gpointer tag, gpointer user_data)
+{
+	Recepteur *r = user_data;
+	guint8 e = (guint8)GPOINTER_TO_INT(tag);
+
+	g_assert_cmpuint(len, >, 0);
+	g_byte_array_append(r->ecrits, data, (guint)len);
+	for(gsize i = 0; i < len; i++)
+		g_byte_array_append(r->etiquettes, &e, 1);
+	r->appels_ecrits++;
+	r->dernier_ecrit = g_get_monotonic_time();
+}
+
+static const TransportCallbacks rappels = { sur_donnees, sur_evenement, NULL };
+static const TransportCallbacks rappels_emission = { sur_donnees, sur_evenement, sur_ecrits };
 
 static guint
 compter(Recepteur *r, TransportEvent ev)
@@ -354,7 +390,11 @@ test_rs485_rts_stable(void)
 		g_assert_cmpint(gt_transport_get_modem_lines(t), ==, TIOCM_DTR);
 	g_assert_cmpint(changements_rts, ==, 0);
 
+	/* RTS levé à l'envoi, baissé par la minuterie de fin de cycle (jamais d'attente bloquante) */
 	g_assert_cmpint(gt_transport_send(t, (const guint8 *)"x", 1), ==, 1);
+	g_assert_cmpint(changements_rts, ==, 1);
+	for(gint64 fin = g_get_monotonic_time() + 2000000; changements_rts < 2 && g_get_monotonic_time() < fin; g_usleep(1000))
+		g_main_context_iteration(NULL, FALSE);
 	g_assert_cmpint(changements_rts, ==, 2);
 	g_assert_cmpint(modem_etat & TIOCM_RTS, ==, 0);
 
@@ -666,6 +706,362 @@ test_deux_instances(void)
 	fermer_pty(&p2);
 }
 
+/* ---- File d'émission ---------------------------------------------------- */
+
+/* Motif reconnaissable : minuscules pour le premier bloc, majuscules pour le second (l'ordre des blocs se vérifie) */
+static guint8 *
+motif(gsize taille, gchar base)
+{
+	guint8 *d = g_malloc(taille);
+
+	for(gsize i = 0; i < taille; i++)
+		d[i] = (guint8)(base + (i % 26));
+	return d;
+}
+
+/* Lit fd (non bloquant) par morceaux de morceau octets en itérant la boucle, jusqu'à attendu octets ou ms écoulées */
+static void
+lire_par_morceaux(int fd, GByteArray *dest, gsize attendu, gsize morceau, guint ms)
+{
+	gint64 fin = g_get_monotonic_time() + (gint64)ms * 1000;
+	guint8 *buf = g_malloc(morceau);
+
+	while(dest->len < attendu && g_get_monotonic_time() < fin)
+	{
+		ssize_t n = read(fd, buf, morceau);
+
+		if(n > 0)
+			g_byte_array_append(dest, buf, (guint)n);
+		g_main_context_iteration(NULL, FALSE);
+		if(n <= 0)
+			g_usleep(500);
+	}
+	g_free(buf);
+}
+
+static void
+non_bloquant(int fd)
+{
+	g_assert_cmpint(fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK), ==, 0);
+}
+
+/* 2 × 64 Kio sur une pty que personne ne lit : tout est accepté, puis arrive dans l'ordre à mesure que le maître lit par petits bouts ;
+ * on_sent rend exactement les octets écrits, avec leur étiquette ; try_send attend que la file soit vide. */
+static void
+test_file_pty_ordre(void)
+{
+	const gsize bloc = 65536;
+	paire_pty_t p;
+	TransportParams tp;
+	GtTransport *t;
+	Recepteur r;
+	GByteArray *lu = g_byte_array_new();
+	guint8 *a = motif(bloc, 'a'), *b = motif(bloc, 'A');
+
+	if(!ouvrir_pty(&p))
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	non_bloquant(p.maitre);
+	recepteur_init(&r);
+	params_serie(&tp, ttyname(p.esclave));
+	t = gt_transport_open(&tp, &rappels_emission, &r, NULL);
+	g_assert_nonnull(t);
+
+	g_assert_cmpint(gt_transport_send_queued(t, a, bloc, GINT_TO_POINTER(1)), ==, (gssize)bloc);
+	g_assert_cmpint(gt_transport_send_queued(t, b, bloc, GINT_TO_POINTER(2)), ==, (gssize)bloc);
+	g_assert_cmpuint(gt_transport_get_queued(t), >, 0);
+	g_assert_cmpuint(r.ecrits->len + gt_transport_get_queued(t), ==, 2 * bloc);
+	errno = 0;
+	g_assert_cmpint(gt_transport_try_send(t, (const guint8 *)"z", 1, GINT_TO_POINTER(3)), ==, -1);
+	g_assert_cmpint(errno, ==, EAGAIN);
+
+	lire_par_morceaux(p.maitre, lu, 2 * bloc, 1000, 10000);
+	g_assert_cmpuint(lu->len, ==, 2 * bloc);
+	g_assert_cmpmem(lu->data, bloc, a, bloc);
+	g_assert_cmpmem(lu->data + bloc, bloc, b, bloc);
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, 0);
+	g_assert_cmpmem(r.ecrits->data, r.ecrits->len, lu->data, lu->len);
+	g_assert_cmpuint(r.appels_ecrits, >, 2);	/* plusieurs morceaux : la file a bien servi */
+	for(gsize i = 0; i < 2 * bloc; i++)
+		g_assert_cmpuint(r.etiquettes->data[i], ==, i < bloc ? 1 : 2);
+
+	/* File vide : écriture directe et synchrone, on_sent compris */
+	g_assert_cmpint(gt_transport_try_send(t, (const guint8 *)"z", 1, GINT_TO_POINTER(3)), ==, 1);
+	g_assert_cmpint(gt_transport_send_queued(t, (const guint8 *)"yx", 2, GINT_TO_POINTER(4)), ==, 2);
+	g_assert_cmpuint(r.ecrits->len, ==, 2 * bloc + 3);
+	g_assert_cmpuint(r.etiquettes->data[2 * bloc], ==, 3);
+	g_assert_cmpuint(r.etiquettes->data[2 * bloc + 2], ==, 4);
+
+	gt_transport_close(t);
+	transport_params_clear(&tp);
+	recepteur_liberer(&r);
+	g_byte_array_unref(lu);
+	g_free(a);
+	g_free(b);
+	fermer_pty(&p);
+}
+
+/* Plafond : au-delà de la place restante, -1 / ENOBUFS, rien d'écrit ni de mis en file */
+static void
+test_file_plafond(void)
+{
+	paire_pty_t p;
+	TransportParams tp;
+	GtTransport *t;
+	Recepteur r;
+	guint8 *d = motif(GT_TRANSPORT_QUEUE_MAX + 1, 'a');
+	GByteArray *lu = g_byte_array_new();
+	gsize en_file;
+
+	if(!ouvrir_pty(&p))
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	non_bloquant(p.maitre);
+	recepteur_init(&r);
+	params_serie(&tp, ttyname(p.esclave));
+	t = gt_transport_open(&tp, &rappels_emission, &r, NULL);
+	g_assert_nonnull(t);
+
+	errno = 0;
+	g_assert_cmpint(gt_transport_send_queued(t, d, GT_TRANSPORT_QUEUE_MAX + 1, NULL), ==, -1);
+	g_assert_cmpint(errno, ==, ENOBUFS);
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, 0);
+	g_assert_cmpuint(r.ecrits->len, ==, 0);
+	lire_par_morceaux(p.maitre, lu, 1, 4096, 100);
+	g_assert_cmpuint(lu->len, ==, 0);
+
+	/* Une première moitié acceptée (pty non lue : presque tout en file), la seconde ne tient plus */
+	g_assert_cmpint(gt_transport_send_queued(t, d, GT_TRANSPORT_QUEUE_MAX / 2 + 1, NULL), ==, GT_TRANSPORT_QUEUE_MAX / 2 + 1);
+	en_file = gt_transport_get_queued(t);
+	g_assert_cmpuint(en_file, >, 0);
+	errno = 0;
+	g_assert_cmpint(gt_transport_send_queued(t, d, GT_TRANSPORT_QUEUE_MAX / 2 + r.ecrits->len, NULL), ==, -1);
+	g_assert_cmpint(errno, ==, ENOBUFS);
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, en_file);
+	g_assert_cmpint(gt_transport_send_queued(t, d, GT_TRANSPORT_QUEUE_MAX - en_file, NULL), ==, (gssize)(GT_TRANSPORT_QUEUE_MAX - en_file));
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, GT_TRANSPORT_QUEUE_MAX);
+
+	gt_transport_close(t);
+	transport_params_clear(&tp);
+	recepteur_liberer(&r);
+	g_byte_array_unref(lu);
+	g_free(d);
+	fermer_pty(&p);
+}
+
+/* Fermeture : la file est jetée, plus aucun on_sent */
+static void
+test_file_fermeture(void)
+{
+	paire_pty_t p;
+	TransportParams tp;
+	GtTransport *t;
+	Recepteur r;
+	guint8 *d = motif(262144, 'a');
+	GByteArray *lu = g_byte_array_new();
+	guint appels;
+
+	if(!ouvrir_pty(&p))
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	non_bloquant(p.maitre);
+	recepteur_init(&r);
+	params_serie(&tp, ttyname(p.esclave));
+	t = gt_transport_open(&tp, &rappels_emission, &r, NULL);
+	g_assert_nonnull(t);
+	g_assert_cmpint(gt_transport_send_queued(t, d, 262144, NULL), ==, 262144);
+	g_assert_cmpuint(gt_transport_get_queued(t), >, 0);
+	appels = r.appels_ecrits;
+	gt_transport_close(t);
+	lire_par_morceaux(p.maitre, lu, 262144, 4096, 300);
+	g_assert_cmpuint(r.appels_ecrits, ==, appels);
+	g_assert_cmpuint(lu->len, <, 262144);
+	transport_params_clear(&tp);
+	recepteur_liberer(&r);
+	g_byte_array_unref(lu);
+	g_free(d);
+	fermer_pty(&p);
+}
+
+/* Perte (maître fermé) : file jetée, plus d'on_sent, puis EIO */
+static void
+test_file_perte(void)
+{
+	paire_pty_t p;
+	TransportParams tp;
+	GtTransport *t;
+	Recepteur r;
+	guint8 *d = motif(262144, 'a');
+	guint appels;
+
+	if(!ouvrir_pty(&p))
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	recepteur_init(&r);
+	params_serie(&tp, ttyname(p.esclave));
+	t = gt_transport_open(&tp, &rappels_emission, &r, NULL);
+	g_assert_nonnull(t);
+	g_assert_cmpint(gt_transport_send_queued(t, d, 262144, NULL), ==, 262144);
+	g_assert_cmpuint(gt_transport_get_queued(t), >, 0);
+	appels = r.appels_ecrits;
+	close(p.maitre);
+	p.maitre = -1;
+	g_assert_true(attendre_evenement(&r, TRANSPORT_EVENT_LOST, 2000));
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, 0);
+	g_assert_cmpuint(r.appels_ecrits, ==, appels);
+	errno = 0;
+	g_assert_cmpint(gt_transport_send_queued(t, d, 1, NULL), ==, -1);
+	g_assert_cmpint(errno, ==, EIO);
+	gt_transport_close(t);
+	transport_params_clear(&tp);
+	recepteur_liberer(&r);
+	g_free(d);
+	fermer_pty(&p);
+}
+
+/* Serveur : le client parti, sa file est jetée ; le client suivant ne reçoit rien d'ancien */
+static void
+test_file_serveur_client_parti(void)
+{
+	TransportParams tp;
+	GtTransport *t;
+	Recepteur r;
+	guint16 port = port_libre();
+	guint8 *d = motif(262144, 'a');
+	GByteArray *lu = g_byte_array_new();
+	int client, petit = 4096;
+
+	recepteur_init(&r);
+	params_tcp(&tp, TRANSPORT_TCP_SERVER, port);
+	t = gt_transport_open(&tp, &rappels_emission, &r, NULL);
+	g_assert_nonnull(t);
+	g_assert_cmpint(gt_transport_send_queued(t, d, 10, NULL), ==, 0);	/* aucun client : rien en file */
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, 0);
+
+	client = connecter(port);
+	g_assert_true(attendre_evenement(&r, TRANSPORT_EVENT_CLIENT_CONNECTED, 2000));
+	g_assert_cmpint(setsockopt(gt_transport_get_fd(t), SOL_SOCKET, SO_SNDBUF, &petit, sizeof(petit)), ==, 0);
+	for(gint i = 0; i < 4 && gt_transport_get_queued(t) == 0; i++)
+		g_assert_cmpint(gt_transport_send_queued(t, d, 262144, NULL), ==, 262144);
+	g_assert_cmpuint(gt_transport_get_queued(t), >, 0);
+
+	close(client);
+	g_assert_true(attendre_evenement(&r, TRANSPORT_EVENT_CLIENT_GONE, 2000));
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, 0);
+
+	client = connecter(port);
+	for(gint64 fin = g_get_monotonic_time() + 2000000; compter(&r, TRANSPORT_EVENT_CLIENT_CONNECTED) < 2 && g_get_monotonic_time() < fin; g_usleep(1000))
+		g_main_context_iteration(NULL, FALSE);
+	g_assert_cmpuint(compter(&r, TRANSPORT_EVENT_CLIENT_CONNECTED), ==, 2);
+	non_bloquant(client);
+	lire_par_morceaux(client, lu, 1, 4096, 300);
+	g_assert_cmpuint(lu->len, ==, 0);
+	g_assert_cmpint(gt_transport_send_queued(t, (const guint8 *)"ok", 2, NULL), ==, 2);
+	lire_par_morceaux(client, lu, 2, 4096, 2000);
+	g_assert_cmpmem(lu->data, lu->len, "ok", 2);
+
+	close(client);
+	gt_transport_close(t);
+	transport_params_clear(&tp);
+	recepteur_liberer(&r);
+	g_byte_array_unref(lu);
+	g_free(d);
+}
+
+static gboolean
+rts_baisse(void)
+{
+	return (modem_etat & TIOCM_RTS) == 0;
+}
+
+/* RS485 : l'envoi ne bloque pas ; un seul TIOCMBIS et un seul TIOCMBIC pour toute la file (deux envois pendant le cycle compris) ;
+ * délais « avant » et « après » respectés par minuterie ; try_send attend la fin du cycle. */
+static void
+test_file_rs485(void)
+{
+	const gsize bloc = 65536;
+	paire_pty_t p;
+	TransportParams tp;
+	GtTransport *t;
+	Recepteur r;
+	guint8 *a = motif(bloc, 'a'), *b = motif(bloc, 'A');
+	GByteArray *lu = g_byte_array_new();
+	gint64 debut, duree, fin;
+	gint64 avant_premier = 0;
+
+	if(!ouvrir_pty(&p))
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	non_bloquant(p.maitre);
+	recepteur_init(&r);
+	params_serie(&tp, ttyname(p.esclave));
+	tp.flow = GT_FLOW_RS485;
+	tp.rs485_before_ms = 100;
+	tp.rs485_after_ms = 150;
+	t = gt_transport_open(&tp, &rappels_emission, &r, NULL);
+	g_assert_nonnull(t);
+	modem_fd = gt_transport_get_fd(t);
+	modem_etat = TIOCM_DTR;
+	changements_rts = appels_bis = appels_bic = 0;
+
+	debut = g_get_monotonic_time();
+	g_assert_cmpint(gt_transport_send_queued(t, a, bloc, GINT_TO_POINTER(1)), ==, (gssize)bloc);
+	duree = g_get_monotonic_time() - debut;
+	g_assert_cmpint(duree, <, 50000);
+	g_assert_cmpint(appels_bis, ==, 1);
+	g_assert_cmpint(modem_etat & TIOCM_RTS, ==, TIOCM_RTS);
+	g_assert_cmpuint(r.ecrits->len, ==, 0);	/* délai « avant » : rien d'écrit encore */
+	g_assert_cmpuint(gt_transport_get_queued(t), ==, bloc);
+	errno = 0;
+	g_assert_cmpint(gt_transport_try_send(t, (const guint8 *)"z", 1, NULL), ==, -1);
+	g_assert_cmpint(errno, ==, EAGAIN);
+
+	lire_par_morceaux(p.maitre, lu, 1000, 1000, 2000);
+	avant_premier = r.dernier_ecrit;
+	g_assert_cmpint(avant_premier - debut, >=, 95000);	/* délai « avant » (minuterie à la milliseconde près) */
+	g_assert_cmpint(gt_transport_send_queued(t, b, bloc, GINT_TO_POINTER(2)), ==, (gssize)bloc);
+	lire_par_morceaux(p.maitre, lu, 2 * bloc, 1000, 10000);
+	g_assert_cmpuint(lu->len, ==, 2 * bloc);
+	g_assert_cmpmem(lu->data, bloc, a, bloc);
+	g_assert_cmpmem(lu->data + bloc, bloc, b, bloc);
+	fin = g_get_monotonic_time();
+
+	while(!rts_baisse() && g_get_monotonic_time() - fin < 2000000)
+	{
+		g_main_context_iteration(NULL, FALSE);
+		g_usleep(1000);
+	}
+	g_assert_true(rts_baisse());
+	g_assert_cmpint(instant_bic - r.dernier_ecrit, >=, 145000);	/* délai « après », compté depuis la dernière écriture */
+	g_assert_cmpint(appels_bis, ==, 1);
+	g_assert_cmpint(appels_bic, ==, 1);
+	g_assert_cmpint(changements_rts, ==, 2);
+	g_assert_cmpuint(r.ecrits->len, ==, 2 * bloc);
+
+	/* Cycle terminé : try_send accepte de nouveau (un nouveau cycle) */
+	g_assert_cmpint(gt_transport_try_send(t, (const guint8 *)"z", 1, NULL), ==, 1);
+	g_assert_cmpint(appels_bis, ==, 2);
+
+	modem_fd = -1;
+	gt_transport_close(t);
+	transport_params_clear(&tp);
+	recepteur_liberer(&r);
+	g_byte_array_unref(lu);
+	g_free(a);
+	g_free(b);
+	fermer_pty(&p);
+}
+
 static void
 test_null_tolere(void)
 {
@@ -704,6 +1100,12 @@ main(int argc, char **argv)
 	g_test_add_func("/transport/tcp-serveur-evenements", test_tcp_serveur_evenements);
 	g_test_add_func("/transport/tcp-serveur-fermeture-libere-le-port", test_tcp_serveur_fermeture_libere_le_port);
 	g_test_add_func("/transport/deux-instances", test_deux_instances);
+	g_test_add_func("/transport/file-pty-ordre", test_file_pty_ordre);
+	g_test_add_func("/transport/file-plafond", test_file_plafond);
+	g_test_add_func("/transport/file-fermeture", test_file_fermeture);
+	g_test_add_func("/transport/file-perte", test_file_perte);
+	g_test_add_func("/transport/file-serveur-client-parti", test_file_serveur_client_parti);
+	g_test_add_func("/transport/file-rs485", test_file_rs485);
 	g_test_add_func("/transport/null-tolere", test_null_tolere);
 	g_test_add_func("/transport/wait-char-ancien-codage", test_wait_char_ancien_codage);
 	return g_test_run();

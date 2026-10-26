@@ -58,7 +58,7 @@ script_port_on_event(TransportEvent ev, const gchar *detail, gpointer user_data)
 	}
 }
 
-static const TransportCallbacks script_port_callbacks = { script_port_on_data, script_port_on_event };
+static const TransportCallbacks script_port_callbacks = { script_port_on_data, script_port_on_event, NULL };
 
 GtScriptPort *
 gt_script_port_open(const TransportParams *params, GError **error)

@@ -121,8 +121,8 @@ static void ask_save(FileActions *fa, const gchar *title, const gchar *last, GtU
 }
 /* ---- envoi de fichier (règles 1 à 4) ---- */
 
-/* gt_link_send rend 0 sans port ouvert, comme pour un port momentanément plein ; pour GtFileSender, 0 = « réessayer dans 10 ms » : hors GT_LINK_OPEN
- * (port fermé, perdu, en reconnexion, serveur TCP sans client), c'est une erreur, sinon l'envoi réessaierait sans fin. */
+/* gt_link_try_send (une écriture, régulée par GtFileSender ; jamais la file d'émission) rend 0 sans port ouvert ; pour GtFileSender, 0 = « réessayer
+ * dans 10 ms » : hors GT_LINK_OPEN (port fermé, perdu, en reconnexion, serveur TCP sans client), c'est une erreur, sinon l'envoi réessaierait sans fin. */
 static gssize send_write(const guint8 *data, gsize len, gpointer user_data)
 {
 	GtkTermLink *link = GT_LINK(user_data);
@@ -133,8 +133,9 @@ static gssize send_write(const guint8 *data, gsize len, gpointer user_data)
 		errno = ENOTCONN;
 		return -1;
 	}
-	written = gt_link_send(link, data, len, GT_SEND_FILE);
-	/* Port plein (écriture non bloquante, tampon du pilote ou de la pty saturé) : « réessayer plus tard », pas une erreur d'envoi */
+	written = gt_link_try_send(link, data, len, GT_SEND_FILE);
+	/* Port plein (écriture non bloquante, tampon du pilote ou de la pty saturé) ou file d'émission pas encore vide (frappe, macro) : « réessayer
+	 * plus tard », pas une erreur d'envoi */
 	if(written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 		return 0;
 	return written;

@@ -5,7 +5,15 @@
  * - on_data, CONNECTED, CLIENT_CONNECTED, CLIENT_GONE sont appelés depuis la surveillance du descripteur : le destinataire
  *   ne ferme pas le transport dans ces rappels ;
  * - LOST est signalé depuis une source d'inactivité, jamais pendant un appel au transport : le destinataire peut fermer le
- *   transport dans ce rappel. Après la perte, l'envoi échoue (-1, errno = EIO) jusqu'à la fermeture. */
+ *   transport dans ce rappel. Après la perte, l'envoi échoue (-1, errno = EIO) jusqu'à la fermeture ;
+ * - on_sent (facultatif) est appelé pour chaque morceau réellement écrit : sous gt_transport_send_queued / gt_transport_try_send
+ *   (écriture directe) ou sous la surveillance du descripteur (file d'émission) ; le destinataire ne ferme pas le transport dans ce
+ *   rappel, mais peut envoyer de nouveau (les octets passent derrière ceux qui attendent).
+ *
+ * File d'émission : gt_transport_send_queued accepte tout ou rien, écrit tout de suite ce que le descripteur prend et garde le reste,
+ * écrit ensuite par une surveillance G_IO_OUT posée tant que la file n'est pas vide. La file est jetée à la fermeture, à la perte et,
+ * en serveur, au départ ou au remplacement du client. RS485 : RTS levé une fois pour toute une rafale, délais « avant » et « après »
+ * par minuterie, vidage du port interrogé (TIOCOUTQ, puis TIOCSERGETLSR) : jamais d'attente bloquante. */
 #ifndef TRANSPORT_H_
 #define TRANSPORT_H_
 
@@ -75,7 +83,12 @@ typedef struct
 {
 	void (*on_data)(const guint8 *data, gsize len, gpointer user_data);
 	void (*on_event)(TransportEvent ev, const gchar *detail, gpointer user_data);
+	/* Octets réellement écrits, avec l'étiquette donnée à l'envoi ; NULL permis */
+	void (*on_sent)(const guint8 *data, gsize len, gpointer tag, gpointer user_data);
 } TransportCallbacks;
+
+/* Plafond de la file d'émission (octets acceptés pas encore écrits), comme GtRxQueue */
+#define GT_TRANSPORT_QUEUE_MAX (1024 * 1024)
 
 #define GT_TRANSPORT_ERROR (gt_transport_error_quark())
 
@@ -100,8 +113,16 @@ typedef struct _GtTransport GtTransport;
 GtTransport *gt_transport_open(const TransportParams *params, const TransportCallbacks *cb, gpointer user_data, GError **error);
 /* Ferme selon les paramètres ouverts (M1) : restauration termios et déverrouillage pour une instance série seulement. */
 void         gt_transport_close(GtTransport *t);
-/* Octets écrits, 0 si rien n'est ouvert (serveur sans client, connexion en cours), négatif en cas d'erreur. */
+/* Une seule tentative, jamais bloquante : octets écrits (ou, en RS485, acceptés pour un cycle RTS), 0 si rien n'est ouvert (serveur sans
+ * client, connexion en cours), -1 et errno en cas d'erreur ; -1 et EAGAIN tant que la file d'émission n'est pas vide (ordre préservé) ou,
+ * en RS485, pendant un cycle. Les octets écrits passent par on_sent avec tag. gt_transport_send = gt_transport_try_send(…, NULL). */
 gssize       gt_transport_send(GtTransport *t, const guint8 *data, gsize len);
+gssize       gt_transport_try_send(GtTransport *t, const guint8 *data, gsize len, gpointer tag);
+/* Tout ou rien : len si accepté (écrit tout de suite ou mis en file), 0 si rien n'est ouvert (rien en file), -1 et errno sinon : ENOBUFS si
+ * len dépasse la place restante sous GT_TRANSPORT_QUEUE_MAX (rien écrit ni mis en file), EIO après une perte, erreur de l'écriture directe. */
+gssize       gt_transport_send_queued(GtTransport *t, const guint8 *data, gsize len, gpointer tag);
+/* Octets acceptés par gt_transport_send_queued (ou try_send en RS485) pas encore écrits */
+gsize        gt_transport_get_queued(GtTransport *t);
 /* Masque TIOCM_*, -1 sans objet (TCP, pty sans lignes modem) ; une erreur de périphérique signale LOST. */
 gint         gt_transport_get_modem_lines(GtTransport *t);
 void         gt_transport_toggle_line(GtTransport *t, GtModemLine line);

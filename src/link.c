@@ -219,6 +219,20 @@ static void link_on_data(const guint8 *data, gsize len, gpointer user_data)
 	g_bytes_unref(bytes);
 }
 
+/* Octets réellement écrits (écriture directe sous gt_link_send / gt_link_try_send, ou file d'émission sous la surveillance du descripteur) :
+ * seuls eux entrent dans l'historique (TX, heure réelle d'écriture) et sont émis par « sent » ; l'origine est l'étiquette de l'envoi */
+static void link_on_sent(const guint8 *data, gsize len, gpointer tag, gpointer user_data)
+{
+	GtkTermLink *link = user_data;
+	GtSendOrigin origin = (GtSendOrigin)GPOINTER_TO_INT(tag);
+	GBytes *bytes;
+
+	gt_history_append(link->history, GT_RECORD_TX, origin, g_get_real_time(), data, len);
+	bytes = g_bytes_new(data, len);
+	g_signal_emit(link, signals[SIG_SENT], 0, bytes, (gint)origin);
+	g_bytes_unref(bytes);
+}
+
 static void link_on_event(TransportEvent ev, const gchar *detail, gpointer user_data)
 {
 	GtkTermLink *link = user_data;
@@ -244,7 +258,7 @@ static void link_on_event(TransportEvent ev, const gchar *detail, gpointer user_
 
 static gboolean link_open_transport(GtkTermLink *link, GError **error)
 {
-	static const TransportCallbacks callbacks = { link_on_data, link_on_event };
+	static const TransportCallbacks callbacks = { link_on_data, link_on_event, link_on_sent };
 	GtTransport *t = gt_transport_open(&link->params, &callbacks, link, error);
 
 	if(t == NULL)
@@ -399,22 +413,24 @@ void gt_link_close(GtkTermLink *link)
 
 gssize gt_link_send(GtkTermLink *link, const guint8 *data, gsize len, GtSendOrigin origin)
 {
-	gssize written;
-	GBytes *bytes;
-
 	g_return_val_if_fail(GT_IS_LINK(link), -1);
 	if(link->transport == NULL || len == 0)
 		return 0;
+	return gt_transport_send_queued(link->transport, data, len, GINT_TO_POINTER(origin));
+}
 
-	written = gt_transport_send(link->transport, data, len);
-	if(written <= 0)
-		return written;
+gssize gt_link_try_send(GtkTermLink *link, const guint8 *data, gsize len, GtSendOrigin origin)
+{
+	g_return_val_if_fail(GT_IS_LINK(link), -1);
+	if(link->transport == NULL || len == 0)
+		return 0;
+	return gt_transport_try_send(link->transport, data, len, GINT_TO_POINTER(origin));
+}
 
-	gt_history_append(link->history, GT_RECORD_TX, origin, g_get_real_time(), data, (gsize)written);
-	bytes = g_bytes_new(data, (gsize)written);
-	g_signal_emit(link, signals[SIG_SENT], 0, bytes, (gint)origin);
-	g_bytes_unref(bytes);
-	return written;
+gsize gt_link_get_queued(GtkTermLink *link)
+{
+	g_return_val_if_fail(GT_IS_LINK(link), 0);
+	return gt_transport_get_queued(link->transport);
 }
 
 gint gt_link_get_modem_lines(GtkTermLink *link)
