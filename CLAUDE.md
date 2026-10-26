@@ -121,7 +121,8 @@ bound to `status-text`, CSS classes `lost` (no style of its own) while the link 
 from the session's `GtPortActivity`, `tab-close` button → `gt_app_close_session()`, insensitive with one tab), `activity_icon.c` (activity indicator:
 fixed 18 × 16 `GtkOverlay`, accessible role image named after the state, one opaque indicator among dot, spinner, Zzz and skull, CSS class
 `activity-<nick>`; animated by timers (66 ms spinner, 800 ms Zzz), not CSS, only while that state is shown and the widget mapped),
-`terminal_view.c` (VTE; renders the link history through `view_render.c`; keyboard → `gt_link_send(GT_SEND_KEYBOARD)`), `app_actions.c`, `status_bar.c`
+`terminal_view.c` (VTE; renders the link history through `view_render.c`; keyboard → `gt_link_send(GT_SEND_KEYBOARD)`; `gt_terminal_view_new(link, options,
+session)`), `app_actions.c`, `status_bar.c`
 (label bound to the link's `status-text`, temporary message without a stack, DTR/RTS/CTS/CD/DSR/RI LEDs polled only while a serial link is open,
 activity indicator `status-activity` shown only with a single tab: `gt_status_bar_set_activity_visible()` from `update_tab_state()` of `app.c`),
 `search_bar.c`, `hex_send_bar.c` (parsing by `hex_input.c`), `dialogs.c` (`gt_ui_message`, `gt_ui_confirm`, `gt_ui_choose`, `gt_ui_open_file`, `gt_ui_save_file`),
@@ -162,8 +163,15 @@ and emits `received (GBytes *data, gint64 wall_time_us)` → subscribers: `src/u
 the RX logger (`GtRxLogger`: own `GtRxTransform`, no echo, transform fed even while paused so resuming never cuts a line; a write error stops it and reports
 through the `message` hook), the file sender (`gt_file_sender_feed_rx()`, wait-for-char), the Lua engine (port 0, connected on the main thread).
 
-**Send path:** everything goes through `gt_link_send(link, data, len, GtSendOrigin)` (keyboard, macro, Lua, hex, file). Only bytes actually written are appended
-to the history (TX record) and emitted by `sent`; echo is rendered from that, so it stays in place across view switches. The history keeps **raw** bytes: CR/LF
+**Send path:** everything goes through the link (spec `docs/superpowers/specs/2026-10-26-file-emission-design.md`). `gt_link_send(link, data, len, GtSendOrigin)`
+(keyboard and paste, macro click/shortcut/polling, hex bar, Lua `send_macro`) is **all accepted or nothing**: `len` once accepted (written at once, the rest in the
+transport's **send queue**, written as the port takes it), 0 when the link is not open (nothing is queued: never a replay after a reconnection), -1 and `errno`
+otherwise (`ENOBUFS`: queue full, `GT_TRANSPORT_QUEUE_MAX` = 1 MiB). `gt_link_try_send()` is one non-blocking write for senders that regulate themselves (file
+send through `file_actions.c`, Lua `send`/`send_hex` on port 0): -1/`EAGAIN` while the queue is not empty, so order is kept. `gt_link_get_queued()`. Only bytes
+actually written are appended to the history (TX record, wall time of the write, origin carried by the transport's tag) and emitted by `sent` — from the
+transport's `on_sent`, possibly later from the fd watch; echo is rendered from that, so it stays in place across view switches. A refused paste or keystroke
+flashes a hint to use « Send RAW file… » (the terminal view holds a weak pointer to its session); the hex bar says « %d byte(s) sent! » only when everything was
+accepted, else « Nothing sent: … » and keeps the entry. The queue dies with the transport (close, loss, server client gone or replaced). The history keeps **raw** bytes: CR/LF
 auto and timestamps are a read-time transform (`GtRxTransform`), so toggling an option, the echo or the view emits `changed` on `GtTermOptions` and redraws
 the terminal once from the history (`gt_terminal_view_redraw()`). « Clear scrollback » only clears VTE's scrollback: a later redraw brings the content back
 from the history, which stays the reference for « Save RAW/ASCII » (`capture.c`; each capture remembers its own last file).
@@ -171,14 +179,25 @@ from the history, which stays the reference for « Save RAW/ASCII » (`capture.c
 **Transport (`transport.c` / `transport.h`):** one instance per opened port (`gt_transport_open(params, callbacks, user_data, GError **)`), three modes —
 `TRANSPORT_SERIAL`, `TRANSPORT_TCP_CLIENT`, `TRANSPORT_TCP_SERVER`; no UI calls, errors via `GError`, `LOST` reported (deferred to an idle) instead of
 reconnecting. Serial specifics: termios in `serial_termios.c`, baud-rate tables in `baud.c`/`baudrates.c`. Privileged TCP ports use `CAP_NET_BIND_SERVICE`.
+**Send queue:** `gt_transport_send_queued(t, data, len, tag)` (all or nothing: empty queue → direct write, the rest queued as `GBytes` chunks with their tag;
+over the room left under `GT_TRANSPORT_QUEUE_MAX` → -1/`ENOBUFS`, nothing written), a `G_IO_OUT` watch present **only while the queue is not empty**, callback
+`on_sent(data, len, tag, user_data)` per chunk actually written (optional: `TransportCallbacks` initialised with two fields stay valid; called after the queue is
+updated, so a handler may send again), `gt_transport_try_send()` (one write; -1/`EAGAIN` while the queue is not empty or an RS485 cycle runs;
+`gt_transport_send()` = it with a NULL tag, used by Lua ports 1–15), `gt_transport_get_queued()`. The queue is dropped at close, at loss and, for a server,
+when the client leaves or is replaced; a write error from the watch is a loss (serial, TCP client) or `CLIENT_GONE` (server). **RS485 never blocks:** one
+`TIOCMBIS` per burst, « before » delay by `g_timeout`, queue written by the watch, then `TIOCOUTQ` polled every 5 ms and the UART shift register
+(`TIOCSERGETLSR`/`TIOCSER_TEMT`) when the driver gives it (bounded: time of the driver's pending bytes + 1 s), « after » delay by `g_timeout`, one `TIOCMBIC`; bytes queued while draining or during the « after »
+delay resume writing without toggling RTS; no `usleep`/`tcdrain` on the main thread, no RTS toggle on `EAGAIN`. In RS485, `try_send` queues what fits for one
+cycle when idle (file send: one RTS cycle per chunk). Lua ports 1–15 cannot be opened in RS485.
 
 **Link (`link.c` / `link.h`):** single state machine for the main port — `CLOSED`, `CONNECTING`, `OPEN`, `LISTENING`, `LOST`, `RECONNECTING`; properties
 `state`, `status-text`, `auto-reconnect`, `reconnect-interval-ms`; signals `open-failed` (user-requested open only → error message box), `received`, `sent`,
 `history-cleared`. Link loss never opens a dialog: the status bar shows « — lost » / « — reconnecting… »; silent retry every 2 s plus an immediate retry when
 udev reports the device back. With `auto-reconnect`, a failed user-requested open (serial or TCP client) shows `open-failed` once, then goes to `RECONNECTING`
 too (device plugged in / server started after GTKTerm). The udev monitor lives here and matches by device number, then path/links (`device_match.c`).
-**Re-entrancy (see `link.h`):** handlers of `received`, `sent` and `notify::state`/`notify::status-text` may run inside the transport's fd watch or inside
-`gt_link_send`; they must not call `gt_link_open`/`gt_link_close` — defer with `g_idle_add`.
+**Re-entrancy (see `link.h`):** handlers of `received`, `sent` and `notify::state`/`notify::status-text` may run inside the transport's fd watch (read or
+send queue) or inside `gt_link_send`/`gt_link_try_send`; they must not call `gt_link_open`/`gt_link_close` — defer with `g_idle_add`. A `sent` handler may send
+again (its bytes go behind those waiting).
 
 **Port activity (`port_activity.c` + `src/ui/activity_icon.c`):** `GtPortActivity` (core, no `link.h`: it gets dated events, `GtPortActivityLink`
 converted by the session) computes one state per tab, by priority `closed`, `dead`, `reconnecting`, `lost`, `connecting` (`CONNECTING` or
@@ -201,7 +220,8 @@ overflow reported once per port and run) and the atomic port state, and runs eve
 invoked from the main thread, recorded by `script_engine_setup`). Lua ports 1–15 are `GtScriptPort` (`script_port.c`, core: one `GtTransport` + one
 `GtRxQueue` each, opened/closed/written on the main thread; the port table is read and written by the Lua thread only); port 0 is the link, observed through
 its `received` signal (connected/disconnected on the main thread); its queue is never closed, so `wait_for(0, …)` returns only data or `"timeout"`.
-`send`/`send_hex` write everything or fail with a reason (partial writes and `EAGAIN` retried on the Lua thread with a 2 ms pause, timeout); failures return
+`send`/`send_hex` write everything or fail with a reason (partial writes and `EAGAIN` retried on the Lua thread with a 2 ms pause, timeout; port 0 through
+`gt_link_try_send`, so a `send` after a big `send_macro` waits for the send queue to empty); failures return
 `false`/`nil` plus a stable English reason; a `tcp_client` connection with a timeout of 0 or a negative one returns `"timeout"` at once; its host name is
 resolved on the Lua thread (`getaddrinfo`, not interruptible) and each address is then opened by its numeric form and tried in turn within the timeout (the
 transport itself also falls back to the next address on an asynchronous refusal). Closing a serial Lua port (`close` or end of script) first waits on the Lua
@@ -219,7 +239,8 @@ wrapped by `std_guard`, which sees the stop on entry and gives argument errors b
 1000 instructions; `debug.sethook` is removed but `package.loadlib` can bypass that. `os.exit(n)` ends the script (never GTKTerm): 0 → finished, any other
 code → error, code not truncated; `print` writes to the console; the script runs inside `lua_pcall` of a C function. Log text is batched in a locked buffer
 flushed by a single source at `G_PRIORITY_DEFAULT_IDLE` (20 ms timer, 1 MiB cap with a dropped-bytes line); the done idle flushes it, joins the thread, then
-reports `GtScriptEnd` (finished / error / stopped). `send_macro` uses `gt_macros_send_quiet()` (no « sent! » message). **Closing a tab or GTKTerm:** `gt_session_shutdown()` stops the session's engine
+reports `GtScriptEnd` (finished / error / stopped). `send_macro` uses `gt_macros_send_quiet()` (no « sent! » message): true once accepted (queued), else
+false plus `"not connected"`, `"link lost"`, `"send queue full"` or a system reason. **Closing a tab or GTKTerm:** `gt_session_shutdown()` stops the session's engine
 after its page (file send and log) is shut down: `gt_script_engine_shutdown()` does not run the main loop — the main thread itself executes the pending
 `run_on_main_sync` requests (of every engine: one queue, one main thread) until the thread ends,
 and abandons the thread after 3 s (the UI is frozen meanwhile). Closing the window first sets the stop flag of every engine, then shuts them down one by one.
@@ -285,7 +306,9 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   panel. The running state is never saved.
 - `macros.c` (application layer, no GTK) — `GtMacros`, one per session (`gt_macros_new(link, owner)`: current set, file path, poller on the session's link,
   so a polling keeps sending on its tab's port whatever tab is shown and stops when its tab closes); `gt_macros_send(m, id, args, n)` is the **only** send
-  path for panel click, shortcut and polling (it flashes « Macro "%s" sent! » through `status_flash(owner)`), `gt_macros_send_quiet()` the same for Lua
+  path for panel click, shortcut and polling (it flashes « Macro "%s" sent! » through `status_flash(owner)` once `gt_link_send` accepted it; a full send queue
+  or an error flashes « Macro "%s" not sent: … », at most once per 3 s per macro; a closed port says nothing; a polling tick is **skipped** while the
+  link's send queue is not empty, so a polling faster than the line never piles up), `gt_macros_send_quiet()` the same for Lua
   without the message; UI effects through the `GtAppUi` hooks with the owner session (`macros_changed`, `macro_polling_changed`, `message`). **Arguments (6c):** the panel no longer saves what the user
   types or picks. `GtMacros` keeps **usage values** (id → raw arguments, born empty, never saved; `gt_macros_set_usage_arg`, `gt_macros_reset_usage` (id 0: all), `gt_macros_has_usage`,
   `gt_macros_get_usage` (raw, read by the panel)); **an empty field means the default value**: `gt_macros_get_args` resolves each argument (non-empty usage
