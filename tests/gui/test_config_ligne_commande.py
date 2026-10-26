@@ -21,7 +21,7 @@ check(wait_until(lambda: e.status_text().startswith(e.port + ' '), 5), 'port de 
 
 # 1. charger un fichier de macros : seul macros_file est écrit dans le profil actif
 e.action('load-macros')
-file_dialog(e, 'Load macros file', ma)
+load_macros_free(e, ma)
 check(wait_until(lambda: 'macros_file=%s' % ma in rc(), 5), 'chemin du fichier de macros enregistre')
 check('port=%s' % autre in rc(), 'le profil garde son port (pas celui de --port)')
 check(e.alerts() == [], 'chargement sans message')

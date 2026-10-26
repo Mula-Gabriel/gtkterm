@@ -32,6 +32,7 @@ typedef struct
 {
 	GtkWidget         *window;	/* « macro-editor » */
 	GWeakRef           session;	/* session éditée (spec §3.2-12 : référence faible) */
+	GWeakRef           parent;	/* fenêtre principale : parent des questions ; l'éditeur n'est pas transient-for, pour pouvoir être agrandi */
 	GtMacroSet        *set;	/* jeu édité ; jamais déréférencé s'il n'est plus le jeu courant */
 	GListStore        *rows;	/* GtMacroRow */
 	GListStore        *list_rows;	/* GtMacroListRow */
@@ -700,7 +701,18 @@ static gboolean on_key_pressed(GtkEventControllerKey *controller, guint keyval, 
 	MacroEditor *editor = editor_of(gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller)));
 	gchar *accel = NULL;
 
-	if(editor == NULL || editor->capture_row == NULL)
+	if(editor == NULL)
+		return GDK_EVENT_PROPAGATE;
+	/* F11 sans modificateur, hors capture d'un raccourci : plein écran (spec 2026-10-15-ouverture-silencieuse §2) */
+	if(editor->capture_row == NULL && keyval == GDK_KEY_F11 && (state & gtk_accelerator_get_default_mod_mask()) == 0)
+	{
+		if(gtk_window_is_fullscreen(GTK_WINDOW(editor->window)))
+			gtk_window_unfullscreen(GTK_WINDOW(editor->window));
+		else
+			gtk_window_fullscreen(GTK_WINDOW(editor->window));
+		return GDK_EVENT_STOP;
+	}
+	if(editor->capture_row == NULL)
 		return GDK_EVENT_PROPAGATE;
 	switch(gt_macro_accel_from_key(keyval, state, &accel))
 	{
@@ -896,9 +908,12 @@ static gboolean apply_edits(MacroEditor *editor)
 	if(gt_macros_get_template(macros) == NULL)
 	{
 		commit_rows(editor, macros);	/* editor->set est le jeu courant */
+		GtkWindow *parent = g_weak_ref_get(&editor->parent);
+
 		s = g_weak_ref_get(&editor->session);
-		gt_ui_macros_save(gtk_window_get_transient_for(GTK_WINDOW(editor->window)), s, NULL);	/* non NULL : editor_macros l'a vue vivante */
+		gt_ui_macros_save(parent, s, NULL);	/* non NULL : editor_macros l'a vue vivante */
 		g_object_unref(s);
+		g_clear_object(&parent);
 		return TRUE;
 	}
 	/* Onglet lié (spec modèles §2.7) : rien n'est appliqué avant la réponse */
@@ -954,8 +969,8 @@ static void do_reload(MacroEditor *editor, GtMacros *macros)
 
 	stop_capture(editor);
 	set_message(editor, NULL, FALSE);
-	/* Fichier .ini disparu : gt_macros_reload le prendrait pour un jeu vide et jetterait la seule copie restante (spec §4 : rien ne change).
-	 * Un modèle disparu est déjà refusé par gt_macros_reload_template. */
+	/* Fichier .ini disparu (spec §4 : rien ne change) : gt_macros_reload le refuse aussi, mais par une boîte de message ; ici la raison reste
+	 * dans l'éditeur. Un modèle disparu est refusé par gt_macros_reload_template. */
 	if(tpl == NULL && path != NULL && !g_file_test(path, G_FILE_TEST_EXISTS))
 	{
 		gchar *text = g_strdup_printf(_("The macros file %s no longer exists."), path);
@@ -1110,6 +1125,7 @@ static void editor_free(gpointer data)
 	g_clear_object(&editor->rows);
 	g_clear_object(&editor->list_rows);
 	g_weak_ref_clear(&editor->session);
+	g_weak_ref_clear(&editor->parent);
 	g_free(editor);
 }
 
@@ -1210,7 +1226,7 @@ static GtkWidget *button_row(void)
 /* --- Table des arguments (spec des arguments §2.11) : sous la liste, pour la seule ligne sélectionnée ; aperçu de la ligne envoyée (§2.10) --- */
 
 /* Colonnes de la table ; la ligne 0 porte les en-têtes, l'argument k la ligne k + 1 */
-enum { COL_RANK, COL_FORMAT, COL_TYPE, COL_DEFAULT, COL_MIN, COL_MAX, COL_CHARSET, COL_OPTIONAL, COL_PREFIX, N_COLS };
+enum { COL_RANK, COL_FORMAT, COL_TYPE, COL_DEFAULT, COL_MIN, COL_MAX, COL_CHARSET, COL_OPTIONAL, COL_PREFIX, COL_FLAG, N_COLS };
 
 /* Entrées de la liste déroulante des jeux de caractères, dans l'ordre ; la dernière est la classe personnalisée */
 static const gchar *const charset_values[] = { "", "printable", "ascii", "latin1" };
@@ -1372,6 +1388,14 @@ static void defaults_commit(MacroEditor *editor, gboolean write)
 static void on_table_entry_changed(GtkEditable *editable, gpointer data)
 {
 	MacroEditor *editor = editor_of(GTK_WIDGET(editable));
+
+	if(editor != NULL)
+		defaults_commit(editor, TRUE);
+}
+
+static void on_default_flag_toggled(GtkCheckButton *check, gpointer data)
+{
+	MacroEditor *editor = editor_of(GTK_WIDGET(check));
 
 	if(editor != NULL)
 		defaults_commit(editor, TRUE);
@@ -1662,9 +1686,9 @@ static GtkWidget *charset_cell(gint k, const gchar *initial)
 	return box;
 }
 
-/* Optional et Prefix de l'argument k écrits dans la ligne affichée (vecteurs de defaults_n éléments), puis l'action si elle est donnée :
+/* Optional (kind : "", "1" ou GT_MACRO_ARG_FLAG) et Prefix de l'argument k écrits dans la ligne affichée (vecteurs de defaults_n éléments), puis l'action si elle est donnée :
  * dans cet ordre, les longueurs restent cohérentes quand notify::action refait la table (qui relit les vecteurs) */
-static void optional_write(MacroEditor *editor, gint k, gboolean optional, const gchar *prefix, const gchar *action)
+static void optional_write(MacroEditor *editor, gint k, const gchar *kind, const gchar *prefix, const gchar *action)
 {
 	GtMacroRow *row = g_object_ref(editor->defaults_row);	/* notify::action peut changer la ligne affichée */
 	gint n = editor->defaults_n;
@@ -1673,7 +1697,7 @@ static void optional_write(MacroEditor *editor, gint k, gboolean optional, const
 
 	for(gint i = 0; i < n; i++)
 	{
-		opt[i] = g_strdup(i == k ? (optional ? "1" : "") : nth((const gchar *const *)ropt, i));
+		opt[i] = g_strdup(i == k ? kind : nth((const gchar *const *)ropt, i));
 		pre[i] = g_strdup(i == k ? prefix : nth((const gchar *const *)rpre, i));
 	}
 	g_strfreev(ropt);
@@ -1745,7 +1769,7 @@ static void on_optional_toggled(GtkCheckButton *check, gpointer data)
 		gtk_widget_set_sensitive(entry, on);
 		editor->defaults_building = FALSE;
 	}
-	optional_write(editor, k, on, on ? prefix : "", action);
+	optional_write(editor, k, on ? "1" : "", on ? prefix : "", action);	/* décocher Optional décoche aussi Flag */
 	/* Action inchangée : la table n'a pas été refaite, la cellule Default du rang k doit suivre l'état facultatif (vide accepté, « (none) ») */
 	if(action == NULL && editor->defaults_row != NULL)
 	{
@@ -1771,12 +1795,46 @@ static void on_prefix_changed(GtkEditable *editable, gpointer data)
 	if(editor == NULL || editor->defaults_building || editor->defaults_row == NULL || k >= editor->defaults_n)
 		return;
 	value = row_nth(gt_macro_row_get_arg_optional(editor->defaults_row), editor->defaults_n, k);
-	optional_write(editor, k, strcmp(value, "1") == 0, gtk_editable_get_text(editable), NULL);
+	optional_write(editor, k, value, gtk_editable_get_text(editable), NULL);
 	g_free(value);
 }
 
-/* Cellules Optional (case) et Prefix (entrée, insensible si la case est décochée) de l'argument k */
-static void optional_cells_attach(MacroEditor *editor, gint k, gboolean optional, const gchar *prefix)
+/* Case Flag de l'argument k (spec 2026-10-15-ouverture-silencieuse §3.2) : cochée, l'argument facultatif devient un drapeau (préfixe seul) ;
+ * la cellule Default devient une case, la table est refaite */
+static void on_flag_toggled(GtkCheckButton *check, gpointer data)
+{
+	MacroEditor *editor = editor_of(GTK_WIDGET(check));
+	gint k = GPOINTER_TO_INT(data);
+	gboolean focused = gtk_widget_has_focus(GTK_WIDGET(check));
+	gchar *prefix;
+	GtkWidget *again;
+
+	if(editor == NULL || editor->defaults_building || editor->defaults_row == NULL || k >= editor->defaults_n)
+		return;
+	prefix = row_nth(gt_macro_row_get_arg_prefix(editor->defaults_row), editor->defaults_n, k);
+	g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, keep_until_idle, g_object_ref(check), g_object_unref);	/* vivante jusqu'à la fin de l'événement */
+	optional_write(editor, k, gtk_check_button_get_active(check) ? GT_MACRO_ARG_FLAG : "1", prefix, NULL);
+	g_free(prefix);
+	/* Le défaut du rang k change de sens (case ↔ texte) : vidé, jamais un « 1 » de case envoyé comme texte */
+	if(row_vector(gt_macro_row_get_args(editor->defaults_row), editor->defaults_n) != NULL)
+	{
+		gchar **args = g_strdupv((gchar **)gt_macro_row_get_args(editor->defaults_row));
+
+		g_free(args[k]);
+		args[k] = g_strdup("");
+		args = vector_or_null(args);
+		gt_macro_row_set_args(editor->defaults_row, (const gchar *const *)args);
+		g_strfreev(args);
+	}
+	defaults_rebuild(editor);
+	again = table_cell(editor, COL_FLAG, k);
+	if(focused && again != NULL)
+		gtk_widget_grab_focus(again);
+}
+
+/* Cellules Optional (case), Prefix (entrée, insensible si la case est décochée) et, pour un %s, Flag (case, insensible si Optional est
+ * décochée) de l'argument k */
+static void optional_cells_attach(MacroEditor *editor, gint k, gboolean optional, gboolean flag, gboolean text, const gchar *prefix)
 {
 	GtkWidget *check = gtk_check_button_new();
 	GtkWidget *entry = gtk_entry_new();
@@ -1793,6 +1851,18 @@ static void optional_cells_attach(MacroEditor *editor, gint k, gboolean optional
 	g_signal_connect(entry, "changed", G_CALLBACK(on_prefix_changed), GINT_TO_POINTER(k));
 	gtk_grid_attach(GTK_GRID(editor->defaults), check, COL_OPTIONAL, k + 1, 1, 1);
 	gtk_grid_attach(GTK_GRID(editor->defaults), entry, COL_PREFIX, k + 1, 1, 1);
+	if(text)
+	{
+		GtkWidget *fl = gtk_check_button_new();
+
+		gtk_check_button_set_active(GTK_CHECK_BUTTON(fl), flag);
+		gtk_widget_set_halign(fl, GTK_ALIGN_CENTER);
+		gtk_widget_set_sensitive(fl, optional);
+		gtk_widget_set_tooltip_text(fl, _("Flag: a check box that sends only the prefix"));
+		name_field(fl, "macro-flag", k);
+		g_signal_connect(fl, "toggled", G_CALLBACK(on_flag_toggled), GINT_TO_POINTER(k));
+		gtk_grid_attach(GTK_GRID(editor->defaults), fl, COL_FLAG, k + 1, 1, 1);
+	}
 }
 
 /* Table refaite : sélection, action de la ligne affichée ou listes ont changé */
@@ -1804,7 +1874,7 @@ static void defaults_rebuild(MacroEditor *editor)
 	macro_arg_info_t *infos = NULL;
 	GtMacroLists *lists = NULL;
 	const gchar *const headers[N_COLS] = { _("#"), _("Format"), _("Type"), _("Default"), _("Min"), _("Max"), _("Charset"), _("Optional"),
-	                                         _("Prefix") };
+	                                         _("Prefix"), _("Flag") };
 	const gchar *const *args, *const *mins, *const *maxs, *const *css;
 	gchar **opts = NULL, **pres = NULL;
 	gint n_args = 0;
@@ -1851,17 +1921,25 @@ static void defaults_rebuild(MacroEditor *editor)
 			gboolean text = g_strcmp0(type, "s") == 0;
 			gchar *rank = g_strdup_printf("%d", k + 1);
 			GtkWidget *w;
-			gboolean optional;
+			gboolean optional, flag;
 
 			gtk_grid_attach(GTK_GRID(editor->defaults), table_text(rank), COL_RANK, k + 1, 1, 1);
 			g_free(rank);
 			gtk_grid_attach(GTK_GRID(editor->defaults), table_text(infos[k].spec), COL_FORMAT, k + 1, 1, 1);
 			gtk_grid_attach(GTK_GRID(editor->defaults), table_text(text ? _("text (bytes)") : gt_macro_arg_type_name(type)), COL_TYPE, k + 1, 1, 1);
-			optional = g_strcmp0(nth((const gchar *const *)opts, k), "1") == 0;
-			/* Défaut d'un argument facultatif : vide accepté malgré les limites, liste avec « (none) » (valeur "") */
-			w = gt_macro_arg_widget_new_full(lists, &infos[k], args != NULL ? args[k] : "", NULL, optional);
-			gt_macro_arg_widget_set_optional(w, optional, nth((const gchar *const *)pres, k));
-			if(GTK_IS_DROP_DOWN(w))
+			flag = text && infos[k].list_name == NULL && g_strcmp0(nth((const gchar *const *)opts, k), GT_MACRO_ARG_FLAG) == 0;
+			optional = flag || g_strcmp0(nth((const gchar *const *)opts, k), "1") == 0;
+			/* Défaut d'un argument facultatif : vide accepté malgré les limites, liste avec « (none) » (valeur "") ; d'un drapeau : une case */
+			if(flag)
+				w = gt_macro_arg_widget_new_flag(nth((const gchar *const *)pres, k), args != NULL ? args[k] : "");
+			else
+			{
+				w = gt_macro_arg_widget_new_full(lists, &infos[k], args != NULL ? args[k] : "", NULL, optional);
+				gt_macro_arg_widget_set_optional(w, optional, nth((const gchar *const *)pres, k));
+			}
+			if(GTK_IS_CHECK_BUTTON(w))
+				g_signal_connect(w, "toggled", G_CALLBACK(on_default_flag_toggled), NULL);
+			else if(GTK_IS_DROP_DOWN(w))
 				g_signal_connect(w, "notify::selected", G_CALLBACK(on_default_dropdown_selected), NULL);
 			else
 			{
@@ -1878,7 +1956,10 @@ static void defaults_rebuild(MacroEditor *editor)
 			}
 			if(text)
 				gtk_grid_attach(GTK_GRID(editor->defaults), charset_cell(k, nth(css, k)), COL_CHARSET, k + 1, 1, 1);
-			optional_cells_attach(editor, k, optional, nth((const gchar *const *)pres, k));
+			for(gint c = COL_MIN; c <= COL_CHARSET; c++)	/* drapeau : ni limites ni jeu de caractères */
+				if(table_cell(editor, c, k) != NULL)
+					gtk_widget_set_sensitive(table_cell(editor, c, k), !flag);
+			optional_cells_attach(editor, k, optional, flag, text, nth((const gchar *const *)pres, k));
 		}
 	}
 	gtk_widget_set_visible(editor->defaults_scroll, n_args > 0);
@@ -2094,11 +2175,11 @@ void gt_macro_editor_open(GtkWindow *parent, GtSession *s)
 	gtk_window_set_title(GTK_WINDOW(editor->window), title);
 	g_free(title);
 	gtk_window_set_default_size(GTK_WINDOW(editor->window), 900, 640);	/* place pour la table des arguments et l'aperçu */
+	/* Fenêtre souveraine (ni modale ni transient-for) : GTK ne donne qu'à elle les boutons Réduire et Agrandir. Détruite avec la fenêtre
+	 * principale comme le ferait destroy-with-parent. */
+	g_weak_ref_init(&editor->parent, parent);
 	if(parent != NULL)
-	{
-		gtk_window_set_transient_for(GTK_WINDOW(editor->window), parent);
-		gtk_window_set_destroy_with_parent(GTK_WINDOW(editor->window), TRUE);
-	}
+		g_signal_connect_object(parent, "destroy", G_CALLBACK(gtk_window_destroy), editor->window, G_CONNECT_SWAPPED);
 	g_signal_connect(editor->window, "close-request", G_CALLBACK(on_close_request), NULL);
 	g_signal_connect(editor->window, "destroy", G_CALLBACK(on_destroy), NULL);
 	g_signal_connect_object(s, "closed", G_CALLBACK(on_session_closed), editor->window, 0);

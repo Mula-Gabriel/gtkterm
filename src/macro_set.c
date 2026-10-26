@@ -166,6 +166,28 @@ fit_length(gchar ***v, gint n)
 
 /* Les arguments enregistrés et leurs limites ne restent que s'ils correspondent encore au nombre de spécificateurs ;
  * chaque limite est revalidée pour le type courant de son argument (sans avertissement) */
+/* Valeurs de arg_optional (spec 2026-10-15-ouverture-silencieuse §3.1) : "1" facultatif, "flag" drapeau (seulement sur un %s, ailleurs "1"),
+ * toute autre valeur "" */
+static void
+normalize_optional(const macro_arg_info_t *infos, gint n_infos, gchar **o, gint n)
+{
+	for(gint k = 0; o != NULL && k < n && o[k] != NULL; k++)
+	{
+		const gchar *v = o[k];
+		const gchar *keep = "";
+
+		if(strcmp(v, "1") == 0)
+			keep = "1";
+		else if(strcmp(v, GT_MACRO_ARG_FLAG) == 0)
+			keep = k < n_infos && infos[k].list_name == NULL && g_strcmp0(infos[k].type, "s") == 0 ? GT_MACRO_ARG_FLAG : "1";
+		if(strcmp(v, keep) != 0)
+		{
+			g_free(o[k]);
+			o[k] = g_strdup(keep);
+		}
+	}
+}
+
 static void
 check_args(const GtMacroSet *set, GtMacro *m)
 {
@@ -183,15 +205,10 @@ check_args(const GtMacroSet *set, GtMacro *m)
 	for(gint v = 0; v < 3; v++)
 		if(*vecs[v] != NULL && vector_all_empty(*vecs[v]))
 			g_clear_pointer(vecs[v], g_strfreev);
-	/* Facultatif et préfixe suivent le nombre d'arguments rang par rang ; toute valeur de facultatif autre que "1" devient "" */
+	/* Facultatif et préfixe suivent le nombre d'arguments rang par rang ; valeurs de facultatif normalisées pour les nouveaux types */
 	fit_length(&m->arg_optional, n);
 	fit_length(&m->arg_prefix, n);
-	for(gint k = 0; m->arg_optional != NULL && k < n; k++)
-		if(strcmp(m->arg_optional[k], "1") != 0 && m->arg_optional[k][0] != '\0')
-		{
-			g_free(m->arg_optional[k]);
-			m->arg_optional[k] = g_strdup("");
-		}
+	normalize_optional(infos, n, m->arg_optional, n);
 	fit_length(&m->arg_optional, n);
 	macro_arg_infos_free(infos, n);
 }
@@ -430,12 +447,14 @@ gt_macro_set_set_optional(GtMacroSet *set, guint id, const gchar *const *optiona
 		g_strfreev(p);
 		return FALSE;
 	}
-	for(gint k = 0; o != NULL && k < n_args; k++)
-		if(strcmp(o[k], "1") != 0)
-		{
-			g_free(o[k]);
-			o[k] = g_strdup("");
-		}
+	if(o != NULL)
+	{
+		gint n_infos = 0;
+		macro_arg_info_t *infos = macro_get_arg_infos(set->lists, m->action, &n_infos);
+
+		normalize_optional(infos, n_infos, o, n_args);
+		macro_arg_infos_free(infos, n_infos);
+	}
 	g_strfreev(m->arg_optional);
 	g_strfreev(m->arg_prefix);
 	m->arg_optional = o;
@@ -449,7 +468,20 @@ gboolean
 gt_macro_arg_is_optional(const GtMacro *macro, gint k)
 {
 	return macro != NULL && macro->arg_optional != NULL && k >= 0 && (guint)k < g_strv_length(macro->arg_optional)
-	       && strcmp(macro->arg_optional[k], "1") == 0;
+	       && (strcmp(macro->arg_optional[k], "1") == 0 || strcmp(macro->arg_optional[k], GT_MACRO_ARG_FLAG) == 0);
+}
+
+gboolean
+gt_macro_arg_is_flag(const GtMacro *macro, gint k)
+{
+	return macro != NULL && macro->arg_optional != NULL && k >= 0 && (guint)k < g_strv_length(macro->arg_optional)
+	       && strcmp(macro->arg_optional[k], GT_MACRO_ARG_FLAG) == 0;
+}
+
+gboolean
+gt_macro_flag_value_set(const gchar *value)
+{
+	return value != NULL && value[0] != '\0' && strcmp(value, "0") != 0;
 }
 
 const gchar *
@@ -741,7 +773,8 @@ emit_omitted(GArray *segs, const GArray *arg_ranges, gchar **optional, gboolean 
 	{
 		const GtMacroRange *r = &g_array_index(arg_ranges, GtMacroRange, k);
 
-		if(!done[k] && r->len == 0 && optional != NULL && g_strcmp0(optional[k], "1") == 0 && r->start <= upto_char)
+		if(!done[k] && r->len == 0 && optional != NULL && (g_strcmp0(optional[k], "1") == 0 || g_strcmp0(optional[k], GT_MACRO_ARG_FLAG) == 0)
+		   && r->start <= upto_char)
 		{
 			GtMacroSegment seg = { GT_MACRO_SEG_OMITTED, (gint)k, byte_pos, 0 };
 
@@ -864,6 +897,8 @@ gt_macro_check_args(const GtMacroSet *set, const GtMacro *macro, const gchar *co
 	{
 		if(gt_macro_arg_is_optional(macro, k) && (use[k] == NULL || use[k][0] == '\0'))
 			continue;
+		if(gt_macro_arg_is_flag(macro, k))
+			continue;	/* drapeau : ni limites ni jeu de caractères, toute valeur dit coché ou non */
 		if(infos[k].list_name != NULL)
 			continue;
 		if(gt_macro_arg_check(infos[k].type, use[k] != NULL ? use[k] : "", limit_at(macro->arg_min, k), limit_at(macro->arg_max, k),

@@ -784,9 +784,6 @@ test_conflit(void)
 	g_free(dir);
 }
 
-/* Aucun fichier courant (onglet dont le profil n'a pas chargé de macros) : la cible est le fichier par défaut ; présent et non vide, il n'est jamais
- * réécrit en silence (conflit, comme un fichier changé sur le disque) ; Reload le lit et en fait le fichier courant ; forcé (Overwrite), il est écrit ;
- * absent ou vide, il est écrit sans question. */
 /* Reload d'un fichier courant disparu (conflit Overwrite / Reload / Cancel) : refusé avec un message nommant le fichier, jeu et chemin inchangés */
 static void
 test_reload_fichier_disparu(void)
@@ -816,6 +813,9 @@ test_reload_fichier_disparu(void)
 	g_free(dir);
 }
 
+/* Aucun fichier courant (onglet dont le profil n'a pas chargé de macros) : la cible est le fichier par défaut ; présent et non vide, il n'est jamais
+ * réécrit en silence (conflit, comme un fichier changé sur le disque) ; Reload le lit et en fait le fichier courant ; forcé (Overwrite), il est écrit ;
+ * absent ou vide, il est écrit sans question. */
 static void
 test_defaut_existant_conflit(void)
 {

@@ -1058,6 +1058,74 @@ static void test_facultatif_verification(void)
 	gt_macro_set_free(set);
 }
 
+/* Drapeau (spec 2026-10-15-ouverture-silencieuse §3.1) : coché → préfixe seul ; "", "0" ou absent → rien ; jamais refusé ; seulement sur un %s */
+static void test_drapeau(void)
+{
+	GtMacroSet *set = gt_macro_set_new();
+	GtMacroLists *lists = gt_macro_lists_new();
+	guint id, id2;
+	const gchar *opt[] = { GT_MACRO_ARG_FLAG, NULL }, *pre[] = { " -save", NULL };
+	const gchar *oui[] = { "1", NULL }, *non[] = { "0", NULL }, *vide[] = { "", NULL }, *autre[] = { "xyz", NULL };
+	const gchar *opt2[] = { GT_MACRO_ARG_FLAG, GT_MACRO_ARG_FLAG, NULL }, *pre2[] = { " -n=", " -m=", NULL };
+	const gchar *max[] = { "0", NULL };
+	GBytes *b;
+	GArray *segs = NULL;
+	gboolean arg = FALSE;
+
+	gt_macro_lists_add(lists, "Mode", "Fast", "fast");
+	gt_macro_set_take_lists(set, lists);
+	id = gt_macro_set_append(set, "d", "", "config DHCP%s;", "");
+	g_assert_true(gt_macro_set_set_optional(set, id, opt, pre, 1));
+	g_assert_true(gt_macro_arg_is_flag(gt_macro_set_find(set, id), 0));
+	g_assert_true(gt_macro_arg_is_optional(gt_macro_set_find(set, id), 0));
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), oui, 1);
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "config DHCP -save;", 18);
+	g_bytes_unref(b);
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), autre, 1);	/* toute valeur non vide autre que "0" : coché, la valeur n'est pas envoyée */
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "config DHCP -save;", 18);
+	g_bytes_unref(b);
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), non, 1);
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "config DHCP;", 12);
+	g_bytes_unref(b);
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), vide, 1);
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "config DHCP;", 12);
+	g_bytes_unref(b);
+	b = gt_macro_expand(set, gt_macro_set_find(set, id), NULL, 0);
+	g_assert_cmpmem(g_bytes_get_data(b, NULL), g_bytes_get_size(b), "config DHCP;", 12);
+	g_bytes_unref(b);
+	/* Aperçu : coché, le préfixe est l'argument ; décoché, segment omis */
+	b = gt_macro_expand_segments(set, gt_macro_set_find(set, id), oui, 1, &segs);
+	for(guint k = 0; k < segs->len; k++)
+		arg |= g_array_index(segs, GtMacroSegment, k).kind == GT_MACRO_SEG_ARG && g_array_index(segs, GtMacroSegment, k).arg == 0;
+	g_assert_true(arg);
+	g_array_unref(segs);
+	segs = NULL;
+	g_bytes_unref(b);
+	b = gt_macro_expand_segments(set, gt_macro_set_find(set, id), non, 1, &segs);
+	arg = FALSE;
+	for(guint k = 0; k < segs->len; k++)
+		arg |= g_array_index(segs, GtMacroSegment, k).kind == GT_MACRO_SEG_OMITTED;
+	g_assert_true(arg);
+	g_array_unref(segs);
+	g_bytes_unref(b);
+	/* Limites ignorées : jamais un refus */
+	gt_macro_set_set_limits(set, id, NULL, max, NULL, 1);
+	g_assert_true(gt_macro_check_args(set, gt_macro_set_find(set, id), oui, 1, NULL, NULL));
+	g_assert_true(gt_macro_check_args(set, gt_macro_set_find(set, id), autre, 1, NULL, NULL));
+	/* Hors %s (nombre, liste) : facultatif ordinaire */
+	id2 = gt_macro_set_append(set, "n", "", "N%d%#Mode", "");
+	g_assert_true(gt_macro_set_set_optional(set, id2, opt2, pre2, 2));
+	g_assert_false(gt_macro_arg_is_flag(gt_macro_set_find(set, id2), 0));
+	g_assert_false(gt_macro_arg_is_flag(gt_macro_set_find(set, id2), 1));
+	g_assert_true(gt_macro_arg_is_optional(gt_macro_set_find(set, id2), 0));
+	g_assert_cmpstr(gt_macro_set_find(set, id2)->arg_optional[1], ==, "1");
+	g_assert_true(gt_macro_flag_value_set("1"));
+	g_assert_false(gt_macro_flag_value_set("0"));
+	g_assert_false(gt_macro_flag_value_set(""));
+	g_assert_false(gt_macro_flag_value_set(NULL));
+	gt_macro_set_free(set);
+}
+
 static void test_facultatif_expansion(void)
 {
 	GtMacroSet *set = gt_macro_set_new();
@@ -1155,5 +1223,6 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_set/facultatif-modele", test_facultatif_modele);
 	g_test_add_func("/macro_set/facultatif-verification", test_facultatif_verification);
 	g_test_add_func("/macro_set/facultatif-expansion", test_facultatif_expansion);
+	g_test_add_func("/macro_set/drapeau", test_drapeau);
 	return g_test_run();
 }

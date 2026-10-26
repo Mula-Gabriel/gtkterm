@@ -144,7 +144,10 @@ profile's `macros_file`, else the active tab's current macros path, else none (n
 (separators and panel visibility copied from the active page, script panel layout too, empty editor), shown, profile applied, port opened.
 `gt_app_close_session()` (`app.close-tab`, tab close button) asks `gt_ui_confirm` only when the session is busy, then: page shut down, session shut down,
 page removed (the neighbour, right then left, becomes active), session removed. An `open-failed` box is prefixed with the tab's short name when there are
-several tabs. The Port, Terminal, profile dialogs and « Configure Macros » act on the session active when they open and close without applying anything on
+several tabs; an **automatic** open (`gt_session_open_port_quiet()`: first tab at start-up, tabs recreated by a project open or Reload, SIGUSR1;
+`gt_session_get_open_quiet()` remembers the mode of the last open) shows no box: the same text is flashed 8 s in that tab's status bar and the tab
+goes `dead` (spec `docs/superpowers/specs/2026-10-15-ouverture-silencieuse-plein-ecran-drapeaux-design.md` §1); Open Port, the Port dialog, a new
+tab and Load profile keep the box. The Port, Terminal, profile dialogs and « Configure Macros » act on the session active when they open and close without applying anything on
 its `closed` signal.
 **Dialogs never block:** transient modal `GtkWindow`s (the message, confirmation and choice boxes `gt_ui_message`/`gt_ui_confirm`/`gt_ui_choose` are
 windows built by GTKTerm, CSS classes `dialog` and `message`, not `GtkAlertDialog`: spec §15), `GtkFileDialog`, `GtkFontDialogButton`, `GtkColorDialogButton`,
@@ -211,6 +214,9 @@ monotonic clock only; `use-timer` false lets tests drive time by `tick`. Delays:
 (default 60), 0 – 3600 s, 0 disables the state, keys `activity_idle_timeout` / `activity_no_data_timeout`, edited in Port › Advanced Configuration
 Options › Port activity (spin buttons `port-idle-timeout`, `port-no-data-timeout`, carried by `GtPortForm`), applied by `gt_session_apply_profile()`
 and `gt_session_open_port()`; closing the link (`gt_session_shutdown()` included) gives `closed`, which has no deadline, so no timeout.
+**Failed open:** the session forwards every `open-failed` of its link to `gt_port_activity_open_failed()`: `dead` at once while the link is
+`CLOSED`, `LOST` or `RECONNECTING` (whatever the no-data delay; `CONNECTING` still shows the spinner), forgotten on entering `OPEN`/`LISTENING` and by
+`gt_port_activity_reset()` (every `gt_session_open_port*()` and `gt_session_close_port()`).
 
 **Lua scripting (`script_engine.c` + `src/ui/script_panel.c`, sub-project 5):** one `GtScriptEngine` per session (`gt_script_engine_new(link, macros)`:
 port 0 is that session's link, `send_macro`/`get_macros`/`get_lists` use its `GtMacros`); engines are independent (thread, ports 1–15, queues, log, stop
@@ -352,7 +358,9 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   button's right-click menu has « Reset arguments » (empties the fields); rebuilding never touches
   polling.
 - `src/ui/macro_editor.c` — « Configure Macros », non-modal, one instance per session (title « Configure Macros — <short name> »), not attached to the
-  application (application accelerators do not apply there, so the capture can see Ctrl+Shift+Q): `GtkColumnView` over a `GListStore` of rows carrying the stable id (no header
+  application (application accelerators do not apply there, so the capture can see Ctrl+Shift+Q) and **not `transient-for`** (GTK gives Minimize /
+  Maximize only to a sovereign window; the main window is kept in a weak ref as parent of its questions and destroys the editor with it; F11 toggles
+  full screen outside a shortcut capture): `GtkColumnView` over a `GListStore` of rows carrying the stable id (no header
   sorting: the order is the user's), Lists page alike; Capture Shortcut refuses a shortcut already taken by a macro or by an application action; OK (or closing
   by the title bar) = `gt_macros_apply_edits()` (`gt_macro_set_apply_edits()` on the current set; a macro whose default values change loses its
   usage values); the window closes without saving if the set is replaced meanwhile. Under the table, the **argument table** `macro-defaults` (a `GtkGrid`, hidden for a macro without argument)
@@ -382,7 +390,12 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   columns after Charset, `macro-optional-<k>` (`GtkCheckButton`) and `macro-prefix-<k>` (`GtkEntry`, insensitive while unchecked); checking splits the prefix off the action with
   `gt_macro_action_split_prefix()` (text before the specifier of argument k back to the first space, space included, never crossing the previous specifier, a whole escape sequence or the start of
   the action; nothing to take → empty prefix, action unchanged; `%%` becomes `%`), unchecking `gt_macro_action_join_prefix()` puts it back before the specifier; both vectors follow the typing in
-  the Action cell (« Prefix of argument %d removed » in `macro-editor-error` while a non-empty prefix is beyond the arguments, cleared when another row is shown); the preview shows prefix and value in blue and an omitted argument as a greyed « ∅ ». The page layout is, top to bottom: `macro-source`, page switcher, filter row, table, the
+  the Action cell (« Prefix of argument %d removed » in `macro-editor-error` while a non-empty prefix is beyond the arguments, cleared when another row is shown); the preview shows prefix and value in blue and an omitted argument as a greyed « ∅ ». **Flag** (`GT_MACRO_ARG_FLAG`,
+  `arg_optional` value `"flag"`, `%s` only, anywhere else read `"1"`): column `Flag` after Prefix (`macro-flag-<k>`, `%s` only, sensitive while Optional is
+  checked; unchecking Optional unchecks it), the Default cell is then a `GtkCheckButton` (`"1"` / `""`) and Min / Max / Charset are insensitive; core:
+  `gt_macro_arg_is_flag()` (a flag is also optional), set when the value is neither empty nor `"0"` (`gt_macro_flag_value_set()`), expansion sends the
+  prefix only, never the value, no limit ever refuses it; panel: a `GtkCheckButton` `macro-<id>-arg-<k>` labelled with the prefix stripped of leading
+  spaces, usage value `"1"` / `"0"` (`"0"` beats a checked default). The page layout is, top to bottom: `macro-source`, page switcher, filter row, table, the
   two button rows **right under the table**, separator `macro-settings-separator` + 12 px margin (hidden with the argument table when the macro has no argument), `macro-defaults`,
   `macro-preview-box`. **Linked tab:** OK applies nothing before the answer:
   `gt_macros_classify_edits()` → `NONE` closes, `DEFAULTS` asks « These macros come from the template %s » Keep in this project (default) / Save to template /
@@ -435,7 +448,10 @@ without a valid profile → refused with a message, nothing closed; an out-of-ra
 valid UTF-8 (a hand-edited script) is made valid, invalid bytes replaced, with a warning); `gt_project_data_save()` writes atomically (`g_file_set_contents`); `gt_project_data_snapshot()` is the text
 compared for « modified » (same serialisation, **without** page state, active tab, usage values or the base of a linked tab: a template re-imported at open
 never makes the project modified).
-- **Free tabs and project tabs, never mixed:** with no project open, tabs work as in 6b (profiles in `.gtktermrc`, macros in a `.ini`). Once a project is open or saved, **every** tab of the window
+- **Free tabs and project tabs, never mixed:** with no project open, tabs work as in 6b (profiles in `.gtktermrc`, macros in a `.ini`), except that
+  Load macros file… asks « Open this macros file »: Create a project with this template (default: `gt_project_begin(project, NULL, NULL, NULL)` turns
+  the free tabs into an untitled project, then the active tab `gt_macros_link_template`s the file) / Open directly (the 6b load) / Cancel (answer
+  ignored if the session closed, entered a project or its generation changed). Once a project is open or saved, **every** tab of the window
   belongs to it (`gt_session_set_in_project()`, property `in-project`): its macros are **embedded** (`GtMacros` without a path, Configure Macros and polling edit the set in memory; Load macros file…
   asks « Use this macros file in the project »: Copy into the project (default; the tab is no longer linked) / Link as template (`gt_macros_link_template`) /
   Cancel, the answer ignored if the session closed, left the project or its generation changed; Save macros file… exports to a chosen `.ini` without linking
@@ -499,11 +515,11 @@ prefix, fake `pkexec` counting authorizations) and `publier_version`, `test_upda
 `settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`). Release: `tools/publier-version.sh vX.Y.Z` (clean tree, `meson.build`
 version, `NEWS` section; annotated tag, no push).
 
-**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 73 scenarios drive
+**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 77 scenarios drive
 GTKTerm through three bricks: (1) **D-Bus actions** — `org.gtk.Actions` (`Activate`, `SetState`, `Describe`) on the private session bus; start-up is detected
 when the name `eu.mulagabriel.gtkterm.test.p<PID>` appears; (2) the **test hook** (`src/ui/test_hooks.c`, compiled unless `-Dtest_hooks=false`, active only
 when `GTKTERM_TEST_HOOKS=1`, which also switches the application id to `eu.mulagabriel.gtkterm.test.p<PID>` without `NON_UNIQUE`): actions `app.test-dump`
-(every widget of the visible windows and popovers: type, accessible role, label, widget name, CSS classes `css`, flags, geometry), `app.test-terminal-text`,
+(every widget of the visible windows and popovers: type, accessible role, label, widget name, CSS classes `css`, flags, geometry; windows: `title`, `modal`, `transient`, `fullscreen`), `app.test-terminal-text`,
 `app.test-terminal-props` (both on the active tab), `app.test-activate(s)`, `app.test-set-text((ss))`, `app.test-sessions` (state `aa{sv}`, one dict per tab in
 order: `index`, `id`, `name`, `state`, `profile`, `macros_file`, `active`, `busy`, `in_project`, `script`, `activity` (state nick), `unread`, `template` (linked macros template path, empty if
 none)), `app.test-project` (state `a{sv}`: `open`, `path`, `modified`, `name` (displayed), `stored_name` (empty without a stored name)); the dump also gives

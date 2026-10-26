@@ -264,6 +264,11 @@ static void on_dropdown_selected(GObject *dropdown, GParamSpec *pspec, gpointer 
 	commit_arg(data, GTK_WIDGET(dropdown));
 }
 
+static void on_flag_toggled(GtkCheckButton *check, gpointer data)
+{
+	commit_arg(data, GTK_WIDGET(check));
+}
+
 static GtkWidget *make_arg_widget(MacroPanel *panel, const GtMacroSet *set, const GtMacro *m, const macro_arg_info_t *info, gint k)
 {
 	const GtMacroLists *lists = gt_macro_set_get_lists(set);
@@ -274,6 +279,18 @@ static GtkWidget *make_arg_widget(MacroPanel *panel, const GtMacroSet *set, cons
 	gboolean opt = gt_macro_arg_is_optional(m, k);
 	GtkWidget *w;
 
+	/* Drapeau (spec 2026-10-15-ouverture-silencieuse §3.3) : case cochée selon la valeur résolue, basculer écrit "1" / "0" */
+	if(gt_macro_arg_is_flag(m, k))
+	{
+		w = gt_macro_arg_widget_new_flag(gt_macro_arg_prefix(m, k), (usage != NULL && usage[0] != '\0') ? usage : def);
+		gt_macro_arg_widget_set_empty_is_default(w, TRUE);
+		g_signal_connect(w, "toggled", G_CALLBACK(on_flag_toggled), panel);
+		gtk_widget_set_name(w, name);
+		g_object_set_data(G_OBJECT(w), "macro-id", GUINT_TO_POINTER(m->id));
+		g_object_set_data(G_OBJECT(w), "arg-index", GINT_TO_POINTER(k));
+		g_free(name);
+		return w;
+	}
 	/* Champ vide = défaut (§2.7) : l'entrée montre la valeur d'usage, vide si elle est absente ou égale au défaut (montré en grisé) ;
 	 * une liste déroulante, sans état vide, montre la valeur résolue */
 	if(g_strcmp0(info->type, "l") == 0)

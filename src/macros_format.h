@@ -15,6 +15,9 @@
 #include <glib.h>
 #include "macros_list.h"
 
+/* Valeur de arg_optional d'un drapeau : facultatif sans valeur, présent (valeur ni vide ni "0") il n'envoie que son préfixe */
+#define GT_MACRO_ARG_FLAG "flag"
+
 typedef struct
 {
   gchar *type;

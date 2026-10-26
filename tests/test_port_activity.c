@@ -186,6 +186,39 @@ test_echec_ouverture_reconnexion(void)
 	g_object_unref(a);
 }
 
+/* Ouverture échouée (spec 2026-10-15-ouverture-silencieuse §1.1) : dead tout de suite, fermé ou en reconnexion, même sans délai sans données ;
+ * CONNECTING prioritaire ; effacé par OPEN, LISTENING et reset */
+static void
+test_echec_ouverture_mort_immediate(void)
+{
+	GtPortActivity *a = manuel(NULL);
+
+	gt_port_activity_set_timeouts(a, 10, 0, 0);
+	gt_port_activity_open_failed(a, 0);
+	ETAT(a, "dead");
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_RECONNECTING, 1 * S);
+	ETAT(a, "dead");
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_CONNECTING, 2 * S);
+	ETAT(a, "connecting");
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_RECONNECTING, 3 * S);
+	ETAT(a, "dead");
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_OPEN, 4 * S);
+	ETAT(a, "waiting");
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_LOST, 5 * S);
+	ETAT(a, "lost");	/* l'échec est oublié : une perte suit la règle habituelle */
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_CLOSED, 6 * S);
+	gt_port_activity_open_failed(a, 6 * S);
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_LISTENING, 7 * S);
+	ETAT(a, "connecting");
+	gt_port_activity_set_link_state(a, GT_PORT_LINK_CLOSED, 8 * S);
+	ETAT(a, "closed");
+	gt_port_activity_open_failed(a, 9 * S);
+	ETAT(a, "dead");
+	gt_port_activity_reset(a, 10 * S);	/* fermeture demandée */
+	ETAT(a, "closed");
+	g_object_unref(a);
+}
+
 static void
 test_bascule_auto_reconnect(void)
 {
@@ -339,6 +372,7 @@ main(int argc, char **argv)
 	g_test_add_func("/port-activity/connexion-jamais-morte", test_connexion_jamais_morte);
 	g_test_add_func("/port-activity/perte-puis-reconnexion", test_perte_puis_reconnexion);
 	g_test_add_func("/port-activity/echec-ouverture-reconnexion", test_echec_ouverture_reconnexion);
+	g_test_add_func("/port-activity/echec-ouverture-mort-immediate", test_echec_ouverture_mort_immediate);
 	g_test_add_func("/port-activity/bascule-auto-reconnect", test_bascule_auto_reconnect);
 	g_test_add_func("/port-activity/perdu-sans-reconnexion", test_perdu_sans_reconnexion);
 	g_test_add_func("/port-activity/delais-nuls", test_delais_nuls);

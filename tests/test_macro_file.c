@@ -984,6 +984,40 @@ test_facultatif_aller_retour(void)
 	g_free(dir);
 }
 
+/* Drapeau : valeur « flag » écrite et relue ; « flag » sur un nombre relu comme « 1 » */
+static void
+test_drapeau_aller_retour(void)
+{
+	gchar *dir = g_dir_make_tmp("gtkterm-mf-XXXXXX", NULL);
+	gchar *path = g_build_filename(dir, "m.ini", NULL);
+	GtMacroSet *set = gt_macro_set_new(), *relu;
+	guint id = gt_macro_set_append(set, "d", "", "config DHCP%s", "");
+	const gchar *opt[] = { GT_MACRO_ARG_FLAG, NULL }, *pre[] = { " -save", NULL };
+	GError *error = NULL;
+	gchar *texte;
+
+	g_assert_true(gt_macro_set_set_optional(set, id, opt, pre, 1));
+	g_assert_true(gt_macro_file_save(set, path, &error));
+	g_assert_no_error(error);
+	texte = lire(path);
+	g_assert_nonnull(strstr(texte, "arg_optional=flag;"));
+	g_free(texte);
+	relu = charger(path);
+	g_assert_true(gt_macro_arg_is_flag(gt_macro_set_get(relu, 0), 0));
+	g_assert_true(gt_macro_set_same_structure(set, relu));
+	gt_macro_set_free(relu);
+	g_assert_true(g_file_set_contents(path, "[gtkterm-macros]\nversion=2\n\n[macro:1]\nlabel=x\naction=X%d\narg_optional=flag;\n", -1, NULL));
+	relu = charger(path);
+	g_assert_false(gt_macro_arg_is_flag(gt_macro_set_get(relu, 0), 0));
+	g_assert_true(gt_macro_arg_is_optional(gt_macro_set_get(relu, 0), 0));
+	gt_macro_set_free(relu);
+	gt_macro_set_free(set);
+	g_remove(path);
+	g_rmdir(dir);
+	g_free(path);
+	g_free(dir);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -1014,6 +1048,7 @@ main(int argc, char **argv)
 	g_test_add_func("/macro_file/refus-copie-remede", test_refus_copie_remede);
 	g_test_add_func("/macro_file/regroupe-lecture", test_regroupe_lecture);
 	g_test_add_func("/macro_file/facultatif-aller-retour", test_facultatif_aller_retour);
+	g_test_add_func("/macro_file/drapeau-aller-retour", test_drapeau_aller_retour);
 	g_test_add_func("/macro_file/regroupe-ancien-format", test_regroupe_ancien_format);
 	return g_test_run();
 }
