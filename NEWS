@@ -16,6 +16,7 @@ Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusq
 - Lua : un port 1 à 15 perdu relâche aussitôt le périphérique, au lieu de le garder jusqu'à la fin du script : un adaptateur USB rebranché garde son nom.
 - TCP : une connexion dont le pair a disparu sans la fermer (veille, câble débranché) est signalée perdue au bout d'environ une minute.
 - Documentation : pour retrouver un adaptateur USB après une mise en veille, désigner le port par /dev/serial/by-id/… avec la reconnexion automatique.
+- Envoi : un collage, une macro ou une saisie hexadécimale plus gros que ce que le port prend d'un coup n'est plus tronqué ; le reste part dès que le port suit (jusqu'à 1 Mio en attente, au-delà l'envoi est refusé avec un message), et le RS485 ne fige plus la fenêtre pendant l'émission.
 ! Un fichier de macros avec des arguments facultatifs, ouvert par une version plus ancienne, envoie l'action sans les préfixes.
 
 ## v2.1.0 — 2026-10-15

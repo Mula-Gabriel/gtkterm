@@ -16,6 +16,7 @@
 /*                                                                     */
 /***********************************************************************/
 
+#include <errno.h>
 #include <string.h>
 
 #include <config.h>
@@ -55,7 +56,12 @@ struct _GtMacros
 static gboolean
 poller_send (guint id, gpointer user_data)
 {
-  return gt_macros_send (user_data, id, NULL, -1);
+  GtMacros *m = user_data;
+
+  /* Tir sauté tant que la file d'émission du port n'est pas vide : une scrutation plus rapide que la ligne n'accumule pas de retard */
+  if (m->link != NULL && gt_link_get_queued (m->link) > 0)
+    return TRUE;
+  return gt_macros_send (m, id, NULL, -1);
 }
 
 static void
@@ -140,6 +146,22 @@ gt_macros_free (GtMacros *m)
 
 #define REFUSAL_FLASH_US (3 * G_USEC_PER_SEC)
 
+/* Message de refus d'une macro : au plus un toutes les 3 s par macro (polling rapide) ; TRUE s'il faut l'afficher maintenant */
+static gboolean
+refusal_flash_due (GtMacros *m, guint id)
+{
+  gint64 now = g_get_monotonic_time ();
+  gint64 *last = g_hash_table_lookup (m->refused_at, GUINT_TO_POINTER (id));
+  gint64 *stamp;
+
+  if (last != NULL && now - *last < REFUSAL_FLASH_US)
+    return FALSE;
+  stamp = g_new (gint64, 1);
+  *stamp = now;
+  g_hash_table_insert (m->refused_at, GUINT_TO_POINTER (id), stamp);
+  return TRUE;
+}
+
 static gboolean
 send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboolean announce)
 {
@@ -152,6 +174,7 @@ send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboole
   gchar *name;
   gchar *reason = NULL;
   gint bad = -1;
+  gint err = 0;
 
   if (m->shut_down || !gt_macro_is_sendable (macro))
     return FALSE;
@@ -166,18 +189,9 @@ send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboole
   /* Arguments hors limites (spec arguments §2.8) : rien n'est écrit ; un message au plus toutes les 3 s par macro (polling rapide) */
   if (!gt_macro_check_args (m->set, macro, use_args, n_args, &bad, &reason))
     {
-      gint64 now = g_get_monotonic_time ();
-      gint64 *last = g_hash_table_lookup (m->refused_at, GUINT_TO_POINTER (id));
-
-      if (announce && (last == NULL || now - *last >= REFUSAL_FLASH_US))
-        {
-          gint64 *stamp = g_new (gint64, 1);
-
-          *stamp = now;
-          g_hash_table_insert (m->refused_at, GUINT_TO_POINTER (id), stamp);
-          gt_app_status_flash (m->owner, 3000, _ ("Macro \"%s\" not sent: argument %d: %s"), name, bad + 1,
-                               reason != NULL ? reason : "");
-        }
+      if (announce && refusal_flash_due (m, id))
+        gt_app_status_flash (m->owner, 3000, _ ("Macro \"%s\" not sent: argument %d: %s"), name, bad + 1,
+                             reason != NULL ? reason : "");
       g_free (reason);
       g_free (name);
       return FALSE;
@@ -185,12 +199,21 @@ send_macro (GtMacros *m, guint id, const gchar *const *args, gint n_args, gboole
   bytes = gt_macro_expand (m->set, macro, use_args, n_args);
   data = g_bytes_get_data (bytes, &len);
   if (len > 0)
-    written = gt_link_send (m->link, data, len, GT_SEND_MACRO);
+    {
+      errno = 0;
+      written = gt_link_send (m->link, data, len, GT_SEND_MACRO);
+      err = errno;
+    }
   g_bytes_unref (bytes);
-  /* Rien d'écrit (port fermé ou perdu) : pas de « envoyée », le « — lost » de la barre d'état reste visible */
+  /* gt_link_send accepte tout ou rien : envoyée (écrite ou dans la file d'émission). Port fermé ou perdu (0) : pas de message, le « — lost »
+     de la barre d'état reste visible. File pleine ou erreur (-1) : signalée, au plus une fois toutes les 3 s par macro */
   if (announce && written > 0)
     gt_app_status_flash (m->owner, 800, _ ("Macro \"%s\" sent!"), name);
+  else if (announce && written < 0 && refusal_flash_due (m, id))
+    gt_app_status_flash (m->owner, 3000, _ ("Macro \"%s\" not sent: %s"), name,
+                         err == ENOBUFS ? _ ("send queue full") : g_strerror (err != 0 ? err : EIO));
   g_free (name);
+  errno = err;	/* raison de l'échec de gt_link_send, relue par l'appelant (send_macro Lua) */
   return len == 0 || (written >= 0 && (gsize) written == len);
 }
 

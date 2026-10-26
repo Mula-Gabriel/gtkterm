@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 0.99.4\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-26 14:12+0100\n"
+"POT-Creation-Date: 2026-10-26 15:47+0100\n"
 "PO-Revision-Date: 2005-03-09 21:17+0100\n"
 "Last-Translator: Bus Jozsef <busj@mailbox.hu>\n"
 "Language-Team: hu <hu@li.org>\n"
@@ -244,7 +244,7 @@ msgstr "Fájl olvasása sikertelen: %s: %s\n"
 msgid "Cannot read file %s: not a regular file"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/file_sender.c:284 src/ui/file_actions.c:202
+#: src/file_sender.c:284 src/ui/file_actions.c:203
 #, fuzzy
 msgid "Error sending file"
 msgstr "Hiba fájl megnyitásakor\n"
@@ -263,7 +263,7 @@ msgstr ""
 msgid "tcp://%s:%s (server)"
 msgstr ""
 
-#: src/link.c:111 src/link.c:588 src/transport.c:466
+#: src/link.c:111 src/link.c:604 src/transport.c:527
 msgid "No open port"
 msgstr "Nincs nyitott port"
 
@@ -282,7 +282,7 @@ msgstr ""
 msgid "%s — reconnecting…"
 msgstr ""
 
-#: src/link.c:323
+#: src/link.c:337
 msgid "device removed"
 msgstr ""
 
@@ -451,35 +451,44 @@ msgstr ""
 msgid "%s: [%s] duplicates [%s]: the earlier group is ignored"
 msgstr ""
 
-#: src/macros.c:178
+#: src/macros.c:193
 #, c-format
 msgid "Macro \"%s\" not sent: argument %d: %s"
 msgstr ""
 
-#: src/macros.c:192
+#: src/macros.c:211
 #, c-format
 msgid "Macro \"%s\" sent!"
 msgstr "Makró \"%s\" elküldve!"
+
+#: src/macros.c:213
+#, fuzzy, c-format
+msgid "Macro \"%s\" not sent: %s"
+msgstr "Makró \"%s\" elküldve!"
+
+#: src/macros.c:214
+msgid "send queue full"
+msgstr ""
 
 #. Profil (non interactif) : jeu vide, mais le chemin courant devient ce fichier. Les enregistrements suivants le visent
 #. (gt_macro_file_save en garde d'abord une copie <fichier>.avant-migration), jamais le fichier par défaut, et le profil
 #. n'est pas redirigé. Avertissement, plus une boîte différée : pas de boucle imbriquée pendant le chargement du profil,
 #. et l'utilisateur sait que ses macros n'ont pas été lues.
-#: src/macros.c:518 src/macros.c:533 src/macros.c:730 src/macros.c:916
+#: src/macros.c:540 src/macros.c:555 src/macros.c:752 src/macros.c:938
 #, fuzzy, c-format
 msgid "Cannot load macros file: %s"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/macros.c:573
+#: src/macros.c:595
 msgid "This tab has no macros file: its macros are saved with the project."
 msgstr ""
 
-#: src/macros.c:581
+#: src/macros.c:603
 #, c-format
 msgid "%s changed on disk: not overwritten"
 msgstr ""
 
-#: src/macros.c:595
+#: src/macros.c:617
 #, fuzzy, c-format
 msgid "%s already exists: not overwritten"
 msgstr ""
@@ -487,28 +496,28 @@ msgstr ""
 "A(z) [%s] szekció már létezik.\n"
 "Felül kívánja írni?\n"
 
-#: src/macros.c:608
+#: src/macros.c:630
 #, fuzzy, c-format
 msgid "Cannot save macros file: %s"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/macros.c:645 src/ui/macro_editor.c:961
+#: src/macros.c:667 src/ui/macro_editor.c:961
 #, c-format
 msgid "The macros file %s no longer exists."
 msgstr ""
 
 #. Le jeu effectif reste : les valeurs propres deviennent les valeurs de la copie
-#: src/macros.c:803
+#: src/macros.c:825
 #, c-format
 msgid "Detached from macros template %s"
 msgstr ""
 
-#: src/macros.c:870
+#: src/macros.c:892
 #, fuzzy, c-format
 msgid "Cannot save macros template: %s"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/macros.c:881
+#: src/macros.c:903
 #, c-format
 msgid "Macros template %s saved"
 msgstr ""
@@ -699,22 +708,22 @@ msgid "Port %d: receive buffer full, oldest data dropped"
 msgstr ""
 
 #. Même message que le transport (même traduction), sans fin de ligne
-#: src/script_engine.c:633 src/transport.c:326
+#: src/script_engine.c:633 src/transport.c:387
 #, fuzzy, c-format
 msgid "Cannot resolve %s: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/script_engine.c:1664
+#: src/script_engine.c:1686
 #, c-format
 msgid "Script exited with status %lld"
 msgstr ""
 
-#: src/script_engine.c:1672
+#: src/script_engine.c:1694
 #, c-format
 msgid "Lua error: %s"
 msgstr ""
 
-#: src/script_engine.c:1786
+#: src/script_engine.c:1808
 msgid "Script already running."
 msgstr ""
 
@@ -723,82 +732,82 @@ msgstr ""
 msgid "Break signal sent!"
 msgstr "Break signál küldve!"
 
-#: src/transport.c:171
+#: src/transport.c:232
 msgid "end of stream"
 msgstr ""
 
-#: src/transport.c:188
+#: src/transport.c:249
 #, fuzzy, c-format
 msgid "Cannot open %s: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:196
+#: src/transport.c:257
 #, c-format
 msgid "%s is not a valid serial port\n"
 msgstr ""
 
-#: src/transport.c:206
+#: src/transport.c:267
 msgid ""
 "Cannot lock port! The serial port may currently be in use by another "
 "program.\n"
 msgstr ""
 
-#: src/transport.c:225
+#: src/transport.c:286
 #, c-format
 msgid "Unable to set baud rate %u"
 msgstr ""
 
-#: src/transport.c:301 src/transport.c:334
+#: src/transport.c:362 src/transport.c:395
 #, fuzzy, c-format
 msgid "Cannot connect to %s:%s: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:352
+#: src/transport.c:413
 #, fuzzy
 msgid "Accept error"
 msgstr "Fájlhiba!\n"
 
-#: src/transport.c:388
+#: src/transport.c:449
 #, fuzzy, c-format
 msgid "Cannot resolve port %s: %s\n"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/transport.c:390
+#: src/transport.c:451
 #, fuzzy, c-format
 msgid "Cannot resolve %s:%s: %s\n"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/transport.c:398
+#: src/transport.c:459
 #, fuzzy, c-format
 msgid "Cannot create socket: %s\n"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/transport.c:417
+#: src/transport.c:478
 #, fuzzy, c-format
 msgid "Cannot bind to %s:%s: %s%s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:419
+#: src/transport.c:480
 msgid ""
 "\n"
 "Use: sudo setcap cap_net_bind_service=+ep gtkterm"
 msgstr ""
 
-#: src/transport.c:429
+#: src/transport.c:490
 #, fuzzy, c-format
 msgid "Cannot listen: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:584
+#: src/transport.c:902
 #, fuzzy
 msgid "Control signals read set signals"
 msgstr "Ellenörző jelek olvasása"
 
-#: src/transport.c:589
+#: src/transport.c:907
 msgid "DTR write"
 msgstr "DTR írás"
 
-#: src/transport.c:589
+#: src/transport.c:907
 msgid "RTS write"
 msgstr "RTS írás"
 
@@ -1001,30 +1010,30 @@ msgstr "Mégsem"
 msgid "Only local files are supported"
 msgstr ""
 
-#: src/ui/file_actions.c:202
+#: src/ui/file_actions.c:203
 msgid "The port is not open"
 msgstr ""
 
-#: src/ui/file_actions.c:242
+#: src/ui/file_actions.c:243
 msgid "Send RAW File"
 msgstr ""
 
-#: src/ui/file_actions.c:288
+#: src/ui/file_actions.c:289
 msgid "Save RAW File"
 msgstr ""
 
-#: src/ui/file_actions.c:295
+#: src/ui/file_actions.c:296
 #, fuzzy
 msgid "Save ASCII File"
 msgstr "/Fájl/Raw fájl _mentése"
 
-#: src/ui/file_actions.c:347
+#: src/ui/file_actions.c:348
 #, fuzzy
 msgid "Log file selection"
 msgstr "Tallózás"
 
 #. « Failed to log data to <chemin>: … » (rx_logger.c) : affiché tel quel
-#: src/ui/file_actions.c:415
+#: src/ui/file_actions.c:416
 msgid "Failed to log data"
 msgstr ""
 
@@ -1033,16 +1042,29 @@ msgstr ""
 msgid "%s: transfer in progress..."
 msgstr "%s: átvitel folyamatban..."
 
-#: src/ui/hex_send_bar.c:55
+#: src/ui/hex_send_bar.c:57
 msgid "Hexadecimal data to send (separator: ';' or space): "
 msgstr "Hexadecimális adat küldés (elválasztó: ';' vagy szóköz):"
 
-#: src/ui/hex_send_bar.c:91
+#: src/ui/hex_send_bar.c:94
 #, c-format
 msgid "Invalid hexadecimal byte \"%s\", nothing sent"
 msgstr ""
 
-#: src/ui/hex_send_bar.c:99
+#: src/ui/hex_send_bar.c:108
+msgid "Nothing sent: the port is not open"
+msgstr ""
+
+#: src/ui/hex_send_bar.c:110
+msgid "Nothing sent: the send queue is full"
+msgstr ""
+
+#: src/ui/hex_send_bar.c:112
+#, c-format
+msgid "Nothing sent: %s"
+msgstr ""
+
+#: src/ui/hex_send_bar.c:115
 #, fuzzy, c-format
 msgid "%d byte(s) sent!"
 msgstr "\"%s\": %d bájt(ok) küldve!"
@@ -1587,7 +1609,7 @@ msgstr "/Fájl/Raw fájl _mentése"
 msgid "Delete profile…"
 msgstr ""
 
-#: src/ui/menus.ui:208 src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:150
+#: src/ui/menus.ui:208 src/ui/terminal_dialog.ui:15 src/ui/terminal_view.c:163
 msgid "Terminal"
 msgstr ""
 
@@ -2065,6 +2087,13 @@ msgstr ""
 
 #: src/ui/terminal_dialog.ui:173
 msgid "_Close"
+msgstr ""
+
+#: src/ui/terminal_view.c:117
+#, c-format
+msgid ""
+"Not sent: %u bytes do not fit in the send queue (use File › Send RAW file… "
+"for large data)"
 msgstr ""
 
 #: src/ui/update_window.c:70

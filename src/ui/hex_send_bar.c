@@ -9,6 +9,7 @@
 #include <config.h>
 #include <glib/gi18n.h>
 #include <gtk/gtk.h>
+#include <errno.h>
 
 #include "app_ui.h"
 #include "hex_input.h"
@@ -25,8 +26,9 @@ typedef struct
 
 static void on_activate(GtkEntry *entry, HexSendBar *hb);
 	/* gt_hex_input_parse ; erreur : flash 3000 ms « Invalid hexadecimal byte "%s", nothing sent » (jeton), saisie gardée, retour ;
-	 * succès : n = len > 0 ? gt_link_send(link, data, len, GT_SEND_HEX) : 0 ; flash 2000 ms « %d byte(s) sent! » (MAX(n, 0)) ;
-	 * gt_hex_history_add(hb->history, texte) AVANT gtk_editable_set_text(entry, "") (le texte appartient à l'entrée) */
+	 * succès : n = len > 0 ? gt_link_send(link, data, len, GT_SEND_HEX) : 0 (tout accepté ou rien : file d'émission) ; accepté : flash 2000 ms
+	 * « %d byte(s) sent! », gt_hex_history_add(hb->history, texte) AVANT gtk_editable_set_text(entry, "") (le texte appartient à l'entrée) ;
+	 * refusé (port pas ouvert, file pleine, erreur) : flash 3000 ms « Nothing sent: … », saisie gardée pour réessayer */
 static gboolean on_key_pressed(GtkEventControllerKey *c, guint keyval, guint keycode, GdkModifierType state, HexSendBar *hb);
 	/* GDK_KEY_Up / KP_Up : gt_hex_history_previous, texte posé si non NULL, curseur en fin (gtk_editable_set_position(-1)), TRUE ;
 	 * GDK_KEY_Down / KP_Down : gt_hex_history_next, texte posé, curseur en fin, TRUE ; autre touche : FALSE */
@@ -84,7 +86,8 @@ static void on_activate(GtkEntry *entry, HexSendBar *hb)
 	GError *err = NULL;
 	GBytes *data = gt_hex_input_parse(text, &err);
 	gsize len;
-	gint n = 0;
+	gssize n = 0;
+	gint send_errno;
 
 	if(data == NULL)
 	{
@@ -93,10 +96,23 @@ static void on_activate(GtkEntry *entry, HexSendBar *hb)
 		return;
 	}
 	len = g_bytes_get_size(data);
+	errno = 0;
 	if(len > 0)
 		n = gt_link_send(hb->link, g_bytes_get_data(data, NULL), len, GT_SEND_HEX);
+	send_errno = errno;
 	g_bytes_unref(data);
-	gt_app_status_flash(hb->session, 2000, _("%d byte(s) sent!"), MAX(n, 0));
+	/* Saisie vide (len 0) : rien à envoyer, comme avant ; sinon gt_link_send accepte tout ou rien */
+	if(len > 0 && n <= 0)
+	{
+		if(n == 0)
+			gt_app_status_flash(hb->session, 3000, _("Nothing sent: the port is not open"));
+		else if(send_errno == ENOBUFS)
+			gt_app_status_flash(hb->session, 3000, _("Nothing sent: the send queue is full"));
+		else
+			gt_app_status_flash(hb->session, 3000, _("Nothing sent: %s"), g_strerror(send_errno != 0 ? send_errno : EIO));
+		return;
+	}
+	gt_app_status_flash(hb->session, 2000, _("%d byte(s) sent!"), (gint)n);
 	gt_hex_history_add(hb->history, text);	/* avant l'effacement : le texte appartient à l'entrée */
 	gtk_editable_set_text(GTK_EDITABLE(entry), "");
 }

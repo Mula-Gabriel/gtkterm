@@ -4,7 +4,9 @@
  * Rappels de la liaison sous la surveillance du transport (link.h) : ils ne font qu'alimenter VTE, jamais d'ouverture ni de boucle. */
 #include <config.h>
 #include <glib/gi18n.h>
+#include <errno.h>
 
+#include "app_ui.h"
 #include "terminal_view.h"
 #include "view_render.h"
 
@@ -18,6 +20,7 @@ typedef struct
 {
 	GtkTermLink *link;	/* non possédée : liaison par défaut, vit plus longtemps que la fenêtre */
 	GtTermOptions *options;	/* référence */
+	GtSession *session;	/* pointeur faible : destinataire des messages (crochet status_flash) */
 	VteTerminal *vte;
 	GtViewRender *render;
 	gint scrollback;	/* dernière valeur appliquée (clear_scrollback la rétablit) */
@@ -109,7 +112,9 @@ static void on_commit(VteTerminal *vte, gchar *text, guint length, gpointer user
 		gt_link_clear_history(tv->link);
 		return;
 	}
-	gt_link_send(tv->link, (const guint8 *)text, length, GT_SEND_KEYBOARD);
+	/* Tout accepté ou rien : au-delà de la file d'émission (collage géant, port qui n'avance plus), rien ne part et on le dit */
+	if(gt_link_send(tv->link, (const guint8 *)text, length, GT_SEND_KEYBOARD) < 0 && errno == ENOBUFS && tv->session != NULL)
+		gt_app_status_flash(tv->session, 5000, _("Not sent: %u bytes do not fit in the send queue (use File › Send RAW file… for large data)"), length);
 }
 
 /* « destroy » (dispose) : plus aucun rappel de la liaison ni des options vers un VTE détruit */
@@ -121,18 +126,26 @@ static void on_view_destroy(GtkWidget *view, gpointer user_data)
 	g_clear_signal_handler(&tv->sent_id, tv->link);
 	g_clear_signal_handler(&tv->cleared_id, tv->link);
 	g_clear_signal_handler(&tv->changed_id, tv->options);
+	if(tv->session != NULL)
+	{
+		g_object_remove_weak_pointer(G_OBJECT(tv->session), (gpointer *)&tv->session);
+		tv->session = NULL;
+	}
 }
 
 static void term_view_free(gpointer data)
 {
 	TermView *tv = data;
 
+	/* Normalement déjà fait par « destroy » ; par sûreté, aucun pointeur faible ne survit à tv */
+	if(tv->session != NULL)
+		g_object_remove_weak_pointer(G_OBJECT(tv->session), (gpointer *)&tv->session);
 	gt_view_render_free(tv->render);
 	g_object_unref(tv->options);
 	g_free(tv);
 }
 
-GtkWidget *gt_terminal_view_new(GtkTermLink *link, GtTermOptions *opts)
+GtkWidget *gt_terminal_view_new(GtkTermLink *link, GtTermOptions *opts, GtSession *session)
 {
 	TermView *tv = g_new0(TermView, 1);
 	GtkWidget *view = gtk_scrolled_window_new();
@@ -140,6 +153,9 @@ GtkWidget *gt_terminal_view_new(GtkTermLink *link, GtTermOptions *opts)
 
 	tv->link = link;
 	tv->options = g_object_ref(opts);
+	tv->session = session;
+	if(session != NULL)
+		g_object_add_weak_pointer(G_OBJECT(session), (gpointer *)&tv->session);
 	tv->scrollback = -1;
 	tv->vte = VTE_TERMINAL(vte_terminal_new());
 	current_options(tv, &vo);

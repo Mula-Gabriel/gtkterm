@@ -421,6 +421,71 @@ test_occupee(void)
 	g_object_unref(s);
 }
 
+/* ---- File d'émission et Lua ----------------------------------------------------- */
+
+static void
+fin_script(GtScriptEnd end, gpointer user_data)
+{
+	*(gint *)user_data = (gint)end + 1;
+}
+
+/* Gros send_macro Lua (mis en file), puis send(0, …) : send attend que la file se vide (EAGAIN, jamais « not connected ») et réussit,
+ * ses octets après ceux de la macro ; rien n'est perdu même si le maître lit lentement. send garde sa régulation (une écriture à la fois) :
+ * un envoi plus gros que la file d'émission passe quand même. */
+static void
+test_lua_envoi_apres_macro(void)
+{
+	const gsize taille = 50000, gros = GT_TRANSPORT_QUEUE_MAX + 4096;
+	gsize total;
+	Pty p;
+	GtSession *s;
+	GtMacroSet *set;
+	GByteArray *lu = g_byte_array_new();
+	gchar *action = g_strnfill(taille, 'X');
+	gint fin = 0;
+	gint64 limite;
+
+	pty_ouvrir(&p);
+	s = session_sur_pty(&p);
+	gt_session_open_port(s);
+	g_assert_true(iterate_until(liaison_ouverte, s, 2000));
+	set = gt_macro_set_new();
+	gt_macro_set_append(set, "Gros", NULL, action, NULL);
+	gt_macros_replace_set(gt_session_get_macros(s), set);
+	gt_script_engine_set_done_func(gt_session_get_script_engine(s), fin_script, &fin);
+	gt_script_engine_run(gt_session_get_script_engine(s),
+	                     "assert(gtkterm.send_macro('Gros'))\n"
+	                     "local ok, err = gtkterm.send(0, 'FIN', 10000)\n"
+	                     "assert(ok, err)\n"
+	                     "ok, err = gtkterm.send(0, string.rep('y', 1052672), 20000)\n"
+	                     "assert(ok, err)\n");
+	total = taille + 3 + gros;
+	limite = g_get_monotonic_time() + 30 * G_USEC_PER_SEC;
+	while((fin == 0 || lu->len < total) && g_get_monotonic_time() < limite)
+	{
+		guint8 tampon[4096];
+		ssize_t n = read(p.maitre, tampon, sizeof(tampon));
+
+		if(n > 0)
+			g_byte_array_append(lu, tampon, (guint)n);
+		g_main_context_iteration(NULL, FALSE);
+		g_usleep(n > 0 ? 200 : 1000);
+	}
+	g_assert_cmpint(fin, ==, GT_SCRIPT_END_FINISHED + 1);
+	g_assert_cmpuint(lu->len, ==, total);
+	g_assert_cmpmem(lu->data, taille, action, taille);
+	g_assert_cmpmem(lu->data + taille, 3, "FIN", 3);
+	for(gsize i = taille + 3; i < total; i++)
+		g_assert_cmpuint(lu->data[i], ==, 'y');
+	g_assert_cmpuint(gt_link_get_queued(gt_session_get_link(s)), ==, 0);
+
+	gt_session_shutdown(s);
+	g_object_unref(s);
+	g_byte_array_unref(lu);
+	g_free(action);
+	pty_fermer(&p);
+}
+
 /* ---- Activité du port ----------------------------------------------------------- */
 
 static const gchar *
@@ -616,6 +681,7 @@ main(int argc, char *argv[])
 	g_test_add_func("/session/deux-sessions-independantes", test_deux_sessions_independantes);
 	g_test_add_func("/session/arret", test_arret);
 	g_test_add_func("/session/occupee", test_occupee);
+	g_test_add_func("/session/lua-envoi-apres-macro", test_lua_envoi_apres_macro);
 	g_test_add_func("/session/actions", test_actions);
 	g_test_add_func("/session/activite", test_activite);
 	g_test_add_func("/session/activite-delais-profil", test_activite_delais_profil);

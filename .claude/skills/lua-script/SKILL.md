@@ -42,7 +42,7 @@ A wrong argument type raises a Lua error.
 | `close(handle)` | – | no effect on a closed port; every port is closed automatically when the script ends or is stopped. Serial: waits first for pending output to be sent (at most 2 s in all; skipped when stopping, **including `os.exit`**: call `gtkterm.close(h)` before `os.exit` when a last `send` must not be lost), so a last `send` before the end is not lost |
 | `clear(handle)` | – | empty the receive buffer of handle (not the terminal) |
 | `save_csv(file, col1, col2, ...)` | `true` \| `false, err` | append a CSV row; first call with header strings |
-| `send_macro(index_or_label, ...args)` | `true`/`false` \| `false, "macro not found"` | send a configured macro (0-based integer index or label; an index outside 0..2147483647 is "not found", a non-integer number raises an error); true once actually sent |
+| `send_macro(index_or_label, ...args)` | `true` \| `false, err` | send a configured macro (0-based integer index or label; an index outside 0..2147483647 is `"macro not found"`, a non-integer number raises an error); true once accepted whole by the main port's send queue (written at once or as soon as the port takes it, never cut); errors: `"invalid argument"`, `"not connected"`, `"link lost"`, `"send queue full"` (more than 1 MiB waiting); a following `send(0, …)` waits for the queue to empty, so order is kept |
 | `get_macros()` | table | `{ {index=, label=, ...}, ... }` |
 | `get_lists()` | table | configured macro lists |
 

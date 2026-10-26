@@ -2,6 +2,7 @@
  * table GtAppUi du test (raccourcis et fenêtre d'édition : suite graphique, test_raccourcis_macros.py et test_macros_edition.py). */
 
 #include <glib.h>
+#include <errno.h>
 #include <string.h>
 
 #include "app_ui.h"
@@ -157,6 +158,60 @@ test_ecriture_en_echec(void)
 	/* M3 : aucun octet ecrit, pas de message « envoyee » (le « - lost » de la barre d'etat reste visible) */
 	g_assert_cmpint(stub_count("status_flash"), ==, 0);
 	stub_link_set_write_fails(FALSE);
+	desinstaller();
+}
+
+/* File d'émission pleine (gt_link_send : -1 / ENOBUFS) : pas de « sent! », l'échec est signalé, au plus une fois toutes les 3 s par macro ;
+ * gt_macros_send_quiet (Lua) ne dit rien */
+static void
+test_file_pleine(void)
+{
+	installer_macros();
+	stub_reset();
+	stub_link_set_refuse(ENOBUFS);
+	g_assert_false(gt_macros_send(macros, id_vitesse, NULL, -1));
+	g_assert_cmpuint(stub_sent()->len, ==, 0);
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	g_assert_null(strstr(stub_last("status_flash"), "sent!"));
+	g_assert_nonnull(strstr(stub_last("status_flash"), "Vitesse"));
+	g_assert_nonnull(strstr(stub_last("status_flash"), "send queue full"));
+	g_assert_false(gt_macros_send(macros, id_vitesse, NULL, -1));
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	g_assert_false(gt_macros_send_quiet(macros, id_sans_libelle, NULL, -1));
+	g_assert_cmpint(stub_count("status_flash"), ==, 1);
+	stub_link_set_refuse(0);
+	g_assert_true(gt_macros_send(macros, id_vitesse, NULL, -1));
+	g_assert_cmpint(stub_count("status_flash"), ==, 2);
+	g_assert_nonnull(strstr(stub_last("status_flash"), "sent!"));
+	desinstaller();
+}
+
+/* Scrutation : un tir est sauté tant que la file d'émission du port n'est pas vide (pas de retard accumulé) */
+static void
+test_polling_saute_si_file(void)
+{
+	GMainContext *ctx = g_main_context_default();
+	gint64 fin;
+
+	installer_macros();
+	stub_reset();
+	stub_link_set_queued(100);
+	g_assert_true(gt_macro_set_set_polling(gt_macros_get_set(macros), id_vitesse, TRUE, 5));
+	g_assert_true(gt_macro_poller_start(gt_macros_get_poller(macros), id_vitesse));
+	fin = g_get_monotonic_time() + 60 * G_TIME_SPAN_MILLISECOND;
+	while(g_get_monotonic_time() < fin)
+		g_main_context_iteration(ctx, FALSE);
+	g_assert_cmpuint(stub_sent()->len, ==, 0);
+	g_assert_cmpint(stub_count("gt_link_send"), ==, 0);
+	g_assert_true(gt_macro_poller_is_running(gt_macros_get_poller(macros), id_vitesse));
+	/* Envoi direct (clic, raccourci) : jamais sauté, il passe derrière la file */
+	g_assert_true(gt_macros_send(macros, id_vitesse, NULL, -1));
+	g_assert_cmpuint(stub_sent()->len, ==, 4);
+	stub_link_set_queued(0);
+	fin = g_get_monotonic_time() + 2 * G_TIME_SPAN_SECOND;
+	while(stub_sent()->len < 8 && g_get_monotonic_time() < fin)
+		g_main_context_iteration(ctx, FALSE);
+	g_assert_cmpuint(stub_sent()->len, >=, 8);
 	desinstaller();
 }
 
@@ -850,6 +905,8 @@ main(int argc, char **argv)
 	g_test_add_func("/macros_send/sans-libelle", test_sans_libelle);
 	g_test_add_func("/macros_send/inconnue-ou-separateur", test_inconnue_ou_separateur);
 	g_test_add_func("/macros_send/ecriture-en-echec", test_ecriture_en_echec);
+	g_test_add_func("/macros_send/file-pleine", test_file_pleine);
+	g_test_add_func("/macros_send/polling-saute-si-file", test_polling_saute_si_file);
 	g_test_add_func("/macros_send/envoi-silencieux", test_envoi_silencieux);
 	g_test_add_func("/macros_send/chargement-ancien-format-listes", test_chargement_ancien_format_listes);
 	g_test_add_func("/macros_send/chargement-fichier-absent", test_chargement_fichier_absent);

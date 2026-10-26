@@ -283,6 +283,29 @@ test_send_macro_argument_invalide(void)
 	g_assert_cmpmem(octets->data, octets->len, "L5;L1;", 6);
 }
 
+/* Échec d'envoi : false et une raison stable (file d'émission pleine, port pas ouvert) ; vrai dès que la macro est acceptée */
+static void
+test_send_macro_echec_raison(void)
+{
+	stub_reset();
+	installer_macro_a();
+	stub_link_set_refuse(ENOBUFS);
+	g_assert_true(executer("local ok, err = gtkterm.send_macro('A')\n"
+	                       "gtkterm.log(tostring(ok) .. ' ' .. tostring(err))\n", 5000));
+	g_assert_nonnull(strstr(journal->str, "false send queue full"));
+	stub_reset();
+	installer_macro_a();
+	stub_link_set_write_fails(TRUE);
+	stub_link_set_state(GT_LINK_LISTENING);
+	g_assert_true(executer("local ok, err = gtkterm.send_macro('A')\n"
+	                       "gtkterm.log(tostring(ok) .. ' ' .. tostring(err))\n", 5000));
+	g_assert_nonnull(strstr(journal->str, "false not connected"));
+	stub_reset();
+	installer_macro_a();
+	g_assert_true(executer("assert(gtkterm.send_macro('A') == true)\n", 5000));
+	g_assert_cmpuint(stub_sent()->len, ==, 1);
+}
+
 /* ---- M26 : wait_for binaire ------------------------------------------- */
 
 static gboolean
@@ -2158,6 +2181,7 @@ main(int argc, char **argv)
 	g_test_add_func("/script_engine/get-lists", test_get_lists);
 	g_test_add_func("/script_engine/send-macro-arguments", test_send_macro_arguments);
 	g_test_add_func("/script_engine/send-macro-argument-invalide", test_send_macro_argument_invalide);
+	g_test_add_func("/script_engine/send-macro-echec-raison", test_send_macro_echec_raison);
 	g_test_add_func("/script_engine/wait-for-binaire", test_wait_for_binaire);
 	g_test_add_func("/script_engine/pair-tcp-ferme", test_pair_tcp_ferme);
 	g_test_add_func("/script_engine/executions-successives", test_executions_successives);

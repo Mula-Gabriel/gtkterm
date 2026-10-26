@@ -1,5 +1,5 @@
 /* Vue du terminal GTK 4 (spec §6.3) : reprend terminal_display.c (GTK 3). Rendu par view_render.c depuis l'historique de la liaison
- * et GtTermOptions ; frappe → gt_link_send(GT_SEND_KEYBOARD). */
+ * et GtTermOptions ; frappe → gt_link_send(GT_SEND_KEYBOARD), tout accepté ou rien (file d'émission). */
 #ifndef GT_UI_TERMINAL_VIEW_H_
 #define GT_UI_TERMINAL_VIEW_H_
 
@@ -8,11 +8,13 @@
 
 #include "link.h"
 #include "profile.h"
+#include "session.h"
 #include "term_options.h"
 
 G_BEGIN_DECLS
 
-GtkWidget   *gt_terminal_view_new(GtkTermLink *link, GtTermOptions *opts);	/* GtkScrolledWindow contenant le VteTerminal nommé "terminal" */
+/* GtkScrolledWindow contenant le VteTerminal nommé "terminal" ; session (pointeur faible, NULL permis) : destinataire des messages d'envoi refusé */
+GtkWidget   *gt_terminal_view_new(GtkTermLink *link, GtTermOptions *opts, GtSession *session);
 VteTerminal *gt_terminal_view_get_vte(GtkWidget *view);
 void         gt_terminal_view_redraw(GtkWidget *view);	/* vide l'écran et le défilement puis rejoue l'historique */
 void         gt_terminal_view_apply_profile(GtkWidget *view, const GtProfile *p);	/* police, couleurs, taille, défilement, curseur */

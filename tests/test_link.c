@@ -4,6 +4,7 @@
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <pty.h>
 #include <string.h>
@@ -532,6 +533,171 @@ test_effacer_historique(void)
 	port_detruire(&p);
 }
 
+/* ---- File d'émission ---------------------------------------------------- */
+
+typedef struct
+{
+	GByteArray *octets;	/* octets TX de l'historique, dans l'ordre */
+	GByteArray *origines;	/* origine de chaque octet TX */
+} BilanTx;
+
+static void
+faire_bilan_tx(const GtRecord *rec, gpointer data)
+{
+	BilanTx *b = data;
+	guint8 o = (guint8)rec->origin;
+
+	if(rec->kind != GT_RECORD_TX)
+		return;
+	g_byte_array_append(b->octets, rec->data, (guint)rec->len);
+	for(gsize i = 0; i < rec->len; i++)
+		g_byte_array_append(b->origines, &o, 1);
+}
+
+static gsize
+taille_tx(GtkTermLink *link)
+{
+	BilanTx b = { g_byte_array_new(), g_byte_array_new() };
+	gsize n;
+
+	gt_history_foreach(gt_link_get_history(link), faire_bilan_tx, &b);
+	n = b.octets->len;
+	g_byte_array_unref(b.octets);
+	g_byte_array_unref(b.origines);
+	return n;
+}
+
+static guint8 *
+motif(gsize taille)
+{
+	guint8 *d = g_malloc(taille);
+
+	for(gsize i = 0; i < taille; i++)
+		d[i] = (guint8)('a' + (i % 26));
+	return d;
+}
+
+/* Lit le maître (non bloquant) par morceaux en itérant la boucle, jusqu'à attendu octets ou ms écoulées ; *tx_max : plus grande taille de
+ * l'historique TX relevée en cours de route (strictement croissante tant que la file se vide) */
+static void
+lire_lentement(int fd, GByteArray *dest, gsize attendu, guint ms, GtkTermLink *link, guint *paliers)
+{
+	gint64 fin = g_get_monotonic_time() + (gint64)ms * 1000;
+	gsize dernier = taille_tx(link);
+	guint8 buf[1000];
+
+	while(dest->len < attendu && g_get_monotonic_time() < fin)
+	{
+		ssize_t n = read(fd, buf, sizeof(buf));
+		gsize tx;
+
+		if(n > 0)
+			g_byte_array_append(dest, buf, (guint)n);
+		g_main_context_iteration(NULL, FALSE);
+		tx = taille_tx(link);
+		g_assert_cmpuint(tx, >=, dernier);
+		g_assert_cmpuint(tx, >=, dest->len);	/* jamais lu côté maître sans être entré dans l'historique */
+		if(tx > dernier && paliers != NULL)
+			(*paliers)++;
+		dernier = tx;
+		if(n <= 0)
+			g_usleep(500);
+	}
+}
+
+/* 64 Kio (collage) puis une frappe : tout accepté, l'historique TX grandit au fil de la lecture, origines conservées dans l'ordre ;
+ * try_send attend que la file soit vide (-1 / EAGAIN, jamais 0) */
+static void
+test_file_emission(void)
+{
+	const gsize taille = 65536;
+	Observateur o;
+	Port p = PORT_INIT;
+	GtkTermLink *link = nouvelle_liaison(&o);
+	BilanTx b = { g_byte_array_new(), g_byte_array_new() };
+	GByteArray *lu = g_byte_array_new();
+	guint8 *d = motif(taille);
+	guint paliers = 0;
+
+	port_brancher(&p);
+	g_assert_cmpint(fcntl(p.maitre, F_SETFL, fcntl(p.maitre, F_GETFL) | O_NONBLOCK), ==, 0);
+	ouvrir_serie(link, &p);
+	g_assert_cmpint(gt_link_send(link, d, taille, GT_SEND_KEYBOARD), ==, (gssize)taille);
+	g_assert_cmpint(gt_link_send(link, (const guint8 *)"MACRO", 5, GT_SEND_MACRO), ==, 5);
+	g_assert_cmpuint(gt_link_get_queued(link), >, 0);
+	g_assert_cmpuint(taille_tx(link), <, taille);
+	g_assert_cmpuint(taille_tx(link) + gt_link_get_queued(link), ==, taille + 5);
+	errno = 0;
+	g_assert_cmpint(gt_link_try_send(link, (const guint8 *)"F", 1, GT_SEND_FILE), ==, -1);
+	g_assert_cmpint(errno, ==, EAGAIN);
+
+	lire_lentement(p.maitre, lu, taille + 5, 10000, link, &paliers);
+	g_assert_cmpuint(lu->len, ==, taille + 5);
+	g_assert_cmpuint(paliers, >, 1);	/* l'historique a grandi en plusieurs fois, au fil de la lecture */
+	g_assert_cmpmem(lu->data, taille, d, taille);
+	g_assert_cmpmem(lu->data + taille, 5, "MACRO", 5);
+	g_assert_cmpuint(gt_link_get_queued(link), ==, 0);
+	gt_history_foreach(gt_link_get_history(link), faire_bilan_tx, &b);
+	g_assert_cmpmem(b.octets->data, b.octets->len, lu->data, lu->len);
+	for(gsize i = 0; i < b.origines->len; i++)
+		g_assert_cmpuint(b.origines->data[i], ==, i < taille ? GT_SEND_KEYBOARD : GT_SEND_MACRO);
+	g_assert_cmpmem(o.envoye->data, o.envoye->len, lu->data, lu->len);
+	g_assert_cmpint(o.derniere_origine, ==, GT_SEND_MACRO);
+
+	/* File vide : try_send écrit de nouveau directement, historique et « sent » compris */
+	g_assert_cmpint(gt_link_try_send(link, (const guint8 *)"F", 1, GT_SEND_FILE), ==, 1);
+	g_assert_cmpuint(taille_tx(link), ==, taille + 6);
+	g_assert_cmpint(o.derniere_origine, ==, GT_SEND_FILE);
+
+	g_byte_array_unref(b.octets);
+	g_byte_array_unref(b.origines);
+	g_byte_array_unref(lu);
+	g_free(d);
+	liberer(link, &o);
+	port_detruire(&p);
+}
+
+/* File pleine : -1 / ENOBUFS, rien n'entre ; fermeture : la file est jetée, rien de plus dans l'historique */
+static void
+test_file_pleine_et_fermeture(void)
+{
+	Observateur o;
+	Port p = PORT_INIT;
+	GtkTermLink *link = nouvelle_liaison(&o);
+	guint8 *d = motif(GT_TRANSPORT_QUEUE_MAX);
+	GByteArray *lu = g_byte_array_new();
+	gsize tx;
+
+	port_brancher(&p);
+	g_assert_cmpint(fcntl(p.maitre, F_SETFL, fcntl(p.maitre, F_GETFL) | O_NONBLOCK), ==, 0);
+	ouvrir_serie(link, &p);
+	g_assert_cmpint(gt_link_send(link, d, GT_TRANSPORT_QUEUE_MAX / 2, GT_SEND_KEYBOARD), ==, GT_TRANSPORT_QUEUE_MAX / 2);
+	g_assert_cmpint(gt_link_send(link, d, GT_TRANSPORT_QUEUE_MAX / 2, GT_SEND_KEYBOARD), ==, GT_TRANSPORT_QUEUE_MAX / 2);
+	tx = taille_tx(link);
+	errno = 0;
+	g_assert_cmpint(gt_link_send(link, d, GT_TRANSPORT_QUEUE_MAX / 2, GT_SEND_MACRO), ==, -1);
+	g_assert_cmpint(errno, ==, ENOBUFS);
+	g_assert_cmpuint(taille_tx(link) + gt_link_get_queued(link), ==, GT_TRANSPORT_QUEUE_MAX);
+
+	gt_link_close(link);
+	g_assert_cmpuint(gt_link_get_queued(link), ==, 0);
+	lire_lentement(p.maitre, lu, GT_TRANSPORT_QUEUE_MAX, 300, link, NULL);
+	g_assert_cmpuint(taille_tx(link), ==, tx);
+	g_assert_cmpuint(lu->len, <=, tx);
+
+	/* Rouverte : rien n'est rejoué */
+	ouvrir_serie(link, &p);
+	g_byte_array_set_size(lu, 0);
+	lire_lentement(p.maitre, lu, 1, 300, link, NULL);
+	g_assert_cmpuint(lu->len, ==, 0);
+	g_assert_cmpuint(taille_tx(link), ==, tx);
+
+	g_byte_array_unref(lu);
+	g_free(d);
+	liberer(link, &o);
+	port_detruire(&p);
+}
+
 /* ---- Perte et reconnexion (M3) ----------------------------------------- */
 
 static void
@@ -870,6 +1036,8 @@ main(int argc, char **argv)
 	g_test_add_func("/link/reception-et-historique", test_reception_et_historique);
 	g_test_add_func("/link/envoi-et-historique", test_envoi_et_historique);
 	g_test_add_func("/link/effacer-historique", test_effacer_historique);
+	g_test_add_func("/link/file-emission", test_file_emission);
+	g_test_add_func("/link/file-pleine-et-fermeture", test_file_pleine_et_fermeture);
 	g_test_add_func("/link/perte-sans-reconnexion", test_perte_sans_reconnexion);
 	g_test_add_func("/link/perte-puis-reconnexion", test_perte_puis_reconnexion);
 	g_test_add_func("/link/fermeture-annule-reconnexion", test_fermeture_annule_reconnexion);

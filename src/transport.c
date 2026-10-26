@@ -38,6 +38,25 @@
 
 #define BUFFER_RECEPTION 8192
 #define WATCH_PRIORITY 10
+#define RS485_DRAIN_POLL_MS 5	/* interrogation du vidage du port en fin de rafale RS485 */
+
+/* Cycle RS485 d'une rafale : un seul TIOCMBIS au début, un seul TIOCMBIC à la fin */
+typedef enum
+{
+	RS485_IDLE,		/* RTS baissé */
+	RS485_BEFORE,		/* RTS levé, délai « avant » en cours */
+	RS485_SENDING,		/* écriture de la file par la surveillance G_IO_OUT */
+	RS485_DRAINING,		/* file vide : attente du vidage du port (TIOCOUTQ, TIOCSERGETLSR) */
+	RS485_AFTER		/* port vidé : délai « après » en cours */
+} Rs485State;
+
+/* Morceau de la file d'émission */
+typedef struct
+{
+	GBytes *bytes;
+	gsize offset;		/* octets déjà écrits */
+	gpointer tag;
+} QueuedChunk;
 
 struct _GtTransport
 {
@@ -50,6 +69,13 @@ struct _GtTransport
 	guint client_watch_id;		/* serveur : lecture du client */
 	guint connect_watch_id;		/* client TCP : connexion en cours */
 	guint lost_idle_id;		/* signalement différé de LOST */
+	guint out_watch_id;		/* G_IO_OUT : posée seulement tant que la file d'émission n'est pas vide */
+	guint rs485_timer_id;		/* RS485 : délai « avant », interrogation du vidage ou délai « après » */
+	GQueue out_queue;		/* QueuedChunk * : octets acceptés pas encore écrits, dans l'ordre */
+	gsize out_queued;		/* total en attente dans out_queue */
+	gboolean flushing;		/* écriture de la file en cours (un on_sent peut remettre des octets en file) */
+	Rs485State rs485;
+	gint64 rs485_drain_deadline;	/* heure monotone au-delà de laquelle le vidage est tenu pour fait (pilote qui ne se vide jamais) */
 	struct addrinfo *addrs;		/* client TCP : adresses résolues, gardées pendant la connexion (I4), NULL ensuite */
 	struct addrinfo *next_addr;	/* client TCP : prochaine adresse à essayer si la connexion en cours échoue */
 	gchar *lost_detail;
@@ -94,6 +120,38 @@ static void transport_stop_watches(GtTransport *t)
 	transport_remove_source(&t->connect_watch_id);
 }
 
+/* ---- File d'émission ---------------------------------------------------- */
+
+static void queued_chunk_free(gpointer data)
+{
+	QueuedChunk *c = data;
+
+	g_bytes_unref(c->bytes);
+	g_free(c);
+}
+
+/* File jetée (fermeture, perte, départ ou remplacement du client) : plus aucun on_sent pour ces octets */
+static void transport_drop_queue(GtTransport *t)
+{
+	transport_remove_source(&t->out_watch_id);
+	g_queue_clear_full(&t->out_queue, queued_chunk_free);
+	t->out_queued = 0;
+}
+
+static gboolean transport_is_rs485(GtTransport *t)
+{
+	return t->params.type == TRANSPORT_SERIAL && t->params.flow == GT_FLOW_RS485;
+}
+
+/* Cycle RS485 abandonné (perte, fermeture) : minuterie retirée ; RTS baissé si lower et que le cycle l'avait levé */
+static void transport_rs485_abort(GtTransport *t, gboolean lower)
+{
+	transport_remove_source(&t->rs485_timer_id);
+	if(lower && t->rs485 != RS485_IDLE && t->fd != -1)
+		ioctl(t->fd, TIOCMBIC, (int[]){TIOCM_RTS});
+	t->rs485 = RS485_IDLE;
+}
+
 static gboolean transport_lost_idle(gpointer data)
 {
 	GtTransport *t = data;
@@ -115,12 +173,16 @@ static void transport_mark_lost(GtTransport *t, const gchar *detail)
 		return;
 	t->lost = TRUE;
 	transport_stop_watches(t);
+	transport_drop_queue(t);
+	transport_rs485_abort(t, FALSE);
 	t->lost_detail = g_strdup(detail);
 	t->lost_idle_id = g_idle_add(transport_lost_idle, t);
 }
 
+/* Serveur : la file d'émission était destinée à ce client, elle part avec lui (rien d'ancien vers le client suivant) */
 static void transport_close_client(GtTransport *t)
 {
+	transport_drop_queue(t);
 	transport_remove_source(&t->client_watch_id);
 	if(t->client_fd != -1)
 	{
@@ -501,7 +563,9 @@ void gt_transport_close(GtTransport *t)
 
 	transport_remove_source(&t->lost_idle_id);
 	transport_stop_watches(t);
+	transport_rs485_abort(t, !t->lost);
 	transport_close_client(t);
+	transport_drop_queue(t);
 
 	if(t->fd != -1)
 	{
@@ -525,50 +589,313 @@ void gt_transport_close(GtTransport *t)
 	g_free(t);
 }
 
-gssize gt_transport_send(GtTransport *t, const guint8 *data, gsize len)
+static int transport_out_fd(GtTransport *t)
 {
-	gboolean rs485;
-	gssize written;
-	gint saved_errno;
+	return (t->params.type == TRANSPORT_TCP_SERVER) ? t->client_fd : t->fd;
+}
+
+/* Une écriture. En TCP, MSG_NOSIGNAL : un pair déjà fermé renvoie EPIPE au lieu de tuer GTKTerm par SIGPIPE (C2). */
+static gssize transport_write(GtTransport *t, int fd, const guint8 *data, gsize len)
+{
+	if(t->params.type == TRANSPORT_SERIAL)
+		return write(fd, data, len);
+	return send(fd, data, len, MSG_NOSIGNAL);
+}
+
+static void transport_report_sent(GtTransport *t, const guint8 *data, gsize len, gpointer tag)
+{
+	if(len > 0 && t->cb.on_sent != NULL)
+		t->cb.on_sent(data, len, tag, t->user_data);
+}
+
+static void transport_enqueue(GtTransport *t, const guint8 *data, gsize len, gpointer tag)
+{
+	QueuedChunk *c = g_new(QueuedChunk, 1);
+
+	c->bytes = g_bytes_new(data, len);
+	c->offset = 0;
+	c->tag = tag;
+	g_queue_push_tail(&t->out_queue, c);
+	t->out_queued += len;
+}
+
+static gboolean transport_out_cb(gint fd, GIOCondition cond, gpointer data);
+
+/* Surveillance G_IO_OUT posée tant que des octets attendent et qu'on peut les écrire (RS485 : seulement pendant l'écriture du cycle) */
+static void transport_update_out_watch(GtTransport *t)
+{
+	int fd = transport_out_fd(t);
+	gboolean want = !t->lost && fd != -1 && t->out_queued > 0 && (!transport_is_rs485(t) || t->rs485 == RS485_SENDING);
+
+	if(want && t->out_watch_id == 0)
+		t->out_watch_id = g_unix_fd_add_full(WATCH_PRIORITY, fd, G_IO_OUT, transport_out_cb, t, NULL);
+	else if(!want)
+		transport_remove_source(&t->out_watch_id);
+}
+
+/* ---- RS485 : un cycle RTS par rafale, sans attente bloquante ------------- */
+
+static gboolean transport_rs485_after_cb(gpointer data)
+{
+	GtTransport *t = data;
+
+	t->rs485_timer_id = 0;
+	ioctl(t->fd, TIOCMBIC, (int[]){TIOCM_RTS});
+	t->rs485 = RS485_IDLE;
+	return G_SOURCE_REMOVE;
+}
+
+/* Port vidé : tampon du pilote (TIOCOUTQ), puis registre de sortie de l'UART quand le pilote le donne (8250 : TIOCSERGETLSR) ; un pilote
+ * qui ne répond pas (USB, pty) se contente de TIOCOUTQ, comme tcdrain pour la plupart d'entre eux */
+static gboolean transport_rs485_drained(GtTransport *t)
+{
+	int pending = 0;
+	unsigned int lsr = 0;
+
+	if(ioctl(t->fd, TIOCOUTQ, &pending) == 0 && pending > 0)
+		return FALSE;
+	if(ioctl(t->fd, TIOCSERGETLSR, &lsr) == 0 && !(lsr & TIOCSER_TEMT))
+		return FALSE;
+	return TRUE;
+}
+
+static gboolean transport_rs485_drain_cb(gpointer data)
+{
+	GtTransport *t = data;
+
+	/* Borne : un pilote qui ne se vide jamais ne garde pas RTS levé indéfiniment */
+	if(!transport_rs485_drained(t) && g_get_monotonic_time() < t->rs485_drain_deadline)
+		return G_SOURCE_CONTINUE;
+	t->rs485_timer_id = 0;	/* cette source se retire en renvoyant G_SOURCE_REMOVE */
+	if(t->params.rs485_after_ms > 0)
+	{
+		t->rs485 = RS485_AFTER;
+		t->rs485_timer_id = g_timeout_add(t->params.rs485_after_ms, transport_rs485_after_cb, t);
+	}
+	else
+		transport_rs485_after_cb(t);
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean transport_rs485_before_cb(gpointer data)
+{
+	GtTransport *t = data;
+
+	t->rs485_timer_id = 0;
+	t->rs485 = RS485_SENDING;
+	transport_update_out_watch(t);
+	return G_SOURCE_REMOVE;
+}
+
+/* Octets mis en file en RS485 : au repos, RTS levé (un seul TIOCMBIS par rafale) puis délai « avant » ; pendant le vidage ou le délai
+ * « après », l'écriture reprend sans rebasculer RTS */
+static void transport_rs485_kick(GtTransport *t)
+{
+	switch(t->rs485)
+	{
+	case RS485_IDLE:
+		ioctl(t->fd, TIOCMBIS, (int[]){TIOCM_RTS});
+		if(t->params.rs485_before_ms > 0)
+		{
+			t->rs485 = RS485_BEFORE;
+			t->rs485_timer_id = g_timeout_add(t->params.rs485_before_ms, transport_rs485_before_cb, t);
+			return;
+		}
+		t->rs485 = RS485_SENDING;
+		break;
+	case RS485_DRAINING:
+	case RS485_AFTER:
+		transport_remove_source(&t->rs485_timer_id);
+		t->rs485 = RS485_SENDING;
+		break;
+	default:
+		break;
+	}
+	transport_update_out_watch(t);
+}
+
+/* ---- Écriture de la file ------------------------------------------------- */
+
+/* Écriture impossible depuis la surveillance : perte (série, client TCP) ou départ du client (serveur), comme à la lecture */
+static void transport_write_failed(GtTransport *t, gint err)
+{
+	if(t->params.type == TRANSPORT_TCP_SERVER)
+	{
+		transport_close_client(t);
+		if(t->cb.on_event != NULL)
+			t->cb.on_event(TRANSPORT_EVENT_CLIENT_GONE, NULL, t->user_data);
+		return;
+	}
+	transport_mark_lost(t, g_strerror(err));
+}
+
+/* Écrit la file tant que le descripteur accepte ; on_sent après chaque écriture, la file déjà à jour (un gestionnaire qui renvoie passe
+ * derrière, un envoi imbriqué ne relance pas l'écriture) */
+static void transport_flush(GtTransport *t)
+{
+	if(t->flushing)
+		return;
+	t->flushing = TRUE;
+	while(!g_queue_is_empty(&t->out_queue) && !t->lost && (!transport_is_rs485(t) || t->rs485 == RS485_SENDING))
+	{
+		QueuedChunk *c = g_queue_peek_head(&t->out_queue);
+		int fd = transport_out_fd(t);
+		gsize size, offset = c->offset, rest;
+		const guint8 *base = g_bytes_get_data(c->bytes, &size);
+		gpointer tag = c->tag;
+		GBytes *keep;
+		gssize n;
+
+		if(fd == -1)
+			break;
+		rest = size - offset;
+		n = transport_write(t, fd, base + offset, rest);
+		if(n < 0)
+		{
+			gint err = errno;
+
+			if(err == EINTR)
+				continue;
+			if(err != EAGAIN && err != EWOULDBLOCK)
+				transport_write_failed(t, err);
+			break;
+		}
+		if(n == 0)
+			break;
+		keep = g_bytes_ref(c->bytes);	/* base reste valable pendant on_sent, même si la file est jetée entre-temps */
+		c->offset += (gsize)n;
+		t->out_queued -= (gsize)n;
+		if(c->offset == size)
+			queued_chunk_free(g_queue_pop_head(&t->out_queue));
+		transport_report_sent(t, base + offset, (gsize)n, tag);
+		g_bytes_unref(keep);
+		if((gsize)n < rest)
+			break;		/* descripteur plein : la surveillance reprendra */
+	}
+	t->flushing = FALSE;
+	if(transport_is_rs485(t) && t->rs485 == RS485_SENDING && g_queue_is_empty(&t->out_queue) && !t->lost)
+	{
+		int pending = 0;
+		guint baud = t->actual_baudrate != 0 ? t->actual_baudrate : 9600;
+
+		/* Temps d'émission de ce que le pilote garde (10 bits par octet), plus une seconde de marge */
+		if(ioctl(t->fd, TIOCOUTQ, &pending) != 0 || pending < 0)
+			pending = 0;
+		t->rs485_drain_deadline = g_get_monotonic_time() + (gint64)pending * 10 * G_USEC_PER_SEC / baud + G_USEC_PER_SEC;
+		t->rs485 = RS485_DRAINING;
+		t->rs485_timer_id = g_timeout_add(RS485_DRAIN_POLL_MS, transport_rs485_drain_cb, t);
+	}
+	transport_update_out_watch(t);
+}
+
+static gboolean transport_out_cb(gint fd, GIOCondition cond, gpointer data)
+{
+	GtTransport *t = data;
+	guint self = t->out_watch_id;
+
+	transport_flush(t);
+	/* transport_flush garde la surveillance tant que des octets attendent ; retirée (file vide, jetée, perte), elle ne doit pas continuer */
+	return (self != 0 && t->out_watch_id == self) ? G_SOURCE_CONTINUE : G_SOURCE_REMOVE;
+}
+
+/* -1 et errno = EIO après une perte, 0 si rien n'est ouvert (serveur sans client, connexion en cours), 1 si l'on peut envoyer */
+static gint transport_send_ready(GtTransport *t)
+{
 	int fd;
 
-	if(t == NULL || len == 0)
-		return 0;
 	if(t->lost)
 	{
 		errno = EIO;
 		return -1;
 	}
-
-	fd = (t->params.type == TRANSPORT_TCP_SERVER) ? t->client_fd : t->fd;
+	fd = transport_out_fd(t);
 	if(fd == -1 || t->connect_watch_id != 0)
 		return 0;
+	return 1;
+}
 
-	rs485 = (t->params.type == TRANSPORT_SERIAL && t->params.flow == GT_FLOW_RS485);
-	if(rs485)
+gssize gt_transport_try_send(GtTransport *t, const guint8 *data, gsize len, gpointer tag)
+{
+	gint ready;
+	gssize written;
+
+	if(t == NULL || len == 0)
+		return 0;
+	ready = transport_send_ready(t);
+	if(ready <= 0)
+		return ready;
+	/* Rien ne double les octets en file ni un cycle RS485 en cours : « plein », l'appelant réessaiera */
+	if(t->out_queued > 0 || t->rs485 != RS485_IDLE)
 	{
-		ioctl(fd, TIOCMBIS, (int[]){TIOCM_RTS});
-		if(t->params.rs485_before_ms > 0)
-			usleep(t->params.rs485_before_ms * 1000);
+		errno = EAGAIN;
+		return -1;
 	}
-
-	/* En TCP, MSG_NOSIGNAL : un pair déjà fermé renvoie EPIPE au lieu de tuer GTKTerm par SIGPIPE (C2). */
-	if(t->params.type == TRANSPORT_SERIAL)
-		written = write(fd, data, len);
-	else
-		written = send(fd, data, len, MSG_NOSIGNAL);
-	saved_errno = errno;
-
-	if(rs485)
+	if(transport_is_rs485(t))
 	{
-		tcdrain(fd);
-		if(t->params.rs485_after_ms > 0)
-			usleep(t->params.rs485_after_ms * 1000);
-		ioctl(fd, TIOCMBIC, (int[]){TIOCM_RTS});
+		/* RTS doit monter avant toute écriture : ce qui tient est accepté pour un cycle (envoi de fichier : un cycle par morceau, comme avant) */
+		len = MIN(len, GT_TRANSPORT_QUEUE_MAX);
+		transport_enqueue(t, data, len, tag);
+		transport_rs485_kick(t);
+		return (gssize)len;
 	}
-
-	errno = saved_errno;
+	written = transport_write(t, transport_out_fd(t), data, len);
+	if(written > 0)
+		transport_report_sent(t, data, (gsize)written, tag);
 	return written;
+}
+
+gssize gt_transport_send(GtTransport *t, const guint8 *data, gsize len)
+{
+	return gt_transport_try_send(t, data, len, NULL);
+}
+
+gssize gt_transport_send_queued(GtTransport *t, const guint8 *data, gsize len, gpointer tag)
+{
+	gint ready;
+	gssize written = 0;
+
+	if(t == NULL || len == 0)
+		return 0;
+	ready = transport_send_ready(t);
+	if(ready <= 0)
+		return ready;
+	if(len > GT_TRANSPORT_QUEUE_MAX - t->out_queued)
+	{
+		errno = ENOBUFS;
+		return -1;
+	}
+	if(transport_is_rs485(t))
+	{
+		transport_enqueue(t, data, len, tag);
+		transport_rs485_kick(t);
+		return (gssize)len;
+	}
+	if(t->out_queued == 0)
+	{
+		/* File vide : écriture directe tout de suite (la frappe reste synchrone) ; une erreur autre que « plein » ne met rien en file */
+		do
+			written = transport_write(t, transport_out_fd(t), data, len);
+		while(written < 0 && errno == EINTR);
+		if(written < 0)
+		{
+			if(errno != EAGAIN && errno != EWOULDBLOCK)
+				return -1;
+			written = 0;
+		}
+	}
+	if((gsize)written < len)
+	{
+		transport_enqueue(t, data + written, len - (gsize)written, tag);
+		transport_update_out_watch(t);
+	}
+	/* Après la mise en file du reste : un gestionnaire qui renvoie passe derrière */
+	transport_report_sent(t, data, (gsize)written, tag);
+	return (gssize)len;
+}
+
+gsize gt_transport_get_queued(GtTransport *t)
+{
+	return t != NULL ? t->out_queued : 0;
 }
 
 gint gt_transport_get_modem_lines(GtTransport *t)
