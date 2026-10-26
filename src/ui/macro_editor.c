@@ -1889,8 +1889,11 @@ static void defaults_rebuild(MacroEditor *editor)
 	defaults_clear(editor);
 	if(row != editor->defaults_row)
 	{
-		/* Autre ligne affichée : le message « Prefix of argument %d removed » de la précédente ne la concerne plus */
-		if(editor->prefix_message)
+		/* Autre ligne affichée : le message « Prefix of argument %d removed » de la précédente ne la concerne plus, celui de la nouvelle est
+		 * réaffiché (son préfixe sera perdu à l'OK) */
+		if(row != NULL)
+			prefix_message_update(editor, row);
+		else if(editor->prefix_message)
 			set_message(editor, NULL, FALSE);
 		defaults_unwatch(editor);
 		if(row != NULL)

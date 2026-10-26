@@ -390,7 +390,7 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   columns after Charset, `macro-optional-<k>` (`GtkCheckButton`) and `macro-prefix-<k>` (`GtkEntry`, insensitive while unchecked); checking splits the prefix off the action with
   `gt_macro_action_split_prefix()` (text before the specifier of argument k back to the first space, space included, never crossing the previous specifier, a whole escape sequence or the start of
   the action; nothing to take → empty prefix, action unchanged; `%%` becomes `%`), unchecking `gt_macro_action_join_prefix()` puts it back before the specifier; both vectors follow the typing in
-  the Action cell (« Prefix of argument %d removed » in `macro-editor-error` while a non-empty prefix is beyond the arguments, cleared when another row is shown); the preview shows prefix and value in blue and an omitted argument as a greyed « ∅ ». **Flag** (`GT_MACRO_ARG_FLAG`,
+  the Action cell (« Prefix of argument %d removed » in `macro-editor-error` while a non-empty prefix is beyond the arguments, cleared when another row is shown, shown again when that row is shown again); the preview shows prefix and value in blue and an omitted argument as a greyed « ∅ ». **Flag** (`GT_MACRO_ARG_FLAG`,
   `arg_optional` value `"flag"`, `%s` only, anywhere else read `"1"`): column `Flag` after Prefix (`macro-flag-<k>`, `%s` only, sensitive while Optional is
   checked; unchecking Optional unchecks it), the Default cell is then a `GtkCheckButton` (`"1"` / `""`) and Min / Max / Charset are insensitive; core:
   `gt_macro_arg_is_flag()` (a flag is also optional), set when the value is neither empty nor `"0"` (`gt_macro_flag_value_set()`), expansion sends the

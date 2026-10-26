@@ -121,7 +121,7 @@ void gt_project_rename_show(GtkWindow *parent, GtProject *project)
 	gtk_window_set_destroy_with_parent(rd->window, TRUE);
 	gtk_window_set_default_size(rd->window, 360, -1);
 	g_object_set_data_full(G_OBJECT(rd->window), "rename-dialog", rd, rename_dialog_free);
-	/* Gestionnaire retiré avec l'état (rename_dialog_free), jamais laissé à la finalisation de la fenêtre */
+	/* Gestionnaire retiré avec l'état (rename_dialog_free, au nettoyage des données de la fenêtre), avant que l'état ne soit libéré */
 	rd->open_handler = g_signal_connect(project, "notify::open", G_CALLBACK(on_project_open_changed), rd);
 	rename_window = rd->window;
 	g_object_add_weak_pointer(G_OBJECT(rd->window), (gpointer *)&rename_window);
