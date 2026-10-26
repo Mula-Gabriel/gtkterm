@@ -13,6 +13,9 @@ Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusq
 - Macros : un argument peut être facultatif, avec un préfixe : vide, il n'envoie ni sa valeur ni son préfixe (par exemple ` -password=`) ; le panneau propose « (aucun) » pour une liste.
 - Ports : la liste de la fenêtre Port n'affiche plus les ports série fantômes (ttyS réservés par le noyau sans matériel derrière).
 - Ports : plus d'avertissement « débit non standard » au chargement d'un profil ; un débit que le matériel refuse reste signalé à l'ouverture.
+- Lua : un port 1 à 15 perdu relâche aussitôt le périphérique, au lieu de le garder jusqu'à la fin du script : un adaptateur USB rebranché garde son nom.
+- TCP : une connexion dont le pair a disparu sans la fermer (veille, câble débranché) est signalée perdue au bout d'environ une minute.
+- Documentation : pour retrouver un adaptateur USB après une mise en veille, désigner le port par /dev/serial/by-id/… avec la reconnexion automatique.
 ! Un fichier de macros avec des arguments facultatifs, ouvert par une version plus ancienne, envoie l'action sans les préfixes.
 
 ## v2.1.0 — 2026-10-15

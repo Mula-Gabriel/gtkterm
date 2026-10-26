@@ -171,6 +171,7 @@ from the history, which stays the reference for « Save RAW/ASCII » (`capture.c
 **Transport (`transport.c` / `transport.h`):** one instance per opened port (`gt_transport_open(params, callbacks, user_data, GError **)`), three modes —
 `TRANSPORT_SERIAL`, `TRANSPORT_TCP_CLIENT`, `TRANSPORT_TCP_SERVER`; no UI calls, errors via `GError`, `LOST` reported (deferred to an idle) instead of
 reconnecting. Serial specifics: termios in `serial_termios.c`, baud-rate tables in `baud.c`/`baudrates.c`. Privileged TCP ports use `CAP_NET_BIND_SERVICE`.
+TCP sockets (client, accepted client) get a keepalive (30 s idle, 10 s interval, 3 probes): a peer gone silently gives `LOST` / `CLIENT_GONE` after about a minute.
 
 **Link (`link.c` / `link.h`):** single state machine for the main port — `CLOSED`, `CONNECTING`, `OPEN`, `LISTENING`, `LOST`, `RECONNECTING`; properties
 `state`, `status-text`, `auto-reconnect`, `reconnect-interval-ms`; signals `open-failed` (user-requested open only → error message box), `received`, `sent`,
@@ -199,7 +200,8 @@ Scripts run on a **background GThread** (`g_thread_new("lua-script", …)`). The
 Lua thread never touches GTK, a transport or the link: it only uses the receive queues (`GtRxQueue`, `rx_queue.c`: locked, 1 MiB, oldest bytes dropped,
 overflow reported once per port and run) and the atomic port state, and runs everything else on the main thread through `run_on_main_sync` (direct call when
 invoked from the main thread, recorded by `script_engine_setup`). Lua ports 1–15 are `GtScriptPort` (`script_port.c`, core: one `GtTransport` + one
-`GtRxQueue` each, opened/closed/written on the main thread; the port table is read and written by the Lua thread only); port 0 is the link, observed through
+`GtRxQueue` each, opened/closed/written on the main thread; the port table is read and written by the Lua thread only; on `LOST` its transport is closed at once,
+fd and lock released, so a USB adapter plugged back keeps its name, and a send fails with `EIO`); port 0 is the link, observed through
 its `received` signal (connected/disconnected on the main thread); its queue is never closed, so `wait_for(0, …)` returns only data or `"timeout"`.
 `send`/`send_hex` write everything or fail with a reason (partial writes and `EAGAIN` retried on the Lua thread with a 2 ms pause, timeout); failures return
 `false`/`nil` plus a stable English reason; a `tcp_client` connection with a timeout of 0 or a negative one returns `"timeout"` at once; its host name is

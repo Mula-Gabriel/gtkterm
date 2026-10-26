@@ -132,6 +132,14 @@ A small indicator left of each tab name (in the status bar when only one tab is 
 
 Both delays are per profile, in the port dialog › **Advanced Configuration Options › Port activity** (defaults 10 s and 60 s, 0 disables the state).
 
+### Reconnecting after an unplug or a suspend
+
+With **Port › Autoreconnect**, a lost port is reopened silently as soon as the device is back. A USB-serial adapter (`ttyUSB…`) can come back under
+another name when it disappears while the port is open, after an unplug or a suspend (`ttyUSB0` becomes `ttyUSB1`). To always find it, type its stable
+name in the port dialog: `/dev/serial/by-id/…` (one name per adapter, from its serial number) or `/dev/serial/by-path/…` (one name per USB socket, for
+identical adapters). `ttyACM…` devices and built-in `ttyS…` ports keep their name. TCP links are checked by keepalive: a peer that vanishes without
+closing the connection (asleep, unplugged, switched off) is reported lost after about one minute of silence.
+
 ### Projects
 
 A project is one `.gtkterm` file holding a whole workstation: every tab with its port and terminal settings, its page layout, **a copy** of its macros and
