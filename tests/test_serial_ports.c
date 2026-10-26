@@ -148,7 +148,7 @@ test_recherche(void)
 	texte = g_strdup_printf("pty_un %s %u %u serial\n", nom, major(st.st_rdev), minor(st.st_rdev));
 	fichier = ecrire_pilotes(dossier, texte);
 	motifs = gt_serial_patterns_read(fichier);
-	ports = gt_serial_ports_find(motifs, liens);
+	ports = gt_serial_ports_find(motifs, liens, NULL);
 	g_assert_cmpuint(ports->len, ==, 2);
 	p = port_de(ports, nom);
 	g_assert_nonnull(p);
@@ -161,7 +161,7 @@ test_recherche(void)
 	g_ptr_array_unref(ports);
 
 	/* sans dossier de liens : le port seul */
-	ports = gt_serial_ports_find(motifs, NULL);
+	ports = gt_serial_ports_find(motifs, NULL, NULL);
 	g_assert_cmpuint(ports->len, ==, 1);
 	g_ptr_array_unref(ports);
 	g_array_unref(motifs);
@@ -172,7 +172,7 @@ test_recherche(void)
 	texte = g_strdup_printf("pty_un %s %u %u serial\n", nom, major(st.st_rdev), minor(st.st_rdev) + 1);
 	fichier = ecrire_pilotes(dossier, texte);
 	motifs = gt_serial_patterns_read(fichier);
-	ports = gt_serial_ports_find(motifs, liens);
+	ports = gt_serial_ports_find(motifs, liens, NULL);
 	g_assert_cmpuint(ports->len, ==, 0);
 	g_ptr_array_unref(ports);
 	g_array_unref(motifs);
@@ -194,6 +194,78 @@ test_recherche(void)
 	g_free(dossier);
 }
 
+/* Nœud UART réservé d'avance (type 0 dans /sys/dev/char/<maj>:<min>/type) : écarté, ses liens aussi ; autre type, valeur illisible ou pas de
+ * fichier type : gardé. Le dossier sysfs est simulé. */
+static void
+test_uart_fantome(void)
+{
+	static const struct { const gchar *type; guint attendus; } cas[] = {
+		{ "0\n", 0 }, { "4\n", 2 }, { "x\n", 2 }, { NULL, 2 },
+	};
+	int maitre, esclave;
+	char nom[256];
+	struct stat st;
+	gchar *dossier = g_dir_make_tmp("gtkterm-ports-XXXXXX", NULL);
+	gchar *liens = g_build_filename(dossier, "dev", NULL);
+	gchar *lien = g_build_filename(liens, "ttyM5", NULL);
+	gchar *sysfs = g_build_filename(dossier, "char", NULL);
+	gchar *numero, *noeud, *type, *texte, *fichier;
+	GArray *motifs;
+
+	g_assert_cmpint(openpty(&maitre, &esclave, nom, NULL, NULL), ==, 0);
+	g_assert_cmpint(stat(nom, &st), ==, 0);
+	g_assert_cmpint(g_mkdir(liens, 0700), ==, 0);
+	g_assert_cmpint(symlink(nom, lien), ==, 0);
+	numero = g_strdup_printf("%u:%u", major(st.st_rdev), minor(st.st_rdev));
+	noeud = g_build_filename(sysfs, numero, NULL);
+	type = g_build_filename(noeud, "type", NULL);
+	g_assert_cmpint(g_mkdir_with_parents(noeud, 0700), ==, 0);
+	texte = g_strdup_printf("pty_un %s %u %u serial\n", nom, major(st.st_rdev), minor(st.st_rdev));
+	fichier = ecrire_pilotes(dossier, texte);
+	motifs = gt_serial_patterns_read(fichier);
+
+	for(guint i = 0; i < G_N_ELEMENTS(cas); i++)
+	{
+		GPtrArray *ports;
+
+		g_unlink(type);
+		if(cas[i].type != NULL)
+			g_assert_true(g_file_set_contents(type, cas[i].type, -1, NULL));
+		ports = gt_serial_ports_find(motifs, liens, sysfs);
+		g_assert_cmpuint(ports->len, ==, cas[i].attendus);
+		g_ptr_array_unref(ports);
+	}
+
+	/* sans dossier sysfs : aucun contrôle, même pour un type 0 */
+	g_assert_true(g_file_set_contents(type, "0\n", -1, NULL));
+	{
+		GPtrArray *ports = gt_serial_ports_find(motifs, liens, NULL);
+
+		g_assert_cmpuint(ports->len, ==, 2);
+		g_ptr_array_unref(ports);
+	}
+
+	g_array_unref(motifs);
+	g_unlink(type);
+	g_rmdir(noeud);
+	g_rmdir(sysfs);
+	g_unlink(lien);
+	g_rmdir(liens);
+	g_unlink(fichier);
+	g_rmdir(dossier);
+	close(maitre);
+	close(esclave);
+	g_free(texte);
+	g_free(fichier);
+	g_free(type);
+	g_free(noeud);
+	g_free(numero);
+	g_free(sysfs);
+	g_free(lien);
+	g_free(liens);
+	g_free(dossier);
+}
+
 int
 main(int argc, char **argv)
 {
@@ -202,5 +274,6 @@ main(int argc, char **argv)
 	g_test_add_func("/serial-ports/pilotes", test_pilotes);
 	g_test_add_func("/serial-ports/defauts", test_defauts);
 	g_test_add_func("/serial-ports/recherche", test_recherche);
+	g_test_add_func("/serial-ports/uart-fantome", test_uart_fantome);
 	return g_test_run();
 }

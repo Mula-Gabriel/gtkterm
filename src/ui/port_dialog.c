@@ -504,7 +504,7 @@ static void port_dialog_open(GtkWindow *parent, GtSession *s, const GtProfile *i
 		g_free(s);
 	}
 	patterns = gt_serial_patterns_read(GT_SERIAL_DRIVERS_FILE);
-	ports = gt_serial_ports_find(patterns, GT_SERIAL_LINKS_DIR);
+	ports = gt_serial_ports_find(patterns, GT_SERIAL_LINKS_DIR, GT_SERIAL_SYSFS_CHAR_DIR);
 	for(guint i = 0; i < ports->len; i++)
 	{
 		const GtSerialPort *p = g_ptr_array_index(ports, i);

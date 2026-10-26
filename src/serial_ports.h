@@ -7,6 +7,7 @@
 
 #define GT_SERIAL_DRIVERS_FILE "/proc/tty/drivers"
 #define GT_SERIAL_LINKS_DIR "/dev"
+#define GT_SERIAL_SYSFS_CHAR_DIR "/sys/dev/char"
 
 typedef struct
 {
@@ -29,8 +30,10 @@ GArray    *gt_serial_patterns_read(const gchar *drivers_path);
 gchar     *gt_serial_patterns_to_string(const GArray *patterns);
 /* Ports accessibles en lecture-écriture (périphériques caractère dont le numéro correspond au pilote), puis liens symboliques de links_dir (NULL :
  * aucun) vers l'un d'eux ; triés par gt_serial_ports_compare, sans doublon. N'ouvre aucun périphérique (ouvrir un tty modifie DTR et RTS).
+ * sysfs_char_dir (NULL : aucun contrôle) : un port dont <sysfs_char_dir>/<majeur>:<mineur>/type vaut 0 (PORT_UNKNOWN : nœud réservé d'avance par
+ * le pilote 8250, sans UART derrière) est écarté ; sans fichier type (pty, USB), le port est gardé.
  * Tableau de GtSerialPort * libéré par g_ptr_array_unref. */
-GPtrArray *gt_serial_ports_find(const GArray *patterns, const gchar *links_dir);
+GPtrArray *gt_serial_ports_find(const GArray *patterns, const gchar *links_dir, const gchar *sysfs_char_dir);
 /* Ordre « semi-numérique » : suites de chiffres comparées comme des nombres (ttyS2 < ttyS10) ; à valeur égale, la plus courte d'abord ; un préfixe
  * vient avant. */
 gint       gt_serial_ports_compare(const gchar *a, const gchar *b);

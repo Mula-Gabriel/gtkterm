@@ -113,7 +113,29 @@ gchar *gt_serial_patterns_to_string(const GArray *patterns)
 	return g_string_free(s, FALSE);
 }
 
-static gboolean is_serial_port(const char *path, const GtSerialPattern *pat)
+#if defined(major) && defined(minor)
+/* Type d'UART publié par le noyau (Linux) : 0 = PORT_UNKNOWN, nœud sans matériel (le pilote 8250 en crée d'avance, ttyS1 à ttyS31) */
+static gboolean is_placeholder_uart(const gchar *sysfs_char_dir, dev_t rdev)
+{
+	gchar *name = g_strdup_printf("%u:%u", major(rdev), minor(rdev));
+	gchar *path = g_build_filename(sysfs_char_dir, name, "type", NULL);
+	gchar *text = NULL, *end;
+	gboolean placeholder = FALSE;
+
+	if(g_file_get_contents(path, &text, NULL, NULL))
+	{
+		gint64 type = g_ascii_strtoll(text, &end, 10);
+
+		placeholder = end != text && type == 0;
+	}
+	g_free(text);
+	g_free(path);
+	g_free(name);
+	return placeholder;
+}
+#endif
+
+static gboolean is_serial_port(const char *path, const GtSerialPattern *pat, const gchar *sysfs_char_dir)
 {
 	struct stat st;
 
@@ -123,11 +145,14 @@ static gboolean is_serial_port(const char *path, const GtSerialPattern *pat)
 		return FALSE;
 	/* Aucune sonde par descripteur : ouvrir un tty modifie DTR et RTS (limite de l'API du noyau) */
 #if defined(major) && defined(minor)
-	if(pat->nminors == 0)
-		return TRUE;
-	if(pat->major != major(st.st_rdev))
-		return FALSE;
-	if((gulong)minor(st.st_rdev) - pat->minor >= pat->nminors)
+	if(pat->nminors != 0)
+	{
+		if(pat->major != major(st.st_rdev))
+			return FALSE;
+		if((gulong)minor(st.st_rdev) - pat->minor >= pat->nminors)
+			return FALSE;
+	}
+	if(sysfs_char_dir != NULL && is_placeholder_uart(sysfs_char_dir, st.st_rdev))
 		return FALSE;
 #endif
 	return TRUE;
@@ -188,7 +213,7 @@ static gint compare_ports(gconstpointer a, gconstpointer b)
 	return gt_serial_ports_compare(pa->path, pb->path);
 }
 
-GPtrArray *gt_serial_ports_find(const GArray *patterns, const gchar *links_dir)
+GPtrArray *gt_serial_ports_find(const GArray *patterns, const gchar *links_dir, const gchar *sysfs_char_dir)
 {
 	GPtrArray *ports = g_ptr_array_new_with_free_func(port_free);
 
@@ -201,7 +226,7 @@ GPtrArray *gt_serial_ports_find(const GArray *patterns, const gchar *links_dir)
 		if(glob(pat->pattern, GLOB_NOSORT, NULL, &gl) != 0)
 			continue;
 		for(char **file = gl.gl_pathv; *file != NULL; file++)
-			if(is_serial_port(*file, pat))
+			if(is_serial_port(*file, pat, sysfs_char_dir))
 				add_port(ports, *file);
 		globfree(&gl);
 	}
