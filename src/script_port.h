@@ -1,7 +1,8 @@
 /* Port ouvert par un script Lua (sous-projet 5) : un GtTransport et une GtRxQueue, plus un état lisible de n'importe quel thread.
  * Ouverture, fermeture et envoi sur le thread principal (celui de la boucle GLib par défaut, où tournent les rappels du
  * transport) ; état, file et raison lisibles de n'importe quel thread. Événements du transport : CONNECTED → OPEN ;
- * CLIENT_CONNECTED → CONNECTED ; CLIENT_GONE → LISTENING (file ouverte) ; LOST → LOST, raison retenue, file fermée. */
+ * CLIENT_CONNECTED → CONNECTED ; CLIENT_GONE → LISTENING (file ouverte) ; LOST → LOST, raison retenue, file fermée, transport fermé
+ * aussitôt (descripteur et verrou relâchés ; l'envoi échoue alors avec EIO). */
 #ifndef SCRIPT_PORT_H_
 #define SCRIPT_PORT_H_
 

@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 #include "script_port.h"
 
@@ -44,6 +45,29 @@ attendre_longueur(GtRxQueue *q, gsize n, guint ms)
 		g_usleep(1000);
 	}
 	return TRUE;
+}
+
+/* Descripteurs du processus ouverts sur le périphérique rdev (Linux : /proc/self/fd ; stat suit le descripteur même quand
+ * le nœud a disparu, comme /dev/pts/N une fois le maître fermé) */
+static guint
+compter_fd(dev_t rdev)
+{
+	GDir *dir = g_dir_open("/proc/self/fd", 0, NULL);
+	const gchar *nom;
+	guint n = 0;
+
+	g_assert_nonnull(dir);
+	while((nom = g_dir_read_name(dir)) != NULL)
+	{
+		gchar *lien = g_build_filename("/proc/self/fd", nom, NULL);
+		struct stat st;
+
+		if(stat(lien, &st) == 0 && S_ISCHR(st.st_mode) && st.st_rdev == rdev)
+			n++;
+		g_free(lien);
+	}
+	g_dir_close(dir);
+	return n;
 }
 
 /* Lit jusqu'à n octets (ou moins au bout de ms) en faisant tourner la boucle GLib */
@@ -220,6 +244,7 @@ test_maitre_ferme(void)
 	TransportParams p;
 	GtScriptPort *port;
 	GError *err = NULL;
+	struct stat st;
 	gint e = 0;
 
 	if(openpty(&maitre, &esclave, NULL, NULL, NULL) != 0)
@@ -231,8 +256,13 @@ test_maitre_ferme(void)
 	params_serie(&p, chemin, 9600, 1);
 	port = gt_script_port_open(&p, &err);
 	g_assert_no_error(err);
+	g_assert_cmpint(fstat(esclave, &st), ==, 0);
+	g_assert_cmpuint(compter_fd(st.st_rdev), ==, 2);	/* celui du test et celui du port */
 	close(maitre);
 	g_assert_true(attendre_etat(port, GT_SCRIPT_PORT_LOST, 5000));
+	/* Le port relâche son descripteur dès la perte, sans attendre la fin du script : un adaptateur USB débranché puis
+	 * rebranché retrouve son nom (le noyau garde le numéro mineur tant qu'un descripteur reste ouvert) */
+	g_assert_cmpuint(compter_fd(st.st_rdev), ==, 1);
 	g_assert_true(gt_rx_queue_is_closed(gt_script_port_get_queue(port)));
 	raison = gt_script_port_dup_reason(port);
 	g_assert_nonnull(raison);

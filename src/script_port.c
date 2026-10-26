@@ -14,7 +14,7 @@
 
 struct _GtScriptPort
 {
-	GtTransport *transport;
+	GtTransport *transport;	/* NULL une fois perdu (fermé dès la perte) */
 	GtRxQueue *queue;
 	gint state;		/* GtScriptPortState, lu de n'importe quel thread (atomique) */
 	GMutex reason_mutex;
@@ -54,6 +54,10 @@ script_port_on_event(TransportEvent ev, const gchar *detail, gpointer user_data)
 		/* Raison, puis file fermée, puis état : qui lit LOST trouve la raison et n'attend plus sur une file encore ouverte */
 		gt_rx_queue_set_closed(port->queue, TRUE);
 		g_atomic_int_set(&port->state, GT_SCRIPT_PORT_LOST);
+		/* Descripteur relâché tout de suite (permis : LOST vient d'une source d'inactivité) et non à la fin du script : le noyau
+		 * garde le numéro mineur d'un adaptateur USB tant qu'il reste ouvert, et l'adaptateur rebranché changerait de nom */
+		gt_transport_close(port->transport);
+		port->transport = NULL;
 		break;
 	}
 }
@@ -125,6 +129,11 @@ gt_script_port_try_send(GtScriptPort *port, const guint8 *data, gsize len, gint 
 	}
 	if(len == 0)
 		return 0;
+	if(port->transport == NULL)
+	{
+		*err = EIO;	/* perdu : transport déjà fermé */
+		return -1;
+	}
 	errno = 0;
 	n = gt_transport_send(port->transport, data, len);
 	if(n < 0)

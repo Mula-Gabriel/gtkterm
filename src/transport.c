@@ -23,6 +23,7 @@
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/prctl.h>
@@ -242,6 +243,21 @@ static gboolean transport_open_serial(GtTransport *t, GError **error)
 
 static gboolean transport_connect_cb(gint fd, GIOCondition cond, gpointer data);
 
+/* Keepalive : une connexion morte sans fermeture (pair en veille ou éteint, câble, NAT) donne une erreur de lecture, donc LOST (client)
+ * ou CLIENT_GONE (serveur), au bout d'environ 30 + 3 × 10 s de silence, au lieu de rester ouverte jusqu'au premier envoi */
+static void transport_set_keepalive(int fd)
+{
+	int on = 1;
+
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+#ifdef TCP_KEEPIDLE
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, (int[]){30}, sizeof(int));
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, (int[]){10}, sizeof(int));
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, (int[]){3}, sizeof(int));
+#endif
+}
+
+
 /* Client TCP : essaie les adresses à partir de rp jusqu'à une connexion établie ou en cours (EINPROGRESS) ; *last_errno reçoit
  * l'erreur du dernier échec synchrone. Connexion en cours : surveillance posée, adresses suivantes retenues pour un refus. */
 static gboolean transport_connect_from(GtTransport *t, struct addrinfo *rp, int *last_errno)
@@ -256,6 +272,7 @@ static gboolean transport_connect_from(GtTransport *t, struct addrinfo *rp, int 
 			continue;
 		}
 		fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) | O_NONBLOCK);
+		transport_set_keepalive(fd);
 		if(connect(fd, rp->ai_addr, rp->ai_addrlen) == 0 || errno == EINPROGRESS)
 		{
 			/* Connexion asynchrone : CONNECTED ou adresse suivante (LOST après la dernière) quand le descripteur devient
@@ -361,6 +378,7 @@ static gboolean transport_accept_cb(gint fd, GIOCondition cond, gpointer data)
 	/* Un nouveau client remplace l'ancien */
 	transport_close_client(t);
 	fcntl(new_fd, F_SETFL, fcntl(new_fd, F_GETFL, 0) | O_NONBLOCK);
+	transport_set_keepalive(new_fd);
 	t->client_fd = new_fd;
 	t->client_watch_id = g_unix_fd_add_full(WATCH_PRIORITY, new_fd, G_IO_IN | G_IO_HUP | G_IO_ERR, transport_read_cb, t, NULL);
 	if(t->cb.on_event != NULL)

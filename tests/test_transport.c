@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -488,6 +489,30 @@ test_tcp_pair_ferme(void)
 	close(ecoute);
 }
 
+/* ---- Keepalive TCP : une connexion morte en silence (veille, câble, NAT) finit par être vue ---- */
+
+static void
+verifier_keepalive(int fd)
+{
+	int v = 0;
+	socklen_t l = sizeof(v);
+
+	g_assert_cmpint(fd, >=, 0);
+	g_assert_cmpint(getsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &v, &l), ==, 0);
+	g_assert_cmpint(v, ==, 1);
+#ifdef TCP_KEEPIDLE
+	l = sizeof(v);
+	g_assert_cmpint(getsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &v, &l), ==, 0);
+	g_assert_cmpint(v, ==, 30);
+	l = sizeof(v);
+	g_assert_cmpint(getsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &v, &l), ==, 0);
+	g_assert_cmpint(v, ==, 10);
+	l = sizeof(v);
+	g_assert_cmpint(getsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &v, &l), ==, 0);
+	g_assert_cmpint(v, ==, 3);
+#endif
+}
+
 /* ---- M5 : fin de flux TCP client signalée ------------------------------ */
 
 static void
@@ -506,6 +531,7 @@ test_tcp_fin_de_flux(void)
 	g_assert_nonnull(t);
 	pair = accept(ecoute, NULL, NULL);
 	g_assert_true(attendre_evenement(&r, TRANSPORT_EVENT_CONNECTED, 2000));
+	verifier_keepalive(gt_transport_get_fd(t));
 	g_assert_cmpint(write(pair, "hi", 2), ==, 2);
 	g_assert_true(attendre_octets(&r, 2, 2000));
 	close(pair);
@@ -593,6 +619,7 @@ test_tcp_serveur_evenements(void)
 
 	client = connecter(port);
 	g_assert_true(attendre_evenement(&r, TRANSPORT_EVENT_CLIENT_CONNECTED, 2000));
+	verifier_keepalive(gt_transport_get_fd(t));
 	g_assert_cmpint(write(client, "hi", 2), ==, 2);
 	g_assert_true(attendre_octets(&r, 2, 2000));
 	g_assert_cmpint(gt_transport_send(t, (const guint8 *)"yo", 2), ==, 2);
