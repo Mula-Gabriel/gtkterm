@@ -1,8 +1,8 @@
 #!/bin/sh
-# Rang d'un port CDC Metro parmi ceux du même produit, pour la règle 99-metro-cdc.rules : /dev/ttyM5_1, _2, _3...
+# Nom d'un port CDC Metro, numéroté parmi ceux du même produit, pour la règle 99-metro-cdc.rules : M5SIN2_1, M5SIN2_2, F3_1...
 # Le port garde son rang tant qu'il vit (événements change) ; un nouveau prend le premier rang libre.
-# Usage : metro-tty-index <Produit> <devnode>, écrit le rang sur stdout.
-Produit=$1
+# Usage : metro-tty-index <Produit> <devnode>, écrit <Produit>_<rang> sur stdout ; hors de [A-Za-z0-9._-], le produit (P/N saisi en usine) prend des « _ ».
+Produit=$(printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_')
 Noeud=$2
 [ -n "$Produit" ] && [ -n "$Noeud" ] || exit 1
 
@@ -12,14 +12,14 @@ flock 9
 
 for N in $(seq 1 32); do
 	Lien=/dev/tty${Produit}_$N
-	if [ "$(readlink -f "$Lien")" = "$Noeud" ]; then echo "$N"; exit 0; fi
+	if [ "$(readlink -f "$Lien")" = "$Noeud" ]; then echo "${Produit}_$N"; exit 0; fi
 done
 
 for N in $(seq 1 32); do
 	Lien=/dev/tty${Produit}_$N
 	if [ ! -e "$Lien" ]; then
 		ln -sfn "${Noeud#/dev/}" "$Lien"
-		echo "$N"
+		echo "${Produit}_$N"
 		exit 0
 	fi
 done
