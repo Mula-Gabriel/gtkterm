@@ -1,7 +1,7 @@
 project(
 	'gtkterm',
 	'c',
-	version: '2.2.1',
+	version: '2.2.2',
 	meson_version : '>= 1.0.0',
 	default_options : ['c_std=gnu11', 'warning_level=2']
 )

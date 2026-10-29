@@ -6,6 +6,10 @@ montré en tête de la fenêtre), toute autre ligne un texte affiché tel quel (
 prolonge l'élément précédent. Une section sans tag publié n'est jamais affichée.
 Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusqu'à la prochaine section, n'est pas affiché.
 
+## v2.2.2 — 2026-10-29
+- Ports : un lien numéroté pour tout afficheur Metro, au nom du produit qu'il annonce (P/N du M5 : /dev/ttyM5SIN2_1, /dev/ttyE501525-200_1 ; modèle du Fx : /dev/ttyF3_1).
+! Les M5 dont le firmware annonce leur P/N quittent /dev/ttyM5_N : un projet ou un profil qui l'ouvre doit pointer vers le nouveau lien.
+
 ## v2.2.1 — 2026-10-26
 - Ports : la liste de la fenêtre Port n'affiche plus les ports série fantômes (ttyS réservés par le noyau sans matériel derrière).
 - Ports : plus d'avertissement « débit non standard » au chargement d'un profil ; un débit que le matériel refuse reste signalé à l'ouverture.
