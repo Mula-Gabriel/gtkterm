@@ -6,6 +6,9 @@ montré en tête de la fenêtre), toute autre ligne un texte affiché tel quel (
 prolonge l'élément précédent. Une section sans tag publié n'est jamais affichée.
 Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusqu'à la prochaine section, n'est pas affiché.
 
+## v2.2.3 — 2026-11-05
+- Macros : « Recharger » dans « Configurer les macros » propose de recharger aussi les autres onglets qui utilisent le même fichier de macros ou le même modèle.
+
 ## v2.2.2 — 2026-10-29
 - Ports : un lien numéroté pour tout afficheur Metro, au nom du produit qu'il annonce (P/N du M5 : /dev/ttyM5SIN2_1, /dev/ttyE501525-200_1 ; modèle du Fx : /dev/ttyF3_1).
 ! Les M5 dont le firmware annonce leur P/N quittent /dev/ttyM5_N : un projet ou un profil qui l'ouvre doit pointer vers le nouveau lien.
