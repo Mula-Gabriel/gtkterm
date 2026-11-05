@@ -386,7 +386,7 @@ live in `scripts/` (use the `/lua-script` skill to scaffold new ones).
   `gt_macros_reload_template()` (linked) or `gt_macros_reload()`; **the editor stays open**: a `reloading` flag makes `gt_macro_editor_macros_changed()` rebuild rows (grouped), argument table,
   preview and filters (a filter is kept while its key exists) and take the new `editor->set`; a **missing file is refused** (« The macros file %s no longer exists. ») and an unreadable one too («
   Cannot reload the macros file %s. »), shown in `macro-editor-error`, nothing changes (the editor tests the file itself before `gt_macros_reload()`, which refuses it too, so only the label
-  speaks, without a message box); outside the flag a set replaced elsewhere still closes the window. **Optional / Prefix:** two argument-table
+  speaks, without a message box); outside the flag a set replaced elsewhere still closes the window; after a successful Reload, when other tabs read the same file (same template for linked tabs, same `.ini` for unlinked free tabs: `gt_app_count_macros_file_siblings()`), it asks « Also reload the macros of the other tab(s) using this file? » Reload all tabs (default) / This tab only; Reload all tabs reloads each of them like its own Reload (`gt_app_reload_macros_file_siblings()`, `app.c`) and closes its open editor without applying anything, then flashes « Macros reloaded in %u other tab(s) ». **Optional / Prefix:** two argument-table
   columns after Charset, `macro-optional-<k>` (`GtkCheckButton`) and `macro-prefix-<k>` (`GtkEntry`, insensitive while unchecked); checking splits the prefix off the action with
   `gt_macro_action_split_prefix()` (text before the specifier of argument k back to the first space, space included, never crossing the previous specifier, a whole escape sequence or the start of
   the action; nothing to take → empty prefix, action unchanged; `%%` becomes `%`), unchecking `gt_macro_action_join_prefix()` puts it back before the specifier; both vectors follow the typing in
@@ -515,7 +515,7 @@ prefix, fake `pkexec` counting authorizations) and `publier_version`, `test_upda
 `settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`). Release: `tools/publier-version.sh vX.Y.Z` (clean tree, `meson.build`
 version, `NEWS` section; annotated tag, no push).
 
-**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 77 scenarios drive
+**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 78 scenarios drive
 GTKTerm through three bricks: (1) **D-Bus actions** — `org.gtk.Actions` (`Activate`, `SetState`, `Describe`) on the private session bus; start-up is detected
 when the name `eu.mulagabriel.gtkterm.test.p<PID>` appears; (2) the **test hook** (`src/ui/test_hooks.c`, compiled unless `-Dtest_hooks=false`, active only
 when `GTKTERM_TEST_HOOKS=1`, which also switches the application id to `eu.mulagabriel.gtkterm.test.p<PID>` without `NON_UNIQUE`): actions `app.test-dump`

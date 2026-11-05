@@ -141,6 +141,59 @@ void gt_app_refresh_template_siblings(GtSession *s)
 	}
 }
 
+/* Autre session qui lit le même fichier de macros que s (même modèle lié, ou même fichier .ini pour deux onglets libres non liés) */
+static gboolean same_macros_file(GtSession *s, GtSession *other)
+{
+	GtMacros *m = gt_session_get_macros(s);
+	GtMacros *om = other != s && !gt_session_is_shut_down(other) ? gt_session_get_macros(other) : NULL;
+	const gchar *tpl = m != NULL ? gt_macros_get_template(m) : NULL;
+
+	if(om == NULL || m == NULL)
+		return FALSE;
+	if(tpl != NULL)
+		return g_strcmp0(gt_macros_get_template(om), tpl) == 0;
+	return gt_macros_get_path(m) != NULL && gt_macros_get_template(om) == NULL && !gt_session_get_in_project(other)
+	       && g_strcmp0(gt_macros_get_path(om), gt_macros_get_path(m)) == 0;
+}
+
+guint gt_app_count_macros_file_siblings(GtSession *s)
+{
+	guint n = 0;
+
+	if(s == NULL || gt_app.sessions == NULL)
+		return 0;
+	for(guint i = 0; i < gt_session_manager_get_n(gt_app.sessions); i++)
+		if(same_macros_file(s, gt_session_manager_get_nth(gt_app.sessions, i)))
+			n++;
+	return n;
+}
+
+guint gt_app_reload_macros_file_siblings(GtSession *s)
+{
+	guint n = 0;
+
+	if(s == NULL || gt_app.sessions == NULL)
+		return 0;
+	for(guint i = 0; i < gt_session_manager_get_n(gt_app.sessions); i++)
+	{
+		GtSession *other = gt_session_manager_get_nth(gt_app.sessions, i);
+		GtMacros *om;
+		gboolean ok;
+
+		if(!same_macros_file(s, other))
+			continue;
+		om = gt_session_get_macros(other);
+		/* Lignes de son éditeur ouvert relatives à l'ancien jeu : il se ferme sans rien appliquer (comme après « Save to template ») */
+		ok = gt_macros_get_template(om) != NULL ? gt_macros_reload_template(om) : gt_macros_reload(om);
+		if(ok)
+		{
+			gt_macro_editor_close(other);
+			n++;
+		}
+	}
+	return n;
+}
+
 void gt_app_foreach_view(GFunc func, gpointer user_data)
 {
 	GtkNotebook *nb;

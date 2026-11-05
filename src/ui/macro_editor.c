@@ -83,6 +83,15 @@ typedef struct
 	guint64  generation;
 } ReloadQuestion;
 
+/* Question « recharger aussi les autres onglets » après un Reload réussi : la session de l'éditeur (pas l'éditeur, qui peut fermer entre-temps)
+ * et le fichier relu, pour ne rien relire si l'onglet a changé de fichier */
+typedef struct
+{
+	GWeakRef window;
+	GWeakRef session;
+	gchar   *path;
+} SiblingsQuestion;
+
 /* Cellule d'une colonne : propriété de la ligne, nom du widget, sélection de la vue */
 typedef struct
 {
@@ -960,7 +969,63 @@ static void editor_reload_rows(MacroEditor *editor, GtMacroSet *set)
 	editor->reloaded = TRUE;
 }
 
-/* Relit le modèle (onglet lié) ou le fichier courant ; l'éditeur reste ouvert sur les lignes relues ; échec : rien ne change */
+static const gchar *macros_source_path(GtMacros *macros)
+{
+	return gt_macros_get_template(macros) != NULL ? gt_macros_get_template(macros) : gt_macros_get_path(macros);
+}
+
+/* Réponse à « Also reload the other tabs…? » : Reload all tabs (0) seulement si la session vit et lit toujours le même fichier */
+static void on_siblings_choice(gint choice, gpointer data)
+{
+	SiblingsQuestion *q = data;
+	GtkWidget *window = g_weak_ref_get(&q->window);
+	MacroEditor *editor = window != NULL ? g_object_get_data(G_OBJECT(window), EDITOR_KEY) : NULL;
+	GtSession *s = g_weak_ref_get(&q->session);
+	GtMacros *macros = s != NULL && !gt_session_is_shut_down(s) ? gt_session_get_macros(s) : NULL;
+
+	if(editor != NULL)
+		asking_set(editor, FALSE);
+	if(choice == 0 && macros != NULL && g_strcmp0(macros_source_path(macros), q->path) == 0)
+	{
+		guint n = gt_app_reload_macros_file_siblings(s);
+
+		if(n > 0)
+			gt_app_status_flash(s, 3000, ngettext("Macros reloaded in %u other tab", "Macros reloaded in %u other tabs", n), n);
+	}
+	g_clear_object(&s);
+	g_clear_object(&window);
+	g_weak_ref_clear(&q->session);
+	g_weak_ref_clear(&q->window);
+	g_free(q->path);
+	g_free(q);
+}
+
+/* Après un Reload réussi : d'autres onglets lisent le même fichier (même modèle, ou même .ini) → proposer de les recharger aussi */
+static void ask_reload_siblings(MacroEditor *editor, GtMacros *macros)
+{
+	GtSession *s = g_weak_ref_get(&editor->session);
+	guint n = s != NULL ? gt_app_count_macros_file_siblings(s) : 0;
+
+	if(n > 0)
+	{
+		SiblingsQuestion *q = g_new0(SiblingsQuestion, 1);
+		const gchar *const labels[] = { _("Reload all tabs"), _("This tab only"), NULL };
+		gchar *text = g_strdup_printf(ngettext("Also reload the macros of the other tab using this file?",
+		                                       "Also reload the macros of the %u other tabs using this file?", n), n);
+
+		g_weak_ref_init(&q->window, editor->window);
+		g_weak_ref_init(&q->session, s);
+		q->path = g_strdup(macros_source_path(macros));
+		asking_set(editor, TRUE);
+		/* Reload all tabs par défaut : c'est l'objet de la question ; les éditeurs ouverts des autres onglets se ferment sans rien appliquer */
+		gt_ui_choose(GTK_WINDOW(editor->window), text, q->path, labels, 0, -1, on_siblings_choice, q);
+		g_free(text);
+	}
+	g_clear_object(&s);
+}
+
+/* Relit le modèle (onglet lié) ou le fichier courant ; l'éditeur reste ouvert sur les lignes relues ; échec : rien ne change ; réussite : les
+ * autres onglets du même fichier peuvent suivre (question) */
 static void do_reload(MacroEditor *editor, GtMacros *macros)
 {
 	const gchar *tpl = gt_macros_get_template(macros);
@@ -992,6 +1057,8 @@ static void do_reload(MacroEditor *editor, GtMacros *macros)
 		set_message(editor, text, TRUE);	/* la raison détaillée est déjà passée par le crochet message */
 		g_free(text);
 	}
+	else
+		ask_reload_siblings(editor, macros);
 }
 
 /* Réponse à « Discard your changes and reload the macros file? » : Reload (0) seulement si la fenêtre vit et que rien n'a changé entre-temps */

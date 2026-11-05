@@ -104,6 +104,7 @@ gui_scenarios = [
 	'test_macro_editor_colonnes',
 	'test_macro_editor_filtre',
 	'test_macro_editor_recharger',
+	'test_macro_editor_recharger_onglets',
 ]
 
 foreach s : gui_scenarios

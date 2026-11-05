@@ -25,6 +25,11 @@ GtkWindow        *gt_app_get_main_window(void);	/* NULL avant « activate » et 
 GtkWidget        *gt_app_get_active_view(void);	/* page de la session active (session_view.h), NULL sans fenêtre ni page */
 void              gt_app_foreach_view(GFunc func, gpointer user_data);	/* chaque page non arrêtée, dans l'ordre des onglets ; func(page, user_data) */
 void              gt_app_refresh_template_siblings(GtSession *s);	/* autres sessions liées au même modèle de macros que s : relues (§2.8) */
+/* Autres sessions qui lisent le même fichier de macros que s (même modèle lié, ou même .ini d'onglets libres non liés) : nombre ; relecture
+ * (Reload de « Configure Macros ») : chacune relue comme par son propre Reload (échec : message), son éditeur ouvert fermé sans rien appliquer ;
+ * renvoie le nombre de sessions relues */
+guint             gt_app_count_macros_file_siblings(GtSession *s);
+guint             gt_app_reload_macros_file_siblings(GtSession *s);
 /* Nouvel onglet (plan, décision 7) : session créée sur une copie de profile (nom de profil profile_name, NULL : « default »), son fichier de
  * macros chargé (non interactif ; projet ouvert : copie du jeu de l'onglet actif, aucun fichier, onglet de projet au script vide), page et
  * étiquette insérées à droite de l'onglet actif et affichées, profil appliqué, port ouvert (échec : boîte open-failed préfixée du nom de
