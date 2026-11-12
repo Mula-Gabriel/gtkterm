@@ -45,6 +45,43 @@ static int changements_rts = 0;
 static int appels_bis = 0;	/* TIOCMBIS sur modem_fd */
 static int appels_bic = 0;	/* TIOCMBIC sur modem_fd */
 static gint64 instant_bic = 0;	/* heure monotone du dernier TIOCMBIC */
+/* Trace de l'ouverture (lignes au repos) : non NULL, tout TIOCM* est simulé sur n'importe quel descripteur et noté, comme chaque réglage termios */
+static GString *trace = NULL;
+
+int __real_tcsetattr(int fd, int action, const struct termios *tio);
+
+int
+__wrap_tcsetattr(int fd, int action, const struct termios *tio)
+{
+	if(trace != NULL)
+		g_string_append(trace, "termios;");
+	return __real_tcsetattr(fd, action, tio);
+}
+
+static const char *
+trace_lignes(int bits)
+{
+	switch(bits)
+	{
+	case TIOCM_DTR:
+		return "dtr";
+	case TIOCM_RTS:
+		return "rts";
+	case TIOCM_DTR | TIOCM_RTS:
+		return "dtr+rts";
+	default:
+		return "?";
+	}
+}
+
+static gboolean
+trace_reglage_termios(unsigned long requete)
+{
+	if(requete == TCSETS || requete == TCSETSW || requete == TCSETSF)
+		return TRUE;
+	/* TCSETS2, TCSETSW2, TCSETSF2 (baud.c) : _IOW('T', 0x2B à 0x2D, struct termios2), type incomplet ici avec <termios.h> */
+	return _IOC_TYPE(requete) == 'T' && _IOC_DIR(requete) == _IOC_WRITE && _IOC_NR(requete) >= 0x2B && _IOC_NR(requete) <= 0x2D;
+}
 
 int
 __wrap_ioctl(int fd, unsigned long requete, ...)
@@ -56,6 +93,24 @@ __wrap_ioctl(int fd, unsigned long requete, ...)
 	arg = va_arg(ap, void *);
 	va_end(ap);
 
+	if(trace != NULL && (requete == TIOCMBIS || requete == TIOCMBIC || requete == TIOCMSET))
+	{
+		g_string_append_printf(trace, "%s:%s;", requete == TIOCMBIS ? "bis" : requete == TIOCMBIC ? "bic" : "set", trace_lignes(*(int *)arg));
+		if(requete == TIOCMBIS)
+			modem_etat |= *(int *)arg;
+		else if(requete == TIOCMBIC)
+			modem_etat &= ~*(int *)arg;
+		else
+			modem_etat = *(int *)arg;
+		return 0;
+	}
+	if(trace != NULL && requete == TIOCMGET)
+	{
+		*(int *)arg = modem_etat;
+		return 0;
+	}
+	if(trace != NULL && trace_reglage_termios(requete))
+		g_string_append(trace, "termios;");
 	if(fd == modem_fd && (requete == TIOCMGET || requete == TIOCMSET || requete == TIOCMBIS || requete == TIOCMBIC))
 	{
 		int ancien = modem_etat;
@@ -406,6 +461,113 @@ test_rs485_rts_stable(void)
 	gt_transport_close(t);
 	transport_params_clear(&tp);
 	fermer_pty(&p);
+}
+
+/* ---- Lignes DTR et RTS au repos à l'ouverture ------------------------- */
+
+/* Ouvre une pty avec ces réglages de lignes et de flux ; rend la trace de l'ouverture et l'état des lignes juste après, lu par le transport
+ * (le noyau les a levées à l'open() : état simulé de départ DTR + RTS). */
+static gchar *
+trace_ouverture(gboolean dtr_bas, gboolean rts_bas, GtFlow flux, gint *lignes)
+{
+	paire_pty_t p;
+	TransportParams tp;
+	GtTransport *t;
+	gchar *texte;
+
+	if(!ouvrir_pty(&p))
+		return NULL;
+	params_serie(&tp, ttyname(p.esclave));
+	tp.flow = flux;
+	tp.dtr_low_on_open = dtr_bas;
+	tp.rts_low_on_open = rts_bas;
+	modem_etat = TIOCM_DTR | TIOCM_RTS;
+	trace = g_string_new(NULL);
+	t = gt_transport_open(&tp, &rappels, NULL, NULL);
+	g_assert_nonnull(t);
+	*lignes = gt_transport_get_modem_lines(t);
+	texte = g_string_free(trace, FALSE);
+	trace = NULL;
+	gt_transport_close(t);
+	transport_params_clear(&tp);
+	fermer_pty(&p);
+	return texte;
+}
+
+static void
+test_lignes_au_repos(void)
+{
+	gchar *texte;
+	gint lignes = -1;
+
+	/* RTS (chargeur ISP) relâché avant DTR (reset) dès l'open(), avant tout réglage termios ; de nouveau après le dernier, au cas où le pilote
+	   les relève (sortie de B0) */
+	texte = trace_ouverture(TRUE, TRUE, GT_FLOW_NONE, &lignes);
+	if(texte == NULL)
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	g_assert_true(g_str_has_prefix(texte, "bic:rts;bic:dtr;termios;"));
+	g_assert_true(g_str_has_suffix(texte, "termios;bic:rts;bic:dtr;"));
+	g_assert_cmpint(lignes, ==, 0);	/* état réel relu juste après l'ouverture : voyants éteints */
+	g_free(texte);
+
+	texte = trace_ouverture(TRUE, FALSE, GT_FLOW_NONE, &lignes);
+	g_assert_true(g_str_has_prefix(texte, "bic:dtr;termios;"));
+	g_assert_true(g_str_has_suffix(texte, "termios;bic:dtr;"));
+	g_assert_null(strstr(texte, "rts"));
+	g_assert_cmpint(lignes, ==, TIOCM_RTS);
+	g_free(texte);
+
+	texte = trace_ouverture(FALSE, TRUE, GT_FLOW_NONE, &lignes);
+	g_assert_true(g_str_has_prefix(texte, "bic:rts;termios;"));
+	g_assert_null(strstr(texte, "dtr"));
+	g_assert_cmpint(lignes, ==, TIOCM_DTR);
+	g_free(texte);
+}
+
+static void
+test_lignes_actives_par_defaut(void)
+{
+	gchar *texte;
+	gint lignes = -1;
+
+	/* Option à « actif » : aucune écriture des lignes, comportement d'avant */
+	texte = trace_ouverture(FALSE, FALSE, GT_FLOW_NONE, &lignes);
+	if(texte == NULL)
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	g_assert_null(strstr(texte, "bic"));
+	g_assert_null(strstr(texte, "bis"));
+	g_assert_null(strstr(texte, "set"));
+	g_assert_cmpint(lignes, ==, TIOCM_DTR | TIOCM_RTS);
+	g_free(texte);
+}
+
+static void
+test_lignes_rts_pilote_par_le_flux(void)
+{
+	gchar *texte;
+	gint lignes = -1;
+
+	/* RTS/CTS et RS485 pilotent RTS : l'option RTS est sans objet, DTR reste baissé */
+	texte = trace_ouverture(TRUE, TRUE, GT_FLOW_RTSCTS, &lignes);
+	if(texte == NULL)
+	{
+		g_test_skip("openpty indisponible");
+		return;
+	}
+	g_assert_true(g_str_has_prefix(texte, "bic:dtr;termios;"));
+	g_assert_null(strstr(texte, "rts"));
+	g_free(texte);
+
+	texte = trace_ouverture(TRUE, TRUE, GT_FLOW_RS485, &lignes);
+	g_assert_true(g_str_has_prefix(texte, "bic:dtr;termios;"));
+	g_assert_null(strstr(texte, "rts"));
+	g_free(texte);
 }
 
 /* ---- Octets binaires transmis intacts ---------------------------------- */
@@ -1117,6 +1279,9 @@ main(int argc, char **argv)
 	g_test_add_func("/transport/termios-sans-heritage", test_termios_sans_heritage);
 	g_test_add_func("/transport/numero-de-peripherique", test_numero_de_peripherique);
 	g_test_add_func("/transport/rs485-rts-stable", test_rs485_rts_stable);
+	g_test_add_func("/transport/lignes-au-repos", test_lignes_au_repos);
+	g_test_add_func("/transport/lignes-actives-par-defaut", test_lignes_actives_par_defaut);
+	g_test_add_func("/transport/lignes-rts-pilote-par-le-flux", test_lignes_rts_pilote_par_le_flux);
 	g_test_add_func("/transport/octets-binaires", test_octets_binaires);
 	g_test_add_func("/transport/perte-maitre-pty", test_perte_maitre_pty);
 	g_test_add_func("/transport/erreurs-ouverture", test_erreurs_ouverture);

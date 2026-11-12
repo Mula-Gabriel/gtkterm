@@ -62,6 +62,9 @@ typedef struct
 	GtParity parity;
 	GtFlow flow;
 	gint rs485_before_ms, rs485_after_ms;
+	/* Série : lignes baissées (TIOCMBIC) juste après l'open(), où le noyau les lève, puis de nouveau après les réglages termios ; RTS d'abord.
+	 * rts_low_on_open est sans objet en RTS/CTS et en RS485 (RTS piloté par le flux). FALSE : lignes laissées telles que le noyau les met. */
+	gboolean dtr_low_on_open, rts_low_on_open;
 	gboolean lock_port;
 	gchar *host;			/* TCP ; vide ou NULL en serveur : toutes les interfaces */
 	gchar *tcp_port;

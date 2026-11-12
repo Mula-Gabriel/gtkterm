@@ -92,6 +92,8 @@ void gt_profile_from_key_file(GKeyFile *kf, const gchar *g, GtProfile *p)
 	}
 	gt_key_file_read_int(kf, g, "rs485_rts_time_before_tx", &p->rs485_before_ms);
 	gt_key_file_read_int(kf, g, "rs485_rts_time_after_tx", &p->rs485_after_ms);
+	gt_key_file_read_bool(kf, g, "dtr_low_on_open", &p->dtr_low_on_open);
+	gt_key_file_read_bool(kf, g, "rts_low_on_open", &p->rts_low_on_open);
 	gt_key_file_read_int(kf, g, "activity_idle_timeout", &p->idle_timeout_s);
 	gt_key_file_read_int(kf, g, "activity_no_data_timeout", &p->no_data_timeout_s);
 	read_string(kf, g, "socket_host", &p->host);
@@ -132,6 +134,8 @@ void gt_profile_to_key_file(const GtProfile *p, GKeyFile *kf, const gchar *g)
 	g_key_file_set_integer(kf, g, "wait_char", p->wait_char);
 	g_key_file_set_integer(kf, g, "rs485_rts_time_before_tx", p->rs485_before_ms);
 	g_key_file_set_integer(kf, g, "rs485_rts_time_after_tx", p->rs485_after_ms);
+	g_key_file_set_boolean(kf, g, "dtr_low_on_open", p->dtr_low_on_open);
+	g_key_file_set_boolean(kf, g, "rts_low_on_open", p->rts_low_on_open);
 	g_key_file_set_integer(kf, g, "activity_idle_timeout", p->idle_timeout_s);
 	g_key_file_set_integer(kf, g, "activity_no_data_timeout", p->no_data_timeout_s);
 	g_key_file_set_string(kf, g, "socket_host", p->host != NULL ? p->host : "");

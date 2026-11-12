@@ -29,6 +29,8 @@ void gt_port_form_from_profile(GtPortForm *f, const GtProfile *p)
 		f->wait_char = g_strdup("");
 	f->rs485_before_ms = CLAMP(p->rs485_before_ms, 0, GT_PORT_FORM_DELAY_MAX);
 	f->rs485_after_ms = CLAMP(p->rs485_after_ms, 0, GT_PORT_FORM_DELAY_MAX);
+	f->dtr_low_on_open = p->dtr_low_on_open;
+	f->rts_low_on_open = p->rts_low_on_open;
 }
 
 void gt_port_form_clear(GtPortForm *f)
@@ -140,6 +142,8 @@ gboolean gt_port_form_apply(const GtPortForm *f, const GtProfile *base, GtProfil
 		out->flow = f->flow;
 		out->rs485_before_ms = f->rs485_before_ms;
 		out->rs485_after_ms = f->rs485_after_ms;
+		out->dtr_low_on_open = f->dtr_low_on_open;
+		out->rts_low_on_open = f->rts_low_on_open;
 	}
 	else
 	{

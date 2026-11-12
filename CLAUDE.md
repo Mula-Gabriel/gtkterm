@@ -183,6 +183,11 @@ from the history, which stays the reference for « Save RAW/ASCII » (`capture.c
 `TRANSPORT_SERIAL`, `TRANSPORT_TCP_CLIENT`, `TRANSPORT_TCP_SERVER`; no UI calls, errors via `GError`, `LOST` reported (deferred to an idle) instead of
 reconnecting. Serial specifics: termios in `serial_termios.c`, baud-rate tables in `baud.c`/`baudrates.c`. Privileged TCP ports use `CAP_NET_BIND_SERVICE`.
 TCP sockets (client, accepted client) get a keepalive (30 s idle, 10 s interval, 3 probes): a peer gone silently gives `LOST` / `CLIENT_GONE` after about a minute.
+**Control lines at open:** `TransportParams.dtr_low_on_open` / `rts_low_on_open` (`GtProfile` fields, keys `dtr_low_on_open` / `rts_low_on_open`, default false = lines left as the
+kernel raises them at `open()`; Port › Advanced Configuration Options › Control lines when opening, check boxes `port-dtr-low` / `port-rts-low`, the RTS one insensitive with RTS/CTS
+or RS-485): one `TIOCMBIC` per line, **RTS before DTR** (ISP released before reset), right after the lock (never on a port another program holds) and again after the last
+`tcsetattr` (a driver may raise them leaving B0); at every open (reconnection included); RTS ignored with `GT_FLOW_RTSCTS` / `GT_FLOW_RS485`. `HUPCL` is left alone. Tests:
+`/transport/lignes-*` (trace of `TIOCM*` and termios calls), GUI `test_lignes_ouverture` (the guard simulates `TIOCMSET`/`BIS`/`BIC` under `GTKTERM_GUARD_FAKE_MODEM`).
 **Send queue:** `gt_transport_send_queued(t, data, len, tag)` (all or nothing: empty queue → direct write, the rest queued as `GBytes` chunks with their tag;
 over the room left under `GT_TRANSPORT_QUEUE_MAX` → -1/`ENOBUFS`, nothing written), a `G_IO_OUT` watch present **only while the queue is not empty**, callback
 `on_sent(data, len, tag, user_data)` per chunk actually written (optional: `TransportCallbacks` initialised with two fields stay valid; called after the queue is
@@ -515,7 +520,7 @@ prefix, fake `pkexec` counting authorizations) and `publier_version`, `test_upda
 `settings.update_url`/`settings.update_prefix` (`[general]` of `.gtktermrc`; defaults to the GitHub fork and `/usr/local`). Release: `tools/publier-version.sh vX.Y.Z` (clean tree, `meson.build`
 version, `NEWS` section; annotated tag, no push).
 
-**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 78 scenarios drive
+**GUI test harness (`tests/gui/`, see `tests/README.md`):** under broadway GTK 4 there is no AT-SPI and VTE does not expose its text, so the 79 scenarios drive
 GTKTerm through three bricks: (1) **D-Bus actions** — `org.gtk.Actions` (`Activate`, `SetState`, `Describe`) on the private session bus; start-up is detected
 when the name `eu.mulagabriel.gtkterm.test.p<PID>` appears; (2) the **test hook** (`src/ui/test_hooks.c`, compiled unless `-Dtest_hooks=false`, active only
 when `GTKTERM_TEST_HOOKS=1`, which also switches the application id to `eu.mulagabriel.gtkterm.test.p<PID>` without `NON_UNIQUE`): actions `app.test-dump`
@@ -533,7 +538,7 @@ private HOME), `open_tab(env, port)` (real Port dialog),
 whose failure comes with an internal assertion of `gtk4-broadwayd` in its log (a GTK defect, seen with GTK 4.24) is reported SKIP (77), not FAIL.
 Each scenario runs isolated (`run-gui-test.sh`: own broadway display, `dbus-run-session` on a private bus without service directories,
 `GDK_DEBUG=no-portals`, private HOME/XDG_*, `guard.c` preloaded to refuse real serial ports and the user's real configuration (and, under
-`GTKTERM_GUARD_FAKE_MODEM`, to simulate `TIOCMGET` on a pty), pty pairs only, fake `git`: `bin/git` serves `tags`, `news` and `delay` files, set by `Env.fake_git(tags=…, news=…, delay=…)`, with
+`GTKTERM_GUARD_FAKE_MODEM`, to simulate the modem lines of a pty: `TIOCMGET` reads them, `TIOCMSET`/`BIS`/`BIC` change them), pty pairs only, fake `git`: `bin/git` serves `tags`, `news` and `delay` files, set by `Env.fake_git(tags=…, news=…, delay=…)`, with
 `local_describe()` for the build's `GIT_DESCRIBE`).
 
 **Other entry points:** `src/ui/main.c` (`main`, wiring order), `src/ui/app.c` (`GtkApplication`, relays, tabs, actions, shutdown), `cmdline.c` (CLI

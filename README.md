@@ -140,6 +140,19 @@ name in the port dialog: `/dev/serial/by-id/…` (one name per adapter, from its
 identical adapters). `ttyACM…` devices and built-in `ttyS…` ports keep their name. TCP links are checked by keepalive: a peer that vanishes without
 closing the connection (asleep, unplugged, switched off) is reported lost after about one minute of silence.
 
+### Boards wired to DTR / RTS (reset, boot loader)
+
+Linux raises **DTR** and **RTS** whenever a serial port is opened. A board whose DTR drives its reset then stays in reset (silent), and one whose RTS
+selects its boot loader (ISP) starts in it (unreadable bytes). For such a board, check **Keep DTR inactive when opening the port** and/or **Keep RTS
+inactive when opening the port** in the port dialog › **Advanced Configuration Options › Control lines when opening** (saved with the profile and the
+project). GTKTerm then lowers the line right after opening the port (RTS before DTR, so the board leaves reset outside its boot loader), at every
+opening: start-up, Open Port, automatic reconnection, new settings. The RTS option has no effect with RTS/CTS or RS-485 flow control, which drive RTS.
+**Port › Toggle DTR** (`F7`) twice still resets the board on demand.
+
+Limits: the line is up for a brief moment between the kernel's open and GTKTerm lowering it (about a millisecond on a USB adapter), so the board may
+restart when the port opens; no application can avoid that pulse (only the adapter's own configuration, such as an FTDI EEPROM setting, can). On
+close, the kernel lowers DTR and RTS (`HUPCL`), which lets such a board start normally.
+
 ### Projects
 
 A project is one `.gtkterm` file holding a whole workstation: every tab with its port and terminal settings, its page layout, **a copy** of its macros and

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 0.99.4\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-05 08:42+0100\n"
+"POT-Creation-Date: 2026-11-12 17:31+0100\n"
 "PO-Revision-Date: 2005-03-09 21:17+0100\n"
 "Last-Translator: Bus Jozsef <busj@mailbox.hu>\n"
 "Language-Team: hu <hu@li.org>\n"
@@ -263,7 +263,7 @@ msgstr ""
 msgid "tcp://%s:%s (server)"
 msgstr ""
 
-#: src/link.c:111 src/link.c:604 src/transport.c:546
+#: src/link.c:111 src/link.c:604 src/transport.c:560
 msgid "No open port"
 msgstr "Nincs nyitott port"
 
@@ -522,37 +522,37 @@ msgstr "Fájl olvasása sikertelen: %s: %s\n"
 msgid "Macros template %s saved"
 msgstr ""
 
-#: src/port_form.c:76
+#: src/port_form.c:78
 msgid "Enter the serial port to open (for example /dev/ttyUSB0)."
 msgstr ""
 
-#: src/port_form.c:81
+#: src/port_form.c:83
 #, c-format
 msgid "The baud rate must be a whole number between 1 and %d."
 msgstr ""
 
-#: src/port_form.c:86
+#: src/port_form.c:88
 msgid "Invalid number of data bits or stop bits."
 msgstr ""
 
-#: src/port_form.c:91 src/port_form.c:110
+#: src/port_form.c:93 src/port_form.c:112
 #, c-format
 msgid "Delays must be between 0 and %d ms."
 msgstr ""
 
-#: src/port_form.c:99
+#: src/port_form.c:101
 msgid "Enter the host to connect to."
 msgstr ""
 
-#: src/port_form.c:104
+#: src/port_form.c:106
 msgid "The TCP port must be a number between 1 and 65535."
 msgstr ""
 
-#: src/port_form.c:120
+#: src/port_form.c:122
 msgid "Enter the character to wait for: exactly one ASCII character."
 msgstr ""
 
-#: src/port_form.c:127
+#: src/port_form.c:129
 #, c-format
 msgid "Activity delays must be between 0 and %d s."
 msgstr ""
@@ -708,7 +708,7 @@ msgid "Port %d: receive buffer full, oldest data dropped"
 msgstr ""
 
 #. Même message que le transport (même traduction), sans fin de ligne
-#: src/script_engine.c:633 src/transport.c:405
+#: src/script_engine.c:633 src/transport.c:419
 #, fuzzy, c-format
 msgid "Cannot resolve %s: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
@@ -736,78 +736,78 @@ msgstr "Break signál küldve!"
 msgid "end of stream"
 msgstr ""
 
-#: src/transport.c:251
+#: src/transport.c:262
 #, fuzzy, c-format
 msgid "Cannot open %s: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:259
+#: src/transport.c:270
 #, c-format
 msgid "%s is not a valid serial port\n"
 msgstr ""
 
-#: src/transport.c:269
+#: src/transport.c:280
 msgid ""
 "Cannot lock port! The serial port may currently be in use by another "
 "program.\n"
 msgstr ""
 
-#: src/transport.c:288
+#: src/transport.c:301
 #, c-format
 msgid "Unable to set baud rate %u"
 msgstr ""
 
-#: src/transport.c:380 src/transport.c:413
+#: src/transport.c:394 src/transport.c:427
 #, fuzzy, c-format
 msgid "Cannot connect to %s:%s: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:431
+#: src/transport.c:445
 #, fuzzy
 msgid "Accept error"
 msgstr "Fájlhiba!\n"
 
-#: src/transport.c:468
+#: src/transport.c:482
 #, fuzzy, c-format
 msgid "Cannot resolve port %s: %s\n"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/transport.c:470
+#: src/transport.c:484
 #, fuzzy, c-format
 msgid "Cannot resolve %s:%s: %s\n"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/transport.c:478
+#: src/transport.c:492
 #, fuzzy, c-format
 msgid "Cannot create socket: %s\n"
 msgstr "Fájl olvasása sikertelen: %s: %s\n"
 
-#: src/transport.c:497
+#: src/transport.c:511
 #, fuzzy, c-format
 msgid "Cannot bind to %s:%s: %s%s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:499
+#: src/transport.c:513
 msgid ""
 "\n"
 "Use: sudo setcap cap_net_bind_service=+ep gtkterm"
 msgstr ""
 
-#: src/transport.c:509
+#: src/transport.c:523
 #, fuzzy, c-format
 msgid "Cannot listen: %s\n"
 msgstr "Nem lehet megnyitni a %s-t: %s\n"
 
-#: src/transport.c:929
+#: src/transport.c:943
 #, fuzzy
 msgid "Control signals read set signals"
 msgstr "Ellenörző jelek olvasása"
 
-#: src/transport.c:934
+#: src/transport.c:948
 msgid "DTR write"
 msgstr "DTR írás"
 
-#: src/transport.c:934
+#: src/transport.c:948
 msgid "RTS write"
 msgstr "RTS írás"
 
@@ -995,12 +995,12 @@ msgstr "Figyelmeztetés:"
 msgid "Error"
 msgstr ""
 
-#: src/ui/dialogs.c:169 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:344
+#: src/ui/dialogs.c:169 src/ui/port_dialog.c:606 src/ui/profile_dialogs.c:344
 #: src/ui/project_rename.c:169
 msgid "_OK"
 msgstr ""
 
-#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
+#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:603
 #: src/ui/profile_dialogs.c:341 src/ui/project_rename.c:166
 #: src/ui/script_panel.c:805
 #, fuzzy
@@ -1753,53 +1753,61 @@ msgstr ""
 msgid "RS-485 half-duplex (RTS)"
 msgstr ""
 
-#: src/ui/port_dialog.c:370
+#: src/ui/port_dialog.c:255
+msgid "Without effect: RTS is driven by the flow control (RTS/CTS or RS-485)."
+msgstr ""
+
+#: src/ui/port_dialog.c:256
+msgid "For a board whose RTS line selects its boot loader (ISP)."
+msgstr ""
+
+#: src/ui/port_dialog.c:387
 msgid "_Host:"
 msgstr ""
 
-#: src/ui/port_dialog.c:372 src/ui/port_dialog.c:402
+#: src/ui/port_dialog.c:389 src/ui/port_dialog.c:419
 #, fuzzy
 msgid "_Port:"
 msgstr "Port:"
 
-#: src/ui/port_dialog.c:374
+#: src/ui/port_dialog.c:391
 msgid "TCP"
 msgstr ""
 
-#: src/ui/port_dialog.c:387
+#: src/ui/port_dialog.c:404
 #, fuzzy
 msgid "Detected serial ports"
 msgstr "Soros port"
 
-#: src/ui/port_dialog.c:392
+#: src/ui/port_dialog.c:409
 msgid "Standard baud rates"
 msgstr ""
 
-#: src/ui/port_dialog.c:404
+#: src/ui/port_dialog.c:421
 msgid "_Baud Rate:"
 msgstr ""
 
-#: src/ui/port_dialog.c:406
+#: src/ui/port_dialog.c:423
 #, fuzzy
 msgid "P_arity:"
 msgstr "Paritás:"
 
-#: src/ui/port_dialog.c:408
+#: src/ui/port_dialog.c:425
 #, fuzzy
 msgid "B_its:"
 msgstr "Bitek:"
 
-#: src/ui/port_dialog.c:410
+#: src/ui/port_dialog.c:427
 #, fuzzy
 msgid "_Stopbits:"
 msgstr "Stoppbitek:"
 
-#: src/ui/port_dialog.c:412
+#: src/ui/port_dialog.c:429
 #, fuzzy
 msgid "_Flow control:"
 msgstr "Folyamatvezérlés:"
 
-#: src/ui/port_dialog.c:417
+#: src/ui/port_dialog.c:434
 #, fuzzy, c-format
 msgid ""
 "No serial devices found. Searched the following device path patterns:\n"
@@ -1812,67 +1820,93 @@ msgstr ""
 "/dev/ttyUSB*\n"
 "/dev/usb/tts/*\n"
 
-#: src/ui/port_dialog.c:429
+#: src/ui/port_dialog.c:446
 msgid "Serial port"
 msgstr "Soros port"
 
-#: src/ui/port_dialog.c:434
+#: src/ui/port_dialog.c:451
 #, fuzzy
 msgid "_Advanced Configuration Options"
 msgstr "Konfigurációk"
 
-#: src/ui/port_dialog.c:441
+#: src/ui/port_dialog.c:458
 #, fuzzy
 msgid "End of line _delay (milliseconds):"
 msgstr "Sorvég késleltetés (tizedmásodperc):"
 
-#: src/ui/port_dialog.c:443
+#: src/ui/port_dialog.c:460
 #, fuzzy
 msgid "_Wait for this special character before passing to next line:"
 msgstr "Speciális karakterre várakozás az következő sor elött:"
 
-#: src/ui/port_dialog.c:450
+#: src/ui/port_dialog.c:467
 msgid "ASCII file transfer"
 msgstr "ASCII fájl átvitel"
 
-#: src/ui/port_dialog.c:454
+#: src/ui/port_dialog.c:471
 msgid "Id_le after (seconds, 0: never):"
 msgstr ""
 
-#: src/ui/port_dialog.c:457
+#: src/ui/port_dialog.c:474
 msgid "_No data after (seconds, 0: never):"
 msgstr ""
 
-#: src/ui/port_dialog.c:459
+#: src/ui/port_dialog.c:476
 msgid "Port activity"
 msgstr ""
 
-#: src/ui/port_dialog.c:463
+#. Mnémoniques k et r : libres dans le dialogue
+#: src/ui/port_dialog.c:479
+msgid "_Keep DTR inactive when opening the port"
+msgstr ""
+
+#: src/ui/port_dialog.c:481
+msgid ""
+"For a board whose DTR line drives its reset: the port opens without holding "
+"it in reset."
+msgstr ""
+
+#: src/ui/port_dialog.c:485
+msgid "Keep _RTS inactive when opening the port"
+msgstr ""
+
+#: src/ui/port_dialog.c:490
+msgid ""
+"The system raises DTR and RTS when it opens a serial port: these options "
+"lower them at once, after a brief pulse. Toggle DTR (Port menu) still resets "
+"the board on demand."
+msgstr ""
+
+#: src/ui/port_dialog.c:498
+msgid "Control lines when opening"
+msgstr ""
+
+#: src/ui/port_dialog.c:503
 msgid "Time with RTS 'on' _before transmit (milliseconds):"
 msgstr ""
 
-#: src/ui/port_dialog.c:465
+#: src/ui/port_dialog.c:505
 msgid "Time with RTS 'on' a_fter transmit (milliseconds):"
 msgstr ""
 
-#: src/ui/port_dialog.c:467
+#: src/ui/port_dialog.c:507
 msgid "RS-485 half-duplex parameters (RTS signal used to send)"
 msgstr ""
 
-#: src/ui/port_dialog.c:522
+#: src/ui/port_dialog.c:562
 #, fuzzy
 msgid "Port configuration"
 msgstr "Konfiguráció betöltés"
 
-#: src/ui/port_dialog.c:522
+#: src/ui/port_dialog.c:562
 msgid "New tab"
 msgstr ""
 
-#: src/ui/port_dialog.c:543
+#: src/ui/port_dialog.c:583
 msgid "_Type:"
 msgstr ""
 
-#: src/ui/port_dialog.c:545
+#: src/ui/port_dialog.c:585
 #, fuzzy
 msgid "Transport"
 msgstr "Soros port"

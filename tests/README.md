@@ -147,7 +147,7 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
   y compris quand meson interrompt le scénario (Ctrl+C, délai dépassé : le signal est relayé au groupe de `timeout`, puis `run-gui-test.sh` attend sa fin).
 - Garde-fou : `guard.c`, chargé par `LD_PRELOAD`, refuse les vrais ports série et la configuration réelle de l'utilisateur (message `EMGUARD` dans stderr, qui
   fait échouer le scénario). Ports : paires pty seulement (et `127.0.0.1`). Faux `git` (`bin/git`, aucun réseau ; sert `tags`, `news` et `delay`) et faux `xterm` (`bin/xterm`, n'exécute
-  rien) pour la fenêtre « Updates ». Si `GTKTERM_GUARD_FAKE_MODEM` est posée (bits `TIOCM_*`), `guard.c` simule aussi `TIOCMGET` sur une pty, pour les voyants des signaux
+  rien) pour la fenêtre « Updates ». Si `GTKTERM_GUARD_FAKE_MODEM` est posée (bits `TIOCM_*`), `guard.c` simule aussi les lignes modem d'une pty (`TIOCMGET` les lit, `TIOCMSET`/`BIS`/`BIC` les changent), pour les voyants des signaux
   de contrôle de la barre d'état.
 
 ### Bibliothèque (`gtktest.py`)
@@ -184,7 +184,7 @@ Sous broadway GTK 4, AT-SPI n'existe pas et VTE 0.76 n'expose pas son texte : le
 ### Écrire un scénario
 
 - `tests/gui/test_<nom>.py` : `from gtktest import *`, un `Env('<nom>')`, `write_config(e.general() + e.profile(…))`, `start(…)`, des `check(…)`, puis
-  `e.finish()` et `sys.exit(conclude())` ; l'ajouter à `gui_scenarios` dans `tests/gui/meson.build` (78 scénarios aujourd'hui).
+  `e.finish()` et `sys.exit(conclude())` ; l'ajouter à `gui_scenarios` dans `tests/gui/meson.build` (79 scénarios aujourd'hui).
 - Viser les widgets par leur nom stable (`gtk_widget_set_name` dans `src/ui/`, par ex. `port-dialog`, `macro-<id>`, `script-run`) ; passer par une action
   `app.*` quand le geste n'est pas l'objet du test, par le navigateur quand il l'est.
 - Échec : lire `build/tests/gui/runs/<scénario>/result.txt` (une ligne `OK` / `ECHEC` par vérification) et `gtkterm.stderr` (sortie d'erreur de GTKTerm) du même dossier.

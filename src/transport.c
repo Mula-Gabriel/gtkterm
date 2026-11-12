@@ -235,6 +235,17 @@ static gboolean transport_read_cb(gint fd, GIOCondition cond, gpointer data)
 	return G_SOURCE_REMOVE;
 }
 
+/* Lignes demandées au repos : RTS (souvent l'entrée du chargeur ISP) avant DTR (souvent le reset), pour que la carte qui sort du reset
+ * ne démarre pas dans son chargeur. Deux appels distincts : un seul TIOCMBIC les relâcherait ensemble (une seule requête USB sur un FTDI).
+ * Le noyau les a levées à l'open() : une impulsion brève reste inévitable ; il les rebaisse à la fermeture (HUPCL), sans danger. */
+static void transport_lower_lines(int fd, const TransportParams *p)
+{
+	if(p->rts_low_on_open && p->flow != GT_FLOW_RTSCTS && p->flow != GT_FLOW_RS485)
+		ioctl(fd, TIOCMBIC, (int[]){TIOCM_RTS});
+	if(p->dtr_low_on_open)
+		ioctl(fd, TIOCMBIC, (int[]){TIOCM_DTR});
+}
+
 static gboolean transport_open_serial(GtTransport *t, GError **error)
 {
 	const TransportParams *p = &t->params;
@@ -271,6 +282,8 @@ static gboolean transport_open_serial(GtTransport *t, GError **error)
 		}
 		t->locked = TRUE;
 	}
+	/* Au plus tôt, avant tout réglage termios, mais après le verrou : jamais sur un port qu'un autre programme tient */
+	transport_lower_lines(fd, p);
 
 	/* Réglages d'origine relevés avant tout changement, débit compris (M3) : la fermeture les restaure tels quels */
 	if(tcgetattr(fd, &t->termios_save) == 0)
@@ -295,6 +308,7 @@ static gboolean transport_open_serial(GtTransport *t, GError **error)
 	tcgetattr(fd, &termios_p);
 	serial_termios_apply(&termios_p, p->bits, p->parity, p->stopbits, p->flow);
 	tcsetattr(fd, TCSANOW, &termios_p);
+	transport_lower_lines(fd, p);	/* un pilote peut les relever en changeant les réglages (sortie de B0) */
 	tcflush(fd, TCOFLUSH);
 	tcflush(fd, TCIFLUSH);
 

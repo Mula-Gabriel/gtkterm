@@ -86,7 +86,7 @@ integration_tests = {
 	'test_transport' : {
 		'sources' : [],
 		'deps' : [util_dep],
-		'link_args' : ['-Wl,--wrap=ioctl', '-Wl,--wrap=getaddrinfo'],
+		'link_args' : ['-Wl,--wrap=ioctl', '-Wl,--wrap=getaddrinfo', '-Wl,--wrap=tcsetattr'],
 	},
 	'test_macros_send' : {
 		'sources' : files('../src/macros.c') + stub_journal + stub_link,

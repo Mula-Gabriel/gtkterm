@@ -205,6 +205,8 @@ void gt_profile_to_transport_params(const GtProfile *p, TransportParams *out)
 	out->flow = p->flow;
 	out->rs485_before_ms = p->rs485_before_ms;
 	out->rs485_after_ms = p->rs485_after_ms;
+	out->dtr_low_on_open = p->dtr_low_on_open;
+	out->rts_low_on_open = p->rts_low_on_open;
 	out->lock_port = p->lock_port;
 	out->host = g_strdup(p->host);
 	out->tcp_port = g_strdup(p->tcp_port);

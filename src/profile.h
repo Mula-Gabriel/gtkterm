@@ -28,6 +28,8 @@ typedef struct
 	GtFlow flow;
 	gint rs485_before_ms;
 	gint rs485_after_ms;
+	gboolean dtr_low_on_open;	/* série : DTR baissé à l'ouverture (carte dont DTR tient le reset) ; défaut FALSE */
+	gboolean rts_low_on_open;	/* série : RTS baissé à l'ouverture (entrée du chargeur ISP), sans objet en RTS/CTS et RS485 */
 	gboolean lock_port;		/* faux avec --disable-port-lock ; jamais enregistré */
 	gchar *host;			/* TCP */
 	gchar *tcp_port;

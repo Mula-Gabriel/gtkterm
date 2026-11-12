@@ -72,8 +72,14 @@ test_serie(void)
 	f.rs485_before_ms = 10;
 	f.rs485_after_ms = 20;
 	f.wait_delay_ms = 100;
+	g_assert_false(f.dtr_low_on_open);	/* défaut : lignes actives à l'ouverture, comme avant */
+	g_assert_false(f.rts_low_on_open);
+	f.dtr_low_on_open = TRUE;
+	f.rts_low_on_open = TRUE;
 	g_assert_true(gt_port_form_apply(&f, &base, &out, &error));
 	g_assert_no_error(error);
+	g_assert_true(out.dtr_low_on_open);
+	g_assert_true(out.rts_low_on_open);
 	g_assert_cmpstr(out.port, ==, "/dev/ttyUSB3");
 	g_assert_cmpuint(out.baudrate, ==, 9600);
 	g_assert_cmpint(out.parity, ==, GT_PARITY_EVEN);
@@ -152,7 +158,10 @@ test_tcp(void)
 	GError *error = NULL;
 
 	profil_defaut(&base);
+	base.dtr_low_on_open = TRUE;
 	gt_port_form_from_profile(&f, &base);
+	g_assert_true(f.dtr_low_on_open);
+	f.dtr_low_on_open = FALSE;	/* lignes de contrôle : champ série, non lu en TCP */
 	f.transport = TRANSPORT_TCP_CLIENT;
 	gt_profile_set_string(&f.device, "");	/* champ série vide : ignoré en TCP */
 	gt_profile_set_string(&f.baudrate, "abc");
@@ -179,6 +188,7 @@ test_tcp(void)
 	g_assert_cmpstr(out.tcp_port, ==, "80");
 	g_assert_cmpstr(out.port, ==, base.port);	/* champs série non lus en TCP */
 	g_assert_cmpuint(out.baudrate, ==, base.baudrate);
+	g_assert_true(out.dtr_low_on_open);
 
 	f.transport = TRANSPORT_TCP_SERVER;	/* serveur : hôte vide = toutes les interfaces */
 	gt_profile_set_string(&f.host, "");

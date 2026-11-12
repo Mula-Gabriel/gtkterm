@@ -92,8 +92,9 @@ FILE *fopen64(const char *p, const char *m)
 	return r(p, m);
 }
 
-/* TIOCMGET simulé : si GTKTERM_GUARD_FAKE_MODEM est posée (bits TIOCM_*, décimal ou 0x…), la lecture des lignes modem d'un terminal (pty)
-   renvoie ces bits au lieu de ENOTTY ; sans la variable, ou hors terminal, comportement normal. */
+/* Lignes modem simulées : si GTKTERM_GUARD_FAKE_MODEM est posée (bits TIOCM_*, décimal ou 0x…), un terminal (pty) a ces lignes au départ ;
+   TIOCMGET les lit, TIOCMSET, TIOCMBIS et TIOCMBIC les changent (un seul état pour le processus) au lieu de ENOTTY ; sans la variable, ou
+   hors terminal, comportement normal. */
 int ioctl(int fd, unsigned long req, ...)
 {
 	static int (*r)(int, unsigned long, ...);
@@ -106,9 +107,20 @@ int ioctl(int fd, unsigned long req, ...)
 	va_start(a, req);
 	arg = va_arg(a, void *);
 	va_end(a);
-	if(req == TIOCMGET && fake != NULL && fake[0] != '\0' && arg != NULL && isatty(fd))
+	if((req == TIOCMGET || req == TIOCMSET || req == TIOCMBIS || req == TIOCMBIC) && fake != NULL && fake[0] != '\0' && arg != NULL && isatty(fd))
 	{
-		*(int *)arg = (int)strtol(fake, NULL, 0);
+		static int lines = -1;
+
+		if(lines == -1)
+			lines = (int)strtol(fake, NULL, 0);
+		if(req == TIOCMGET)
+			*(int *)arg = lines;
+		else if(req == TIOCMSET)
+			lines = *(int *)arg;
+		else if(req == TIOCMBIS)
+			lines |= *(int *)arg;
+		else
+			lines &= ~*(int *)arg;
 		return 0;
 	}
 	return r(fd, req, arg);

@@ -36,6 +36,7 @@ typedef struct
 	GtkWidget *serial_frame;
 	GtkWidget *tcp_frame;
 	GtkWidget *rs485_frame;
+	GtkWidget *lines_frame;	/* lignes de contrôle à l'ouverture (série) */
 	GtkEntry *device;
 	GtkStringList *device_model;	/* ports détectés */
 	GHashTable *links;	/* chemins des liens udev (gras) */
@@ -48,6 +49,7 @@ typedef struct
 	GtkEntry *wait_char;
 	GtkSpinButton *rs485_before, *rs485_after;
 	GtkSpinButton *idle_timeout, *no_data_timeout;	/* secondes, 0 : jamais */
+	GtkCheckButton *dtr_low, *rts_low;
 	GtkLabel *error;
 	GWeakRef session;	/* réglage : session active à l'ouverture (spec §3.2-12) */
 	GtProfile *base;	/* création d'onglet : copie du profil initial (possédée) ; NULL en réglage */
@@ -232,6 +234,7 @@ static void update_visibility(PortDialog *pd)
 
 	gtk_widget_set_visible(pd->serial_frame, serial);
 	gtk_widget_set_visible(pd->rs485_frame, serial);
+	gtk_widget_set_visible(pd->lines_frame, serial);
 	gtk_widget_set_visible(pd->tcp_frame, !serial);
 	gtk_widget_set_visible(GTK_WIDGET(pd->error), FALSE);
 }
@@ -239,6 +242,18 @@ static void update_visibility(PortDialog *pd)
 static void on_type_changed(GObject *dropdown, GParamSpec *pspec, PortDialog *pd)
 {
 	update_visibility(pd);
+}
+
+/* RTS/CTS et RS-485 pilotent RTS : la case RTS est alors sans objet (grisée, raison dans l'infobulle), sa valeur gardée */
+static void on_flow_changed(GObject *dropdown, GParamSpec *pspec, PortDialog *pd)
+{
+	GtFlow flow = (GtFlow)value_at(pd->flow, flow_values, G_N_ELEMENTS(flow_values));
+	gboolean driven = flow == GT_FLOW_RTSCTS || flow == GT_FLOW_RS485;
+
+	gtk_widget_set_sensitive(GTK_WIDGET(pd->rts_low), !driven);
+	gtk_widget_set_tooltip_text(GTK_WIDGET(pd->rts_low),
+	                            driven ? _("Without effect: RTS is driven by the flow control (RTS/CTS or RS-485).")
+	                                   : _("For a board whose RTS line selects its boot loader (ISP)."));
 }
 
 static void on_wait_toggled(GtkCheckButton *check, PortDialog *pd)
@@ -272,6 +287,8 @@ static void read_form(PortDialog *pd, GtPortForm *f)
 	f->wait_char = g_strdup(gtk_editable_get_text(GTK_EDITABLE(pd->wait_char)));
 	f->rs485_before_ms = spin_value(pd->rs485_before);
 	f->rs485_after_ms = spin_value(pd->rs485_after);
+	f->dtr_low_on_open = gtk_check_button_get_active(pd->dtr_low);
+	f->rts_low_on_open = gtk_check_button_get_active(pd->rts_low);
 	f->idle_timeout_s = spin_value(pd->idle_timeout);
 	f->no_data_timeout_s = spin_value(pd->no_data_timeout);
 }
@@ -433,8 +450,8 @@ static GtkWidget *build_advanced(PortDialog *pd, const GtPortForm *form)
 {
 	GtkWidget *expander = gtk_expander_new_with_mnemonic(_("_Advanced Configuration Options"));
 	GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-	GtkWidget *file_grid = grid_new(), *rs485_grid = grid_new(), *activity_grid = grid_new();
-	GtkWidget *check;
+	GtkWidget *file_grid = grid_new(), *rs485_grid = grid_new(), *activity_grid = grid_new(), *lines_grid = grid_new();
+	GtkWidget *check, *note;
 
 	gtk_widget_set_name(expander, "port-advanced");
 	pd->line_delay = delay_spin_new("port-line-delay", form->wait_delay_ms);
@@ -457,6 +474,29 @@ static GtkWidget *build_advanced(PortDialog *pd, const GtPortForm *form)
 	grid_label(activity_grid, _("_No data after (seconds, 0: never):"), GTK_WIDGET(pd->no_data_timeout), 0, 1);
 	gtk_grid_attach(GTK_GRID(activity_grid), GTK_WIDGET(pd->no_data_timeout), 1, 1, 1, 1);
 	gtk_box_append(GTK_BOX(box), frame_new(_("Port activity"), activity_grid));
+
+	/* Mnémoniques libres dans le dialogue : k et r (anglais), m et u (français) */
+	check = gtk_check_button_new_with_mnemonic(_("_Keep DTR inactive when opening the port"));
+	gtk_widget_set_name(check, "port-dtr-low");
+	gtk_widget_set_tooltip_text(check, _("For a board whose DTR line drives its reset: the port opens without holding it in reset."));
+	gtk_check_button_set_active(GTK_CHECK_BUTTON(check), form->dtr_low_on_open);
+	pd->dtr_low = GTK_CHECK_BUTTON(check);
+	gtk_grid_attach(GTK_GRID(lines_grid), check, 0, 0, 1, 1);
+	check = gtk_check_button_new_with_mnemonic(_("Keep _RTS inactive when opening the port"));
+	gtk_widget_set_name(check, "port-rts-low");
+	gtk_check_button_set_active(GTK_CHECK_BUTTON(check), form->rts_low_on_open);
+	pd->rts_low = GTK_CHECK_BUTTON(check);
+	gtk_grid_attach(GTK_GRID(lines_grid), check, 0, 1, 1, 1);
+	note = gtk_label_new(_("The system raises DTR and RTS when it opens a serial port: these options lower them at once, after a brief pulse. "
+	                       "Toggle DTR (Port menu) still resets the board on demand."));
+	gtk_widget_set_name(note, "port-lines-note");
+	gtk_label_set_wrap(GTK_LABEL(note), TRUE);
+	gtk_label_set_max_width_chars(GTK_LABEL(note), 60);
+	gtk_label_set_xalign(GTK_LABEL(note), 0.0);
+	gtk_widget_add_css_class(note, "dim-label");
+	gtk_grid_attach(GTK_GRID(lines_grid), note, 0, 2, 1, 1);
+	pd->lines_frame = frame_new(_("Control lines when opening"), lines_grid);
+	gtk_box_append(GTK_BOX(box), pd->lines_frame);
 
 	pd->rs485_before = delay_spin_new("port-rs485-before", form->rs485_before_ms);
 	pd->rs485_after = delay_spin_new("port-rs485-after", form->rs485_after_ms);
@@ -573,11 +613,13 @@ static void port_dialog_open(GtkWindow *parent, GtSession *s, const GtProfile *i
 
 	g_signal_connect(pd->type, "notify::selected", G_CALLBACK(on_type_changed), pd);
 	g_signal_connect(pd->wait_char_check, "toggled", G_CALLBACK(on_wait_toggled), pd);
+	g_signal_connect(pd->flow, "notify::selected", G_CALLBACK(on_flow_changed), pd);
 	gt_ui_close_on_escape(pd->window);	/* Échap ferme (dialogs.c) */
 	gtk_window_set_default_widget(pd->window, ok);
 	gtk_window_set_child(pd->window, box);
 	update_visibility(pd);
 	on_wait_toggled(pd->wait_char_check, pd);
+	on_flow_changed(G_OBJECT(pd->flow), NULL, pd);
 
 	gt_port_form_clear(&form);
 	g_ptr_array_unref(ports);

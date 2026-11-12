@@ -35,6 +35,7 @@ gui_scenarios = [
 	'test_config_verrou',
 	'test_config_valeurs_corrigees',
 	'test_status_bar',
+	'test_lignes_ouverture',
 	'test_search',
 	'test_hex_send',
 	# profils et fichiers de macros

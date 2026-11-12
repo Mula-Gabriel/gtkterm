@@ -143,8 +143,12 @@ test_conversion_transport(void)
 	p.flow = GT_FLOW_RS485;
 	p.rs485_before_ms = 5;
 	p.rs485_after_ms = 6;
+	p.dtr_low_on_open = TRUE;
+	p.rts_low_on_open = TRUE;
 	p.lock_port = FALSE;
 	gt_profile_to_transport_params(&p, &tp);
+	g_assert_true(tp.dtr_low_on_open);
+	g_assert_true(tp.rts_low_on_open);
 	g_assert_cmpint(tp.type, ==, TRANSPORT_TCP_CLIENT);
 	g_assert_cmpstr(tp.port, ==, "/dev/ttyACM1");
 	g_assert_true(tp.port != p.port);

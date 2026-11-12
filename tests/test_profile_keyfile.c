@@ -5,7 +5,7 @@
 #include "profile_keyfile.h"
 
 /* Texte exact écrit par config_store.c de 6b pour un profil par défaut avec macros_file=/tmp/m.ini (référence figée), plus les deux clés
- * d'activité du port ajoutées après les délais RS-485 (indicateurs d'activité) */
+ * deux clés des lignes au repos à l'ouverture et les deux d'activité du port ajoutées après les délais RS-485 */
 static const gchar *const reference_6b =
 	"[profile:default]\n"
 	"transport=serial\n"
@@ -19,6 +19,8 @@ static const gchar *const reference_6b =
 	"wait_char=-1\n"
 	"rs485_rts_time_before_tx=30\n"
 	"rs485_rts_time_after_tx=30\n"
+	"dtr_low_on_open=false\n"
+	"rts_low_on_open=false\n"
 	"activity_idle_timeout=10\n"
 	"activity_no_data_timeout=60\n"
 	"socket_host=\n"
@@ -66,6 +68,7 @@ static void test_aller_retour(void)
 	a.baudrate = 9600;
 	a.echo = TRUE;
 	a.wait_char = 13;
+	a.dtr_low_on_open = TRUE;
 	a.foreground = (GtColor){ 0.25, 0.5, 0.75, 1.0 };
 	gt_profile_to_key_file(&a, kf, "tab:0");
 	gt_profile_init_defaults(&b);
@@ -76,6 +79,8 @@ static void test_aller_retour(void)
 	g_assert_cmpuint(b.baudrate, ==, 9600);
 	g_assert_true(b.echo);
 	g_assert_cmpint(b.wait_char, ==, 13);
+	g_assert_true(b.dtr_low_on_open);
+	g_assert_false(b.rts_low_on_open);
 	g_assert_cmpfloat(b.foreground.green, ==, 0.5);
 	g_assert_null(b.macros_file);
 	/* macros_file NULL écrit dans un groupe qui en a déjà une : la clé est retirée */
@@ -103,6 +108,8 @@ static void test_cles_absentes_gardees(void)
 	gt_profile_from_key_file(kf, "g", &p);
 	g_assert_cmpuint(p.baudrate, ==, 57600);
 	g_assert_true(p.echo);
+	g_assert_false(p.dtr_low_on_open);	/* profil d'avant l'option : lignes laissées actives */
+	g_assert_false(p.rts_low_on_open);
 	gt_profile_clear(&p);
 	g_key_file_free(kf);
 }

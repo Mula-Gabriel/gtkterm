@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gtkterm 1.3.2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-05 08:42+0100\n"
+"POT-Creation-Date: 2026-11-12 17:31+0100\n"
 "PO-Revision-Date: 2026-10-10 12:00+0200\n"
 "Last-Translator: Julien Schmitt <julien@jls-info.com>\n"
 "Language-Team: French <traduc@traduc.org>\n"
@@ -267,7 +267,7 @@ msgstr "tcp://%s:%s (serveur, aucun client)"
 msgid "tcp://%s:%s (server)"
 msgstr "tcp://%s:%s (serveur)"
 
-#: src/link.c:111 src/link.c:604 src/transport.c:546
+#: src/link.c:111 src/link.c:604 src/transport.c:560
 msgid "No open port"
 msgstr "Aucun port ouvert"
 
@@ -532,38 +532,38 @@ msgstr "Impossible d'enregistrer le modèle de macros : %s"
 msgid "Macros template %s saved"
 msgstr "Modèle de macros %s enregistré"
 
-#: src/port_form.c:76
+#: src/port_form.c:78
 msgid "Enter the serial port to open (for example /dev/ttyUSB0)."
 msgstr "Saisissez le port série à ouvrir (par exemple /dev/ttyUSB0)."
 
-#: src/port_form.c:81
+#: src/port_form.c:83
 #, c-format
 msgid "The baud rate must be a whole number between 1 and %d."
 msgstr "Le débit doit être un nombre entier compris entre 1 et %d."
 
-#: src/port_form.c:86
+#: src/port_form.c:88
 msgid "Invalid number of data bits or stop bits."
 msgstr "Nombre de bits de données ou de bits de stop non valide."
 
-#: src/port_form.c:91 src/port_form.c:110
+#: src/port_form.c:93 src/port_form.c:112
 #, c-format
 msgid "Delays must be between 0 and %d ms."
 msgstr "Les délais doivent être compris entre 0 et %d ms."
 
-#: src/port_form.c:99
+#: src/port_form.c:101
 msgid "Enter the host to connect to."
 msgstr "Saisissez l'hôte auquel se connecter."
 
-#: src/port_form.c:104
+#: src/port_form.c:106
 msgid "The TCP port must be a number between 1 and 65535."
 msgstr "Le port TCP doit être un nombre compris entre 1 et 65535."
 
-#: src/port_form.c:120
+#: src/port_form.c:122
 msgid "Enter the character to wait for: exactly one ASCII character."
 msgstr ""
 "Saisissez le caractère à attendre : un seul caractère ASCII exactement."
 
-#: src/port_form.c:127
+#: src/port_form.c:129
 #, c-format
 msgid "Activity delays must be between 0 and %d s."
 msgstr "Les délais d'activité doivent être compris entre 0 et %d s."
@@ -721,7 +721,7 @@ msgid "Port %d: receive buffer full, oldest data dropped"
 msgstr "Port %d : tampon de réception plein, données les plus anciennes jetées"
 
 #. Même message que le transport (même traduction), sans fin de ligne
-#: src/script_engine.c:633 src/transport.c:405
+#: src/script_engine.c:633 src/transport.c:419
 #, c-format
 msgid "Cannot resolve %s: %s\n"
 msgstr "Impossible de résoudre %s : %s\n"
@@ -748,17 +748,17 @@ msgstr "Signal break envoyé !"
 msgid "end of stream"
 msgstr "fin du flux"
 
-#: src/transport.c:251
+#: src/transport.c:262
 #, c-format
 msgid "Cannot open %s: %s\n"
 msgstr "Impossible d'ouvrir %s : %s\n"
 
-#: src/transport.c:259
+#: src/transport.c:270
 #, c-format
 msgid "%s is not a valid serial port\n"
 msgstr "%s n'est pas un port série valide\n"
 
-#: src/transport.c:269
+#: src/transport.c:280
 msgid ""
 "Cannot lock port! The serial port may currently be in use by another "
 "program.\n"
@@ -766,41 +766,41 @@ msgstr ""
 "Impossible de verrouiller le port ! Le port série est peut-être utilisé par "
 "un autre logiciel.\n"
 
-#: src/transport.c:288
+#: src/transport.c:301
 #, c-format
 msgid "Unable to set baud rate %u"
 msgstr "Impossible de régler le débit à %u"
 
-#: src/transport.c:380 src/transport.c:413
+#: src/transport.c:394 src/transport.c:427
 #, c-format
 msgid "Cannot connect to %s:%s: %s\n"
 msgstr "Impossible de se connecter à %s:%s : %s\n"
 
-#: src/transport.c:431
+#: src/transport.c:445
 msgid "Accept error"
 msgstr "Erreur d'acceptation"
 
-#: src/transport.c:468
+#: src/transport.c:482
 #, c-format
 msgid "Cannot resolve port %s: %s\n"
 msgstr "Impossible de résoudre le port %s : %s\n"
 
-#: src/transport.c:470
+#: src/transport.c:484
 #, c-format
 msgid "Cannot resolve %s:%s: %s\n"
 msgstr "Impossible de résoudre %s:%s : %s\n"
 
-#: src/transport.c:478
+#: src/transport.c:492
 #, c-format
 msgid "Cannot create socket: %s\n"
 msgstr "Impossible de créer le connecteur réseau : %s\n"
 
-#: src/transport.c:497
+#: src/transport.c:511
 #, c-format
 msgid "Cannot bind to %s:%s: %s%s\n"
 msgstr "Impossible de s'attacher à %s:%s : %s%s\n"
 
-#: src/transport.c:499
+#: src/transport.c:513
 msgid ""
 "\n"
 "Use: sudo setcap cap_net_bind_service=+ep gtkterm"
@@ -808,20 +808,20 @@ msgstr ""
 "\n"
 "Utilisez : sudo setcap cap_net_bind_service=+ep gtkterm"
 
-#: src/transport.c:509
+#: src/transport.c:523
 #, c-format
 msgid "Cannot listen: %s\n"
 msgstr "Impossible d'écouter : %s\n"
 
-#: src/transport.c:929
+#: src/transport.c:943
 msgid "Control signals read set signals"
 msgstr "Lecture ou écriture des signaux de contrôle"
 
-#: src/transport.c:934
+#: src/transport.c:948
 msgid "DTR write"
 msgstr "Écriture de DTR"
 
-#: src/transport.c:934
+#: src/transport.c:948
 msgid "RTS write"
 msgstr "Écriture de RTS"
 
@@ -1007,12 +1007,12 @@ msgstr "Avertissement"
 msgid "Error"
 msgstr "Erreur"
 
-#: src/ui/dialogs.c:169 src/ui/port_dialog.c:566 src/ui/profile_dialogs.c:344
+#: src/ui/dialogs.c:169 src/ui/port_dialog.c:606 src/ui/profile_dialogs.c:344
 #: src/ui/project_rename.c:169
 msgid "_OK"
 msgstr "_OK"
 
-#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:563
+#: src/ui/dialogs.c:256 src/ui/file_send_window.c:47 src/ui/port_dialog.c:603
 #: src/ui/profile_dialogs.c:341 src/ui/project_rename.c:166
 #: src/ui/script_panel.c:805
 msgid "_Cancel"
@@ -1785,47 +1785,55 @@ msgstr "Xon/Xoff"
 msgid "RS-485 half-duplex (RTS)"
 msgstr "RS-485 semi-duplex (RTS)"
 
-#: src/ui/port_dialog.c:370
+#: src/ui/port_dialog.c:255
+msgid "Without effect: RTS is driven by the flow control (RTS/CTS or RS-485)."
+msgstr "Sans effet : RTS est piloté par le contrôle de flux (RTS/CTS ou RS-485)."
+
+#: src/ui/port_dialog.c:256
+msgid "For a board whose RTS line selects its boot loader (ISP)."
+msgstr "Pour une carte dont la ligne RTS fait démarrer le chargeur d'amorçage (ISP)."
+
+#: src/ui/port_dialog.c:387
 msgid "_Host:"
 msgstr "_Hôte :"
 
-#: src/ui/port_dialog.c:372 src/ui/port_dialog.c:402
+#: src/ui/port_dialog.c:389 src/ui/port_dialog.c:419
 msgid "_Port:"
 msgstr "_Port :"
 
-#: src/ui/port_dialog.c:374
+#: src/ui/port_dialog.c:391
 msgid "TCP"
 msgstr "TCP"
 
-#: src/ui/port_dialog.c:387
+#: src/ui/port_dialog.c:404
 msgid "Detected serial ports"
 msgstr "Ports série détectés"
 
-#: src/ui/port_dialog.c:392
+#: src/ui/port_dialog.c:409
 msgid "Standard baud rates"
 msgstr "Débits standard"
 
-#: src/ui/port_dialog.c:404
+#: src/ui/port_dialog.c:421
 msgid "_Baud Rate:"
 msgstr "_Débit :"
 
-#: src/ui/port_dialog.c:406
+#: src/ui/port_dialog.c:423
 msgid "P_arity:"
 msgstr "Par_ité :"
 
-#: src/ui/port_dialog.c:408
+#: src/ui/port_dialog.c:425
 msgid "B_its:"
 msgstr "_Bits :"
 
-#: src/ui/port_dialog.c:410
+#: src/ui/port_dialog.c:427
 msgid "_Stopbits:"
 msgstr "Bits de _stop :"
 
-#: src/ui/port_dialog.c:412
+#: src/ui/port_dialog.c:429
 msgid "_Flow control:"
 msgstr "Contrôle de _flux :"
 
-#: src/ui/port_dialog.c:417
+#: src/ui/port_dialog.c:434
 #, c-format
 msgid ""
 "No serial devices found. Searched the following device path patterns:\n"
@@ -1834,63 +1842,94 @@ msgstr ""
 "Aucun périphérique série trouvé. Motifs de chemins recherchés :\n"
 "%sSaisissez un chemin de périphérique dans la zone Port."
 
-#: src/ui/port_dialog.c:429
+#: src/ui/port_dialog.c:446
 msgid "Serial port"
 msgstr "Port série"
 
-#: src/ui/port_dialog.c:434
+#: src/ui/port_dialog.c:451
 msgid "_Advanced Configuration Options"
 msgstr "Options de confi_guration avancées"
 
-#: src/ui/port_dialog.c:441
+#: src/ui/port_dialog.c:458
 msgid "End of line _delay (milliseconds):"
 msgstr "Délai de fin de _ligne (millisecondes) :"
 
-#: src/ui/port_dialog.c:443
+#: src/ui/port_dialog.c:460
 msgid "_Wait for this special character before passing to next line:"
 msgstr "Attendre ce _caractère spécial avant de passer à la ligne suivante :"
 
-#: src/ui/port_dialog.c:450
+#: src/ui/port_dialog.c:467
 msgid "ASCII file transfer"
 msgstr "Transfert de fichier ASCII"
 
-#: src/ui/port_dialog.c:454
+#: src/ui/port_dialog.c:471
 msgid "Id_le after (seconds, 0: never):"
 msgstr "R_epos après (secondes, 0 : jamais) :"
 
-#: src/ui/port_dialog.c:457
+#: src/ui/port_dialog.c:474
 msgid "_No data after (seconds, 0: never):"
 msgstr "Sa_ns données après (secondes, 0 : jamais) :"
 
-#: src/ui/port_dialog.c:459
+#: src/ui/port_dialog.c:476
 msgid "Port activity"
 msgstr "Activité du port"
 
-#: src/ui/port_dialog.c:463
+#. Mnémoniques k et r : libres dans le dialogue
+#: src/ui/port_dialog.c:479
+msgid "_Keep DTR inactive when opening the port"
+msgstr "_Maintenir DTR inactif à l'ouverture du port"
+
+#: src/ui/port_dialog.c:481
+msgid ""
+"For a board whose DTR line drives its reset: the port opens without holding "
+"it in reset."
+msgstr ""
+"Pour une carte dont la ligne DTR commande le reset : le port s'ouvre sans la "
+"tenir en reset."
+
+#: src/ui/port_dialog.c:485
+msgid "Keep _RTS inactive when opening the port"
+msgstr "Maintenir RTS inactif à l'o_uverture du port"
+
+#: src/ui/port_dialog.c:490
+msgid ""
+"The system raises DTR and RTS when it opens a serial port: these options "
+"lower them at once, after a brief pulse. Toggle DTR (Port menu) still resets "
+"the board on demand."
+msgstr ""
+"Le système active DTR et RTS à l'ouverture d'un port série : ces options les "
+"désactivent aussitôt, après une brève impulsion. « Inverser DTR » (menu Port) "
+"réinitialise toujours la carte à la demande."
+
+#: src/ui/port_dialog.c:498
+msgid "Control lines when opening"
+msgstr "Lignes de contrôle à l'ouverture"
+
+#: src/ui/port_dialog.c:503
 msgid "Time with RTS 'on' _before transmit (milliseconds):"
 msgstr "Durée avec RTS actif a_vant la transmission (millisecondes) :"
 
-#: src/ui/port_dialog.c:465
+#: src/ui/port_dialog.c:505
 msgid "Time with RTS 'on' a_fter transmit (milliseconds):"
 msgstr "Durée avec RTS actif ap_rès la transmission (millisecondes) :"
 
-#: src/ui/port_dialog.c:467
+#: src/ui/port_dialog.c:507
 msgid "RS-485 half-duplex parameters (RTS signal used to send)"
 msgstr "Paramètres RS-485 semi-duplex (utilisant signal RTS pour envoi)"
 
-#: src/ui/port_dialog.c:522
+#: src/ui/port_dialog.c:562
 msgid "Port configuration"
 msgstr "Configuration du port"
 
-#: src/ui/port_dialog.c:522
+#: src/ui/port_dialog.c:562
 msgid "New tab"
 msgstr "Nouvel onglet"
 
-#: src/ui/port_dialog.c:543
+#: src/ui/port_dialog.c:583
 msgid "_Type:"
 msgstr "_Type :"
 
-#: src/ui/port_dialog.c:545
+#: src/ui/port_dialog.c:585
 msgid "Transport"
 msgstr "Transport"
 

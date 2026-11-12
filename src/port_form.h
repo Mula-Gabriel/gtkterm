@@ -42,6 +42,8 @@ typedef struct
 	gchar *wait_char;	/* texte saisi (UTF-8) */
 	gint rs485_before_ms;
 	gint rs485_after_ms;
+	gboolean dtr_low_on_open;	/* série : lignes de contrôle au repos à l'ouverture */
+	gboolean rts_low_on_open;
 	gint idle_timeout_s;
 	gint no_data_timeout_s;
 } GtPortForm;
