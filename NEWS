@@ -6,6 +6,10 @@ montré en tête de la fenêtre), toute autre ligne un texte affiché tel quel (
 prolonge l'élément précédent. Une section sans tag publié n'est jamais affichée.
 Un titre de niveau 1 (« # … ») clôt la section en cours : ce qui suit, jusqu'à la prochaine section, n'est pas affiché.
 
+## v2.2.4 — 2026-11-12
+- Ports : deux options par profil, « Maintenir DTR inactif » et « Maintenir RTS inactif à l'ouverture du port » (Port › Options avancées), pour les cartes
+  dont DTR tient le reset ou RTS fait démarrer le chargeur ISP : GTKTerm baisse ces lignes juste après chaque ouverture (démarrage, reconnexion, nouveaux réglages).
+
 ## v2.2.3 — 2026-11-05
 - Macros : « Recharger » dans « Configurer les macros » propose de recharger aussi les autres onglets qui utilisent le même fichier de macros ou le même modèle.
 
